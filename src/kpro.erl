@@ -8,6 +8,7 @@
 %% exported for internal use
 -export([ decode/2
         , decode_fields/3
+        , encode/1
         ]).
 
 -include("kpro.hrl").
