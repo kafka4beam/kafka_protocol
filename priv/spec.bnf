@@ -169,15 +169,15 @@ JoinGroupRequest => GroupId SessionTimeout MemberId ProtocolType [GroupProtocol]
     ProtocolName => string
     ProtocolMetadata => bytes
 
-JoinGroupResponse => ErrorCode GenerationId GroupProtocol LeaderId MemberId [Member]
+JoinGroupResponse => ErrorCode GenerationId GroupProtocol LeaderId MemberId [GroupMemberMetadata]
   ErrorCode => int16
   GenerationId => int32
   GroupProtocol => string
   LeaderId => string
   MemberId => string
-  Member => MemberId MemberMetadata
+  GroupMemberMetadata => MemberId Metadata
     MemberId => string
-    MemberMetadata => bytes
+    Metadata => bytes
 
 SyncGroupRequest => GroupId GenerationId MemberId [GroupAssignment]
   GroupId => string
@@ -225,13 +225,13 @@ DescribeGroupsRequest => [GroupId]
   GroupId => string
 
 DescribeGroupsResponse => [GroupDescription]
-  GroupDescription => ErrorCode GroupId State ProtocolType Protocol [GroupMember]
+  GroupDescription => ErrorCode GroupId State ProtocolType Protocol [GroupMemberDescription]
   ErrorCode => int16
   GroupId => string
   State => string
   ProtocolType => string
   Protocol => string
-  GroupMember => MemberId ClientId ClientHost MemberMetadata MemberAssignment
+  GroupMemberDescription => MemberId ClientId ClientHost MemberMetadata MemberAssignment
     MemberId => string
     ClientId => string
     ClientHost => string

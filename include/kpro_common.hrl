@@ -23,7 +23,7 @@
 -type str()        :: undefined | string() | binary().
 -type bytes()      :: undefined | binary().
 -type api_key()    :: 0..16.
--type error_code() :: integer().
+-type error_code() :: int16() | atom().
 
 -define(is_kafka_primitive(T),
         (T =:= int8 orelse T =:= int16 orelse

@@ -46,10 +46,6 @@ decode_response(Bin) ->
     false -> {incomplete, Bin}
   end.
 
-decode_fields(RecordName, FieldTypes, Bin) ->
-  {FieldValues, BinRest} = do_decode_fields(FieldTypes, Bin, _Acc = []),
-  %% make the record.
-  {list_to_tuple([RecordName | FieldValues]), BinRest}.
 
 %%%_* Internal functions =======================================================
 
@@ -103,11 +99,17 @@ decode({array, Type}, Bin) ->
 decode(StructName, Bin) when is_atom(StructName) ->
   kpro_structs:decode(StructName, Bin).
 
-do_decode_fields([], Bin, Acc) ->
+decode_fields(RecordName, Fields, Bin) ->
+  {FieldValues, BinRest} = do_decode_fields(RecordName, Fields, Bin, _Acc = []),
+  %% make the record.
+  {list_to_tuple([RecordName | FieldValues]), BinRest}.
+
+do_decode_fields(_RecordName, _Fields = [], Bin, Acc) ->
   {lists:reverse(Acc), Bin};
-do_decode_fields([FieldType | Rest], Bin, Acc) ->
-  {FieldValue, BinRest} = decode(FieldType, Bin),
-  do_decode_fields(Rest, BinRest, [FieldValue | Acc]).
+do_decode_fields(RecordName, [{FieldName, FieldType} | Rest], Bin, Acc) ->
+  {FieldValue0, BinRest} = decode(FieldType, Bin),
+  FieldValue = maybe_translate(RecordName, FieldName, FieldValue0),
+  do_decode_fields(RecordName, Rest, BinRest, [FieldValue | Acc]).
 
 do_decode_response(Bin) ->
   <<I:32/integer, Rest0/binary>> = Bin,
@@ -120,6 +122,13 @@ do_decode_response(Bin) ->
                   , responseMessage = Message
                   },
   {Result, Rest}.
+
+%% Translate specific values to human readable format.
+%% e.g. error codes.
+maybe_translate(_RecordName, errorCode, Code) ->
+  kpro_errorCode:decode(Code);
+maybe_translate(_RecordName, _FieldName, RawValue) ->
+  RawValue.
 
 copy_bytes(-1, Bin) ->
   {undefined, Bin};

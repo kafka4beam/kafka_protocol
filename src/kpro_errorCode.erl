@@ -43,7 +43,7 @@ is_error(_)        -> true.
 %% @doc Decode kafka protocol error code integer into atoms
 %% for undefined error codes, return the original integer
 %% @end
--spec decode(integer()) -> error_code().
+-spec decode(int16()) -> error_code().
 decode(-1) -> ?EC_UNKNOWN;
 decode(0)  -> ?EC_NONE;
 decode(1)  -> ?EC_OFFSET_OUT_OF_RANGE;

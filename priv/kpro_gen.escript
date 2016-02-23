@@ -122,7 +122,7 @@ gen_record_fields([{Name, Type} | Fields]) ->
   [ [ FieldName, " :: "
     , case Type of
         {one_of, Refs} -> gen_union_type(Refs, length(FieldName)+12);
-        _              -> gen_field_type(Type)
+        _              -> gen_field_type(list_to_atom(FieldName), Type)
       end
     , "\n"
     ]
@@ -134,6 +134,10 @@ gen_union_type(Refs, Width) ->
   infix(lists:map(fun(Name) ->
                     atom_to_list(Name) ++ "()"
                   end, Refs), Sep).
+
+%% generate special pre-defined types.
+gen_field_type(errorCode, _)     -> "error_code()";
+gen_field_type(_FieldName, Type) -> gen_field_type(Type).
 
 gen_field_type(int8)   -> "int8()";
 gen_field_type(int16)  -> "int16()";
@@ -235,7 +239,7 @@ get_ref_names([_ | Rest]) ->
 %% decoder example:
 %%
 %% decode(RecordName, Bin) ->
-%%    kpro:decode_fields(RecordName, FieldTypes, Bin).
+%%    kpro:decode_fields(RecordName, Fields, Bin).
 %%
 gen_clause(encoder, Name, Fields) ->
   VariableName = case Fields of
