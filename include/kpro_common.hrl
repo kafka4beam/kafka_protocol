@@ -7,6 +7,10 @@
 -define(KAFKA_VERSION, {0,9,0}). %% by default
 -endif.
 
+-define(KPRO_API_VERSION, 0).
+-define(KPRO_MAGIC_BYTE, 0).
+-define(KPRO_ATTRIBUTES, 0).
+
 %% correlation IDs are 32 bit signed integers.
 %% we use 27 bits only, and use the highest 5 bits to be redudant with API key
 %% so that the decoder may decode the responses without the need of an extra
@@ -24,6 +28,8 @@
 -type bytes()      :: undefined | binary().
 -type api_key()    :: 0..16.
 -type error_code() :: int16() | atom().
+
+-define(incomplete_message_set, incomplete_message_set).
 
 -define(is_kafka_primitive(T),
         (T =:= int8 orelse T =:= int16 orelse
@@ -62,6 +68,25 @@
         , ?API_DescribeGroupsRequest
         , ?API_ListGroupsRequest
         ]).
+
+-define(REQ_TO_API_KEY(Req),
+        case Req of
+          kpro_ProduceRequest          -> ?API_ProduceRequest;
+          kpro_FetchRequest            -> ?API_FetchRequest;
+          kpro_OffsetRequest           -> ?API_OffsetRequest;
+          kpro_MetadataRequest         -> ?API_MetadataRequest;
+          kpro_OffsetCommitRequestV2   -> ?API_OffsetCommitRequest;
+          kpro_OffsetCommitRequestV1   -> ?API_OffsetCommitRequest;
+          kpro_OffsetCommitRequestV0   -> ?API_OffsetCommitRequest;
+          kpro_OffsetFetchRequest      -> ?API_OffsetFetchRequest;
+          kpro_GroupCoordinatorRequest -> ?API_GroupCoordinatorRequest;
+          kpro_JoinGroupRequest        -> ?API_JoinGroupRequest;
+          kpro_HeartbeatRequest        -> ?API_HeartbeatRequest;
+          kpro_LeaveGroupRequest       -> ?API_LeaveGroupRequest;
+          kpro_SyncGroupRequest        -> ?API_SyncGroupRequest;
+          kpro_DescribeGroupsRequest   -> ?API_DescribeGroupsRequest;
+          kpro_ListGroupsRequest       -> ?API_ListGroupsRequest
+        end).
 
 -define(API_KEY_TO_REQ(ApiKey),
         case ApiKey of

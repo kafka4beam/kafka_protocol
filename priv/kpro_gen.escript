@@ -45,10 +45,10 @@ fields(Fields, Def) ->
             end, Fields).
 
 field_name(Name) when is_atom(Name) ->
-  Name;
+  lower_case_leading(Name);
 field_name({array, Name}) ->
   %% for array fields, append a _L suffix to the name
-  list_to_atom(atom_to_list(Name) ++ "_L").
+  list_to_atom(atom_to_list(field_name(Name)) ++ "_L").
 
 field_type(Name, Def) when is_atom(Name) ->
   case lists:keyfind(Name, 1, Def) of
@@ -111,14 +111,14 @@ gen_record({Name, Fields}) ->
   ].
 
 %% change the first char to lower case
-fmt_field_name(Name) ->
+lower_case_leading(Name) ->
   [H | T] = atom_to_list(Name),
-  [H + ($a - $A) | T].
+  list_to_atom([H + ($a - $A) | T]).
 
 gen_record_fields([]) ->
   [];
 gen_record_fields([{Name, Type} | Fields]) ->
-  FieldName = fmt_field_name(Name),
+  FieldName = atom_to_list(Name),
   [ [ FieldName, " :: "
     , case Type of
         {one_of, Refs} -> gen_union_type(Refs, length(FieldName)+12);
@@ -256,13 +256,13 @@ gen_clause(encoder, Name, Fields) ->
   ];
 gen_clause(decoder, Name, Fields) ->
   [ "decode(", atom_to_list(Name) ,", Bin) ->\n"
-  , "FieldTypes = ", gen_field_types(Fields), ","
-  , "kpro:decode_fields(", atom_to_list(Name), ", FieldTypes, Bin)"
+  , "Fields = ", gen_field_types(Fields), ","
+  , "kpro:decode_fields(", atom_to_list(Name), ", Fields, Bin)"
   ].
 
 gen_field_encoders(_Prefix, []) -> [];
 gen_field_encoders(Prefix, [{FieldName, FieldType} | Fields]) ->
-  FieldV_code = Prefix ++ fmt_field_name(FieldName),
+  FieldV_code = Prefix ++ atom_to_list(FieldName),
   [ bin(["enc(", encode_arg_code(FieldType, FieldV_code), ")"])
   | gen_field_encoders(Prefix, Fields)].
 
@@ -278,5 +278,5 @@ encode_arg_code(_T, V) ->
 bin(IoList) -> iolist_to_binary(IoList).
 
 gen_field_types(Fields) ->
-  Types = [T || {_N, T} <- Fields],
-  io_lib:format("~p", [Types]).
+  io_lib:format("~p", [Fields]).
+
