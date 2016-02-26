@@ -23,9 +23,16 @@
 -define(KAFKA_VERSION, {0,9,0}). %% by default
 -endif.
 
+%% Compression attributes
+-define(KPRO_COMPRESS_NONE, 0).
+-define(KPRO_COMPRESS_GZIP, 1).
+-define(KPRO_COMPRESS_SNAPPY, 2).
+
+%% some pre-defined default values
+-define(KPRO_REPLICA_ID, -1).
 -define(KPRO_API_VERSION, 0).
 -define(KPRO_MAGIC_BYTE, 0).
--define(KPRO_ATTRIBUTES, 0).
+-define(KPRO_ATTRIBUTES, ?KPRO_COMPRESS_NONE).
 
 %% correlation IDs are 32 bit signed integers.
 %% we use 27 bits only, and use the highest 5 bits to be redudant with API key
@@ -44,6 +51,13 @@
 -type bytes()      :: undefined | binary().
 -type api_key()    :: 0..16.
 -type error_code() :: int16() | atom().
+
+%% type re-define for readability
+-type client_id() :: str().
+-type corr_id()   :: int32().
+-type topic()     :: str().
+-type partition() :: int32().
+-type offset()    :: int64().
 
 -define(incomplete_message, incomplete_message).
 
