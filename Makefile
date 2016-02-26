@@ -17,8 +17,8 @@ include erlang.mk
 
 .PHONY: gen-code gen-clean
 
-$(GEN_CODE):: include/kpro_common.hrl priv/kpro_gen.sh priv/kpro_gen.escript priv/spec.bnf priv/kpro_scanner.xrl priv/kpro_parser.yrl
-	priv/kpro_gen.sh
+$(GEN_CODE):: include/kpro_common.hrl priv/kpro_gen.sh priv/kpro_gen.escript priv/kafka.bnf priv/kpro_scanner.xrl priv/kpro_parser.yrl
+	priv/kpro_gen.escript
 
 gen-code: $(GEN_CODE)
 	$(verbose) :

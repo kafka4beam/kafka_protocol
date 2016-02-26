@@ -7,7 +7,12 @@
 -include("../include/kpro_common.hrl").
 
 main(_) ->
-  Tokens = kpro_scanner:file("spec.bnf"),
+  ok = file:set_cwd(this_dir()),
+  {ok, _} = leex:file(kpro_scanner),
+  {ok, _} = compile:file("kpro_scanner.erl", [debug_info]),
+  {ok, _} = yecc:file(kpro_parser),
+  {ok, _} = compile:file("kpro_parser.erl", [debug_info]),
+  Tokens = kpro_scanner:file("kafka.bnf"),
   Records = to_records(parse(Tokens, [])),
   generate_code(Records).
 
@@ -89,7 +94,7 @@ gen_header_file(Records) ->
     , "\n\n"
     , "-endif.\n"
     ],
-  Filename = filename:join([this_dir(), "..", "include", "kpro.hrl"]),
+  Filename = filename:join(["..", "include", "kpro.hrl"]),
   ok = file:write_file(Filename, IoData).
 
 gen_types([]) -> [];
@@ -162,7 +167,7 @@ this_dir() ->
   filename:dirname(ThisScript).
 
 gen_marshaller(Records) ->
-  Filename = filename:join([this_dir(), "..", "src", "kpro_structs.erl"]),
+  Filename = filename:join(["..", "src", "kpro_structs.erl"]),
   Header0 =
     [ "%% generated code"
     , "-module(kpro_structs)."
