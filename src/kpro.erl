@@ -193,7 +193,7 @@ do_decode_fields(RecordName, [{FieldName, FieldType} | Rest], Bin, Acc) ->
 %% Translate specific values to human readable format.
 %% e.g. error codes.
 maybe_translate(_RecordName, errorCode, Code) ->
-  kpro_errorCode:decode(Code);
+  kpro_ErrorCode:decode(Code);
 maybe_translate(_RecordName, _FieldName, RawValue) ->
   RawValue.
 
