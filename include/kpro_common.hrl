@@ -29,9 +29,9 @@
 -type api_key()    :: 0..16.
 -type error_code() :: int16() | atom().
 
--define(incomplete_message_set, incomplete_message_set).
+-define(incomplete_message, incomplete_message).
 
--define(is_kafka_primitive(T),
+-define(IS_KAFKA_PRIMITIVE(T),
         (T =:= int8 orelse T =:= int16 orelse
          T =:= int32 orelse T =:= int64 orelse
          T =:= string orelse T =:= bytes)).

@@ -89,7 +89,7 @@ encode({bytes, B}) when is_binary(B) ->
   Length = size(B),
   <<Length:32/?INT, B/binary>>;
 encode({{array, T}, L}) when is_list(L) ->
-  true = ?is_kafka_primitive(T), %% assert
+  true = ?IS_KAFKA_PRIMITIVE(T), %% assert
   Length = length(L),
   [<<Length:32/?INT>>, [encode({T, I}) || I <- L]];
 encode({array, L}) when is_list(L) ->
@@ -168,16 +168,15 @@ decode(kpro_FetchResponsePartition, Bin) ->
 decode(StructName, Bin) when is_atom(StructName) ->
   kpro_structs:decode(StructName, Bin).
 
+decode_message_stream(<<>>, Acc) ->
+  lists:reverse(Acc);
 decode_message_stream(Bin, Acc) ->
-  try decode(kpro_Message, Bin) of
-    {Msg, Rest} ->
-      decode_message_stream(Rest, [Msg | Acc])
-  catch error : {badmatch, _} ->
-    case Acc =:= [] andalso Bin =/= <<>> of
-      true  -> ?incomplete_message_set;
-      false -> lists:reverse(Acc)
-    end
-  end.
+  {Msg, Rest} =
+    try decode(kpro_Message, Bin)
+    catch error : {badmatch, _} ->
+      {?incomplete_message, <<>>}
+    end,
+  decode_message_stream(Rest, [Msg | Acc]).
 
 decode_fields(RecordName, Fields, Bin) ->
   {FieldValues, BinRest} = do_decode_fields(RecordName, Fields, Bin, _Acc = []),

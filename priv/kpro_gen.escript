@@ -70,7 +70,7 @@ field_type(Name, Def) when is_atom(Name) ->
       Type;
     {_, {array, Type}} ->
       %% only primitive types possible here
-      true = ?is_kafka_primitive(Type),
+      true = ?IS_KAFKA_PRIMITIVE(Type),
       {array, Type};
     {_, {one_of, Refs}} ->
       {one_of, [gname(R) || R <- Refs]}
@@ -225,9 +225,9 @@ gen_clauses(EncDec, Name, Records) when is_atom(Name) ->
   end.
 
 get_ref_names([]) -> [];
-get_ref_names([{_N, {array, T}} | Rest]) when not ?is_kafka_primitive(T) ->
+get_ref_names([{_N, {array, T}} | Rest]) when not ?IS_KAFKA_PRIMITIVE(T) ->
   [T | get_ref_names(Rest)];
-get_ref_names([{_N, T} | Rest]) when is_atom(T), not ?is_kafka_primitive(T) ->
+get_ref_names([{_N, T} | Rest]) when is_atom(T), not ?IS_KAFKA_PRIMITIVE(T) ->
   [T | get_ref_names(Rest)];
 get_ref_names([_ | Rest]) ->
   get_ref_names(Rest).
@@ -271,9 +271,9 @@ gen_field_encoders(Prefix, [{FieldName, FieldType} | Fields]) ->
   [ bin(["enc(", encode_arg_code(FieldType, FieldV_code), ")"])
   | gen_field_encoders(Prefix, Fields)].
 
-encode_arg_code(T, V) when ?is_kafka_primitive(T) ->
+encode_arg_code(T, V) when ?IS_KAFKA_PRIMITIVE(T) ->
   ["{", atom_to_list(T), ", ", V, "}"];
-encode_arg_code({array, T}, V) when ?is_kafka_primitive(T) ->
+encode_arg_code({array, T}, V) when ?IS_KAFKA_PRIMITIVE(T) ->
   ["{{array,", atom_to_list(T), "}, ", V, "}"];
 encode_arg_code({array, _T}, V) ->
   ["{array, ", V, "}"];

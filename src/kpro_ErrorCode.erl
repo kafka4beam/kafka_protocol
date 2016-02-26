@@ -22,7 +22,7 @@
 %%% @end
 %%%=============================================================================
 
--module(kpro_errorCode).
+-module(kpro_ErrorCode).
 
 -export([ desc/1
         , decode/1
@@ -32,8 +32,6 @@
 -include("kpro_common.hrl").
 
 -define(KAFKA_VERSION_STR, <<"0.9.0.0">>).
-
--define(IS_INT16(X), (X >= -32768 andalso X < 32768)).
 
 %% @doc Return true if it is not ZERO error code.
 is_error(0)        -> false;
