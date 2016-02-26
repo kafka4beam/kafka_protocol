@@ -1,5 +1,5 @@
 PROJECT = kafka_protocol
-PROJECT_DESCRIPTION = Kafka message wire format encode/decode library
+PROJECT_DESCRIPTION = Kafka protocol erlang library
 PROJECT_VERSION = 0.1.0
 
 COVER = true
