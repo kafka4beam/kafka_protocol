@@ -53,9 +53,11 @@
 -type error_code() :: int16() | atom().
 
 %% type re-define for readability
--type topic() :: str().
+-type client_id() :: str().
+-type corr_id()   :: int32().
+-type topic()     :: str().
 -type partition() :: int32().
--type offset() :: int64().
+-type offset()    :: int64().
 
 -define(incomplete_message, incomplete_message).
 

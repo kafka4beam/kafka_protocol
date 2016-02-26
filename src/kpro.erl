@@ -16,6 +16,7 @@
 
 -module(kpro).
 
+%% help apis to constricut kpro_Xxx structures.
 -export([ fetch_request/6
         , offset_request/4
         , produce_request/5
@@ -24,7 +25,6 @@
 -export([ decode_response/1
         , encode_request/1
         , encode_request/3
-        , parse_stream/1
         ]).
 
 %% exported for internal use
@@ -37,6 +37,9 @@
 
 -define(INT, signed-integer).
 
+%% @doc Help function to contruct a #kpro_OffsetRequest{} for requests
+%% against one single topic-partition.
+%% @end
 -spec offset_request(topic(), partition(), integer(), non_neg_integer()) ->
         kpro_OffsetRequest().
 offset_request(Topic, Partition, Time, MaxNoOffsets) ->
@@ -53,6 +56,9 @@ offset_request(Topic, Partition, Time, MaxNoOffsets) ->
                      , offsetRequestTopic_L = [TopicReq]
                      }.
 
+%% @doc Help function to construct a #kpro_FetchRequest{} against one signle
+%% topic-partition.
+%% @end
 -spec fetch_request(topic(), partition(), offset(),
                     non_neg_integer(), non_neg_integer(), pos_integer()) ->
                       kpro_FetchRequest().
@@ -72,6 +78,10 @@ fetch_request(Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
                     , fetchRequestTopic_L = [PerTopic]
                     }.
 
+
+%% @doc Help function to construct a #kpro_ProduceRequest{} for
+%% messages targeting one single topic-partition.
+%% @end
 -spec produce_request(topic(), partition(), [{binary(), binary()}],
                       integer(), non_neg_integer()) ->
                          kpro_ProduceRequest().
@@ -97,28 +107,45 @@ produce_request(Topic, Partition, KafkaKvList, RequiredAcks, AckTimeout) ->
                       , topicMessageSet_L = [TopicMessageSet]
                       }.
 
-%% @doc Parse binary stream of kafka responses.
-%%      Returns list of kpro_Response() and remaining binary.
+%% @doc Parse binary stream received from kafka broker.
+%%      Return a list of kpro_Response() and the remaining bytes.
 %% @end
--spec parse_stream(binary()) -> {kpro_Response(), binary()}.
-parse_stream(Bin) ->
-  parse_stream(Bin, []).
+-spec decode_response(binary()) -> {kpro_Response(), binary()}.
+decode_response(Bin) ->
+  decode_response(Bin, []).
 
-parse_stream(Bin, Acc) ->
-  case decode_response(Bin) of
+decode_response(Bin, Acc) ->
+  case do_decode_response(Bin) of
     {incomplete, Rest} ->
       {lists:reverse(Acc), Rest};
     {Response, Rest} ->
-      parse_stream(Rest, [Response | Acc])
+      decode_response(Rest, [Response | Acc])
   end.
 
+%% @doc help function to encode kpro_XxxRequest into kafka wire format.
+-spec encode_request(client_id(), corr_id(), RequestMessage) -> iodata()
+        when RequestMessage:: kpro_ProduceRequest()
+                            | kpro_FetchRequest()
+                            | kpro_OffsetRequest()
+                            | kpro_MetadataRequest()
+                            | kpro_OffsetCommitRequestV0()
+                            | kpro_OffsetCommitRequestV1()
+                            | kpro_OffsetCommitRequestV2()
+                            | kpro_OffsetFetchRequest()
+                            | kpro_GroupCoordinatorRequest()
+                            | kpro_JoinGroupRequest()
+                            | kpro_HeartbeatRequest()
+                            | kpro_LeaveGroupRequest()
+                            | kpro_SyncGroupRequest()
+                            | kpro_DescribeGroupsRequest()
+                            | kpro_ListGroupsRequest().
 encode_request(ClientId, CorrId, Request) ->
   R = #kpro_Request{ apiVersion     = ?KPRO_API_VERSION
                    , correlationId  = CorrId
                    , clientId       = ClientId
                    , requestMessage = Request
                    },
-  kpro:encode_request(R).
+  encode_request(R).
 
 %% @doc Encode #kpro_Request{} records into kafka wire format.
 -spec encode_request(kpro_Request()) -> iodata().
@@ -144,11 +171,13 @@ encode_request(#kpro_Request{ apiVersion     = ApiVersion0
   Size = data_size(IoData),
   [encode({int32, Size}), IoData].
 
-%% @doc Decode responses received from kafka.
+%%%_* Internal functions =======================================================
+
+%% @private Decode responses received from kafka broker.
 %% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
 %% @end
--spec decode_response(binary()) -> {incomplete | #kpro_Response{}, binary()}.
-decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
+-spec do_decode_response(binary()) -> {incomplete | #kpro_Response{}, binary()}.
+do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
   <<I:32/integer, Rest0/binary>> = Bin,
   ApiKey = I bsr ?CORR_ID_BITS,
   CorrId = I band ?MAX_CORR_ID,
@@ -168,10 +197,8 @@ decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
                   , responseMessage = Message
                   },
   {Result, Rest};
-decode_response( Bin) ->
+do_decode_response( Bin) ->
   {incomplete, Bin}.
-
-%%%_* Internal functions =======================================================
 
 encode({int8,  I}) when is_integer(I) -> <<I:8/?INT>>;
 encode({int16, I}) when is_integer(I) -> <<I:16/?INT>>;
