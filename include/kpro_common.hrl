@@ -24,15 +24,15 @@
 -endif.
 
 %% Compression attributes
--define(COMPRESS_NONE, 0).
--define(COMPRESS_GZIP, 1).
--define(COMPRESS_SNAPPY, 2).
+-define(KPRO_COMPRESS_NONE, 0).
+-define(KPRO_COMPRESS_GZIP, 1).
+-define(KPRO_COMPRESS_SNAPPY, 2).
 
 %% some pre-defined default values
--define(KPRO_REPLICA_ID, 0).
+-define(KPRO_REPLICA_ID, -1).
 -define(KPRO_API_VERSION, 0).
 -define(KPRO_MAGIC_BYTE, 0).
--define(KPRO_ATTRIBUTES, ?COMPRESS_NONE).
+-define(KPRO_ATTRIBUTES, ?KPRO_COMPRESS_NONE).
 
 %% correlation IDs are 32 bit signed integers.
 %% we use 27 bits only, and use the highest 5 bits to be redudant with API key
