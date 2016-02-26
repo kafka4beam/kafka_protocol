@@ -16,8 +16,15 @@
 
 -module(kpro).
 
+-export([ fetch_request/6
+        , offset_request/4
+        , produce_request/6
+        ]).
+
 -export([ decode_response/1
         , encode_request/1
+        , encode_request/3
+        , parse_stream/1
         ]).
 
 %% exported for internal use
@@ -29,6 +36,89 @@
 -include("kpro.hrl").
 
 -define(INT, signed-integer).
+
+-spec offset_request(topic(), partition(), integer(), non_neg_integer()) ->
+        kpro_OffsetRequest().
+offset_request(Topic, Partition, Time, MaxNoOffsets) ->
+  PartitionReq =
+    #kpro_OffsetRequestPartition{ partition          = Partition
+                                , time               = Time
+                                , maxNumberOfOffsets = MaxNoOffsets
+                                },
+  TopicReq =
+    #kpro_OffsetRequestTopic{ topicName                = Topic
+                            , offsetRequestPartition_L = [PartitionReq]
+                            },
+  #kpro_OffsetRequest{ replicaId            = ?REPLICA_ID
+                     , offsetRequestTopic_L = [TopicReq]
+                     }.
+
+-spec fetch_request(topic(), partition(), offset(),
+                    non_neg_integer(), non_neg_integer(), pos_integer()) ->
+                      kpro_FetchRequest().
+fetch_request(Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
+  PerPartition =
+    #kpro_FetchRequestPartition{ partition   = Partition
+                               , fetchOffset = Offset
+                               , maxBytes    = MaxBytes
+                               },
+  PerTopic =
+    #kpro_FetchRequestTopic{ topicName               = Topic
+                           , fetchRequestPartition_L = [PerPartition]
+                           },
+  #kpro_FetchRequest{ replicaId           = ?REPLICA_ID
+                    , maxWaitTime         = MaxWaitTime
+                    , minBytes            = MinBytes
+                    , fetchRequestTopic_L = [PerTopic]
+                    }.
+
+-spec produce_request(topic(), partition(), [{binary(), binary()}],
+                      integer(), non_neg_integer()) ->
+                         kpro_ProduceRequest().
+produce_request(Topic, Partition, KafkaKvList, RequiredAcks, AckTimeout) ->
+  Messages =
+    lists:map(fun({K, V}) ->
+                  #kpro_Message{ magicByte  = ?MAGIC_BYTE
+                               , attributes = ?COMPRESS_NONE
+                               , key        = K
+                               , value      = V
+                               }
+              end, KafkaKvList),
+  PartitionMsgSet =
+    #kpro_PartitionMessageSet{ partition = Partition
+                             , message_L = Messages
+                             },
+  TopicMessageSet =
+    #kpro_TopicMessageSet{ topicName             = Topic
+                         , partitionMessageSet_L = [PartitionMsgSet]
+                         },
+  #kpro_ProduceRequest{ requiredAcks      = RequiredAcks
+                      , timeout           = AckTimeout
+                      , topicMessageSet_L = [TopicMessageSet]
+                      }.
+
+%% @doc Parse binary stream of kafka responses.
+%%      Returns list of kpro_Response() and remaining binary.
+%% @end
+-spec parse_stream(binary()) -> {kpro_Response(), binary()}.
+parse_stream(Bin) ->
+  parse_stream(Bin, []).
+
+parse_stream(Bin, Acc) ->
+  case decode_response(Bin) of
+    {incomplete, Rest} ->
+      {lists:reverse(Acc), Rest};
+    {Response, Rest} ->
+      parse_stream(Rest, [Response | Acc])
+  end.
+
+encode_request(ClientId, CorrId, Request) ->
+  R = #kpro_Request{ apiVersion     = ?API_VERSION
+                   , correlationId  = CorrId
+                   , clientId       = ClientId
+                   , requestMessage = Request
+                   },
+  kpro:encode_request(R).
 
 %% @doc Encode #kpro_Request{} records into kafka wire format.
 -spec encode_request(kpro_Request()) -> iodata().
