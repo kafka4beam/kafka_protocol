@@ -18,7 +18,7 @@
 
 -export([ fetch_request/6
         , offset_request/4
-        , produce_request/6
+        , produce_request/5
         ]).
 
 -export([ decode_response/1
@@ -49,7 +49,7 @@ offset_request(Topic, Partition, Time, MaxNoOffsets) ->
     #kpro_OffsetRequestTopic{ topicName                = Topic
                             , offsetRequestPartition_L = [PartitionReq]
                             },
-  #kpro_OffsetRequest{ replicaId            = ?REPLICA_ID
+  #kpro_OffsetRequest{ replicaId            = ?KPRO_REPLICA_ID
                      , offsetRequestTopic_L = [TopicReq]
                      }.
 
@@ -66,7 +66,7 @@ fetch_request(Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
     #kpro_FetchRequestTopic{ topicName               = Topic
                            , fetchRequestPartition_L = [PerPartition]
                            },
-  #kpro_FetchRequest{ replicaId           = ?REPLICA_ID
+  #kpro_FetchRequest{ replicaId           = ?KPRO_REPLICA_ID
                     , maxWaitTime         = MaxWaitTime
                     , minBytes            = MinBytes
                     , fetchRequestTopic_L = [PerTopic]
@@ -78,8 +78,8 @@ fetch_request(Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
 produce_request(Topic, Partition, KafkaKvList, RequiredAcks, AckTimeout) ->
   Messages =
     lists:map(fun({K, V}) ->
-                  #kpro_Message{ magicByte  = ?MAGIC_BYTE
-                               , attributes = ?COMPRESS_NONE
+                  #kpro_Message{ magicByte  = ?KPRO_MAGIC_BYTE
+                               , attributes = ?KPRO_ATTRIBUTES
                                , key        = K
                                , value      = V
                                }
@@ -113,7 +113,7 @@ parse_stream(Bin, Acc) ->
   end.
 
 encode_request(ClientId, CorrId, Request) ->
-  R = #kpro_Request{ apiVersion     = ?API_VERSION
+  R = #kpro_Request{ apiVersion     = ?KPRO_API_VERSION
                    , correlationId  = CorrId
                    , clientId       = ClientId
                    , requestMessage = Request
