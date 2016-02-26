@@ -1,0 +1,8 @@
+{application,kafka_protocol,
+ [{description,"Kafka protocol message encode/decode library"},
+  {vsn,"1.0.0"},
+  {registered,[]},
+  {applications,[kernel,stdlib]},
+  {env,[]},
+  {modules,[]}]}.
+
