@@ -25,6 +25,7 @@
 -export([ decode_response/1
         , encode_request/1
         , encode_request/3
+        , next_corr_id/1
         ]).
 
 %% exported for internal use
@@ -106,6 +107,11 @@ produce_request(Topic, Partition, KafkaKvList, RequiredAcks, AckTimeout) ->
                       , timeout           = AckTimeout
                       , topicMessageSet_L = [TopicMessageSet]
                       }.
+
+%% @doc Get the next correlation ID.
+-spec next_corr_id(corr_id()) -> corr_id().
+next_corr_id(?MAX_CORR_ID) -> 0;
+next_corr_id(CorrId)       -> CorrId + 1.
 
 %% @doc Parse binary stream received from kafka broker.
 %%      Return a list of kpro_Response() and the remaining bytes.
