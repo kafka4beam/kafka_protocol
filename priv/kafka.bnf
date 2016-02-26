@@ -1,0 +1,240 @@
+## Reference: https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol
+## This is the source for code generation.
+
+Packet => Size Payload
+  Size => int32
+  Payload => Request | Response
+
+Request => ApiKey ApiVersion CorrelationId ClientId RequestMessage
+  ApiKey => int16
+  ApiVersion => int16
+  CorrelationId => int32
+  ClientId => string
+  RequestMessage => ProduceRequest | FetchRequest | OffsetRequest | MetadataRequest | OffsetCommitRequestV0 | OffsetCommitRequestV1 | OffsetCommitRequestV2 | OffsetFetchRequest | GroupCoordinatorRequest | JoinGroupRequest | HeartbeatRequest | LeaveGroupRequest | SyncGroupRequest | DescribeGroupsRequest | ListGroupsRequest
+
+Response => CorrelationId ResponseMessage
+  CorrelationId => int32
+  ResponseMessage => ProduceResponse | FetchResponse | OffsetResponse | MetadataResponse | OffsetCommitResponse | OffsetFetchResponse | GroupCoordinatorResponse | JoinGroupResponse | HeartbeatResponse | LeaveGroupResponse | SyncGroupResponse | DescribeGroupsResponse | ListGroupsResponse
+
+Message => Offset MessageSize Crc MagicByte Attributes Key Value
+  Offset => int64
+  MessageSize => int32
+  Crc => int32
+  MagicByte => int8
+  Attributes => int8
+  Key => bytes
+  Value => bytes
+
+MetadataRequest => [TopicName]
+  TopicName => string
+
+MetadataResponse => [Broker] [TopicMetadata]
+  Broker => NodeId Host Port
+  NodeId => int32
+  Host => string
+  Port => int32
+  TopicMetadata => ErrorCode TopicName [PartitionMetadata]
+  PartitionMetadata => ErrorCode Partition Leader Replicas Isr
+  Partition => int32
+  Leader => int32
+  Replicas => [int32]
+  Isr => [int32]
+  ErrorCode => int16
+  TopicName => string
+
+ProduceRequest => RequiredAcks Timeout [TopicMessageSet]
+  TopicMessageSet => TopicName [PartitionMessageSet]
+  PartitionMessageSet => Partition MessageSetSize [Message]
+  RequiredAcks => int16
+  Timeout => int32
+  Partition => int32
+  MessageSetSize => int32
+  TopicName => string
+
+ProduceResponse => [ProduceResponseTopic]
+  ProduceResponseTopic => TopicName [ProduceResponsePartition]
+  ProduceResponsePartition => Partition ErrorCode Offset
+  TopicName => string
+  Partition => int32
+  ErrorCode => int16
+  Offset => int64
+
+FetchRequest => ReplicaId MaxWaitTime MinBytes [FetchRequestTopic]
+  FetchRequestTopic => TopicName [FetchRequestPartition]
+  FetchRequestPartition => Partition FetchOffset MaxBytes
+  ReplicaId => int32
+  MaxWaitTime => int32
+  MinBytes => int32
+  TopicName => string
+  Partition => int32
+  FetchOffset => int64
+  MaxBytes => int32
+
+FetchResponse => [FetchResponseTopic]
+  FetchResponseTopic => TopicName [FetchResponsePartition]
+  FetchResponsePartition => Partition ErrorCode HighWatermarkOffset MessageSetSize [Message]
+  TopicName => string
+  Partition => int32
+  ErrorCode => int16
+  HighWatermarkOffset => int64
+  MessageSetSize => int32
+
+OffsetRequest => ReplicaId [OffsetRequestTopic]
+  OffsetRequestTopic => TopicName [OffsetRequestPartition]
+  OffsetRequestPartition => Partition Time MaxNumberOfOffsets
+  ReplicaId => int32
+  TopicName => string
+  Partition => int32
+  Time => int64
+  MaxNumberOfOffsets => int32
+
+OffsetResponse => [TopicOffsets]
+  TopicOffsets => TopicName [PartitionOffsets]
+  PartitionOffsets => Partition ErrorCode [Offset]
+  TopicName => string
+  Partition => int32
+  ErrorCode => int16
+  Offset => int64
+
+GroupCoordinatorRequest => GroupId
+  GroupId => string
+
+GroupCoordinatorResponse => ErrorCode CoordinatorId CoordinatorHost CoordinatorPort
+  ErrorCode => int16
+  CoordinatorId => int32
+  CoordinatorHost => string
+  CoordinatorPort => int32
+
+OffsetCommitRequestV0 => ConsumerGroupId [OCReqV0Topic]
+  OCReqV0Topic => TopicName [OCReqV0Partition]
+  OCReqV0Partition => Partition Offset Metadata
+  ConsumerGroupId => string
+  TopicName => string
+  Partition => int32
+  Offset => int64
+  Metadata => string
+
+OffsetCommitRequestV1 => ConsumerGroupId ConsumerGroupGenerationId ConsumerId [OCReqV1Topic]
+  OCReqV1Topic => TopicName [OCReqV1Partition]
+  OCReqV1Partition => Partition Offset TimeStamp Metadata
+  ConsumerGroupId => string
+  ConsumerGroupGenerationId => int32
+  ConsumerId => string
+  TopicName => string
+  Partition => int32
+  Offset => int64
+  TimeStamp => int64
+  Metadata => string
+
+OffsetCommitRequestV2 => ConsumerGroupId ConsumerGroupGenerationId ConsumerId RetentionTime [OCReqV2Topic]
+  OCReqV2Topic => TopicName [OCReqV2Partition]
+  OCReqV2Partition => Partition Offset Metadata
+  ConsumerGroupId => string
+  ConsumerGroupGenerationId => int32
+  ConsumerId => string
+  RetentionTime => int64
+  TopicName => string
+  Partition => int32
+  Offset => int64
+  Metadata => string
+
+OffsetCommitResponse => [OCRspTopic]
+  OCRspTopic => TopicName [OCRspPartition]
+  OCRspPartition => Partition ErrorCode
+  TopicName => string
+  Partition => int32
+  ErrorCode => int16
+
+OffsetFetchRequest => ConsumerGroup [OFReqTopic]
+  OFReqTopic => TopicName [Partition]
+  ConsumerGroup => string
+  TopicName => string
+  Partition => int32
+
+OffsetFetchResponse => [TopicOffset]
+  TopicOffset => TopicName [PartitionOffset]
+  PartitionOffset => Partition Offset Metadata ErrorCode
+  TopicName => string
+  Partition => int32
+  Offset => int64
+  Metadata => string
+  ErrorCode => int16
+
+JoinGroupRequest => GroupId SessionTimeout MemberId ProtocolType [GroupProtocol]
+  GroupId => string
+  SessionTimeout => int32
+  MemberId => string
+  ProtocolType => string
+  GroupProtocol => ProtocolName ProtocolMetadata
+    ProtocolName => string
+    ProtocolMetadata => bytes
+
+JoinGroupResponse => ErrorCode GenerationId GroupProtocol LeaderId MemberId [GroupMemberMetadata]
+  ErrorCode => int16
+  GenerationId => int32
+  GroupProtocol => string
+  LeaderId => string
+  MemberId => string
+  GroupMemberMetadata => MemberId Metadata
+    MemberId => string
+    Metadata => bytes
+
+SyncGroupRequest => GroupId GenerationId MemberId [GroupAssignment]
+  GroupId => string
+  GenerationId => int32
+  MemberId => string
+  GroupAssignment => MemberId MemberAssignment
+    MemberId => string
+    MemberAssignment => bytes
+
+MemberAssignment => Version [PartitionAssignment]
+  Version => int16
+  PartitionAssignment => TopicName [Partition]
+    TopicName => string
+    Partition => int32
+  UserData => bytes
+
+SyncGroupResponse => ErrorCode MemberAssignment
+  ErrorCode => int16
+  MemberAssignment => bytes
+
+HeartbeatRequest => GroupId GenerationId MemberId
+  GroupId => string
+  GenerationId => int32
+  MemberId => string
+
+HeartbeatResponse => ErrorCode
+  ErrorCode => int16
+
+LeaveGroupRequest => GroupId MemberId
+  GroupId => string
+  MemberId => string
+
+LeaveGroupResponse => ErrorCode
+  ErrorCode => int16
+
+ListGroupsRequest =>
+
+ListGroupsResponse => ErrorCode [GroupInfo]
+  ErrorCode => int16
+  GroupInfo => GroupId ProtocolType
+    GroupId => string
+    ProtocolType => string
+
+DescribeGroupsRequest => [GroupId]
+  GroupId => string
+
+DescribeGroupsResponse => [GroupDescription]
+  GroupDescription => ErrorCode GroupId State ProtocolType Protocol [GroupMemberDescription]
+  ErrorCode => int16
+  GroupId => string
+  State => string
+  ProtocolType => string
+  Protocol => string
+  GroupMemberDescription => MemberId ClientId ClientHost MemberMetadata MemberAssignment
+    MemberId => string
+    ClientId => string
+    ClientHost => string
+    MemberMetadata => bytes
+    MemberAssignment => bytes
+
