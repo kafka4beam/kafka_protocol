@@ -2,6 +2,22 @@
 %% -*- erlang -*-
 %%! -smp enable -sname kpro_gen
 
+%%%
+%%%   Copyright (c) 2014-2016, Klarna AB
+%%%
+%%%   Licensed under the Apache License, Version 2.0 (the "License");
+%%%   you may not use this file except in compliance with the License.
+%%%   You may obtain a copy of the License at
+%%%
+%%%       http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%%   Unless required by applicable law or agreed to in writing, software
+%%%   distributed under the License is distributed on an "AS IS" BASIS,
+%%%   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%%   See the License for the specific language governing permissions and
+%%%   limitations under the License.
+%%%
+
 -mode(compile).
 
 -include("../include/kpro_common.hrl").
@@ -83,17 +99,19 @@ generate_code(Records) ->
   ok = gen_marshaller(Records).
 
 gen_header_file(Records) ->
-  IoData =
-    [ "-ifndef(kpro_hrl).\n"
-    , "-define(kpro_hrl, true).\n"
-    , "\n"
-    , "-include(\"kpro_common.hrl\").\n"
-    , "\n"
-    , gen_records(Records)
-    , gen_types(Records)
-    , "\n\n"
+  Blocks =
+    [ "%% generated code, do not edit!"
+    , ""
+    , "-ifndef(kpro_hrl)."
+    , "-define(kpro_hrl, true)."
+    , ""
+    , "-include(\"kpro_common.hrl\")."
+    , ""
+    , [gen_records(Records), gen_types(Records)]
+    , ""
     , "-endif.\n"
     ],
+  IoData = infix(Blocks, "\n"),
   Filename = filename:join(["..", "include", "kpro.hrl"]),
   ok = file:write_file(Filename, IoData).
 
@@ -169,7 +187,7 @@ this_dir() ->
 gen_marshaller(Records) ->
   Filename = filename:join(["..", "src", "kpro_structs.erl"]),
   Header0 =
-    [ "%% generated code"
+    [ "%% generated code, do not edit!"
     , "-module(kpro_structs)."
     , "-export([encode/1])."
     , "-export([decode/2])."
