@@ -215,7 +215,7 @@ encode({string, undefined}) ->
 encode({string, L}) when is_list(L) ->
   encode({string, iolist_to_binary(L)});
 encode({string, <<>>}) ->
-  <<-1:16/?INT>>;
+  <<0:16/?INT>>;
 encode({string, B}) when is_binary(B) ->
   Length = size(B),
   <<Length:16/?INT, B/binary>>;
