@@ -155,6 +155,10 @@
           ?API_ListGroupsRequest       -> kpro_ListGroupsResponse
         end).
 
+-define(CONSUMER_GROUP_STRUCTS, [ kpro_ConsumerGroupProtocolMetadata
+                                , kpro_ConsumerGroupMemberAssignment
+                                ]).
+
 %% Error code macros, from:
 %% https://github.com/apache/kafka/blob/0.9.0/clients/src/
 %%       main/java/org/apache/kafka/common/protocol/Errors.java
