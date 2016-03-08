@@ -95,7 +95,7 @@ do_desc(?EC_CORRUPT_MESSAGE) ->
   <<"The message contents does not match the message CRC "
     "or the message is otherwise corrupt.">>;
 do_desc(?EC_UNKNOWN_TOPIC_OR_PARTITION) ->
-  <<"This server does not host this topic-partition.">>;
+  <<"Topic or partition not found for the request">>;
 do_desc(?EC_INVALID_MESSAGE_SIZE) ->
   <<"The message has a negative size.">>;
 do_desc(?EC_LEADER_NOT_AVAILABLE) ->
