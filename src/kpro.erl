@@ -146,8 +146,7 @@ decode_response(Bin, Acc) ->
                             | kpro_DescribeGroupsRequest()
                             | kpro_ListGroupsRequest().
 encode_request(ClientId, CorrId, Request) ->
-  R = #kpro_Request{ apiVersion     = ?KPRO_API_VERSION
-                   , correlationId  = CorrId
+  R = #kpro_Request{ correlationId  = CorrId
                    , clientId       = ClientId
                    , requestMessage = Request
                    },
@@ -163,9 +162,9 @@ encode_request(#kpro_Request{ apiVersion     = ApiVersion0
   true = (CorrId0 =< ?MAX_CORR_ID), %% assert
   ApiKey = req_to_api_key(RequestMessage),
   CorrId = (ApiKey bsl ?CORR_ID_BITS) bor CorrId0,
-  ApiVersion = case ApiVersion0 of
-                 undefined -> ?KPRO_API_VERSION;
-                 _         -> ApiVersion0
+  ApiVersion = case ApiVersion0 =:= undefined of
+                  true  -> get_api_version(RequestMessage);
+                  false -> ApiVersion0
                end,
   IoData =
     [ encode({int16, ApiKey})
@@ -178,6 +177,11 @@ encode_request(#kpro_Request{ apiVersion     = ApiVersion0
   [encode({int32, Size}), IoData].
 
 %%%_* Internal functions =======================================================
+
+get_api_version(#kpro_OffsetCommitRequestV1{}) -> 1;
+get_api_version(#kpro_OffsetCommitRequestV2{}) -> 2;
+get_api_version(#kpro_OffsetFetchRequest{})    -> 1;
+get_api_version(_)                             -> 0.
 
 %% @private Decode responses received from kafka broker.
 %% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
