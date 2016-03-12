@@ -146,8 +146,7 @@ decode_response(Bin, Acc) ->
                             | kpro_DescribeGroupsRequest()
                             | kpro_ListGroupsRequest().
 encode_request(ClientId, CorrId, Request) ->
-  R = #kpro_Request{ apiVersion     = ?KPRO_API_VERSION
-                   , correlationId  = CorrId
+  R = #kpro_Request{ correlationId  = CorrId
                    , clientId       = ClientId
                    , requestMessage = Request
                    },
@@ -163,9 +162,9 @@ encode_request(#kpro_Request{ apiVersion     = ApiVersion0
   true = (CorrId0 =< ?MAX_CORR_ID), %% assert
   ApiKey = req_to_api_key(RequestMessage),
   CorrId = (ApiKey bsl ?CORR_ID_BITS) bor CorrId0,
-  ApiVersion = case ApiVersion0 of
-                 undefined -> ?KPRO_API_VERSION;
-                 _         -> ApiVersion0
+  ApiVersion = case ApiVersion0 =:= undefined of
+                  true  -> get_api_version(RequestMessage);
+                  false -> ApiVersion0
                end,
   IoData =
     [ encode({int16, ApiKey})
@@ -178,6 +177,11 @@ encode_request(#kpro_Request{ apiVersion     = ApiVersion0
   [encode({int32, Size}), IoData].
 
 %%%_* Internal functions =======================================================
+
+get_api_version(#kpro_OffsetCommitRequestV1{}) -> 1;
+get_api_version(#kpro_OffsetCommitRequestV2{}) -> 2;
+get_api_version(#kpro_OffsetFetchRequest{})    -> 1;
+get_api_version(_)                             -> 0.
 
 %% @private Decode responses received from kafka broker.
 %% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
@@ -221,11 +225,12 @@ encode({string, B}) when is_binary(B) ->
   <<Length:16/?INT, B/binary>>;
 encode({bytes, undefined}) ->
   <<-1:32/?INT>>;
-encode({bytes, <<>>}) ->
-  <<-1:32/?INT>>;
-encode({bytes, B}) when is_binary(B) ->
-  Length = size(B),
-  <<Length:32/?INT, B/binary>>;
+encode({bytes, B}) when is_binary(B) orelse is_list(B) ->
+  Size = data_size(B),
+  case Size =:= 0 of
+    true  -> <<-1:32/?INT>>;
+    false -> [<<Size:32/?INT>>, B]
+  end;
 encode({{array, T}, L}) when is_list(L) ->
   true = ?IS_KAFKA_PRIMITIVE(T), %% assert
   Length = length(L),
@@ -261,6 +266,26 @@ encode(#kpro_Message{} = R) ->
    encode({int32, Size}),
    Crc, Body
   ];
+encode(#kpro_GroupAssignment{memberAssignment = MA} = GA) ->
+  case MA of
+    #kpro_ConsumerGroupMemberAssignment{} ->
+      %% member assignment is an embeded 'bytes' blob
+      Bytes = encode(MA),
+      kpro_structs:encode(GA#kpro_GroupAssignment{memberAssignment = Bytes});
+    _IoData ->
+      %% the higher level user may have it encoded already
+      kpro_structs:encode(GA)
+  end;
+encode(#kpro_GroupProtocol{protocolMetadata = PM} = GP) ->
+  case PM of
+    #kpro_ConsumerGroupProtocolMetadata{} ->
+      %% Group protocol metadata is an embeded 'bytes' blob
+      Bytes = encode(PM),
+      kpro_structs:encode(GP#kpro_GroupProtocol{protocolMetadata = Bytes});
+    _IoData ->
+      %% the higher level user may have it encoded already
+      kpro_structs:encode(GP)
+  end;
 encode(Struct) when is_tuple(Struct) ->
   kpro_structs:encode(Struct).
 
@@ -329,11 +354,37 @@ do_decode_fields(RecordName, [{FieldName, FieldType} | Rest], Bin, Acc) ->
   do_decode_fields(RecordName, Rest, BinRest, [FieldValue | Acc]).
 
 %% Translate specific values to human readable format.
+%% or decode nested structure in embeded bytes
 %% e.g. error codes.
 maybe_translate(_RecordName, errorCode, Code) ->
   kpro_ErrorCode:decode(Code);
+maybe_translate(kpro_GroupMemberMetadata, protocolMetadata, Bin) ->
+  maybe_decode_consumer_group_member_metadata(Bin);
+maybe_translate(_, memberAssignment, Bin) ->
+  maybe_decode_consumer_group_member_assignment(Bin);
 maybe_translate(_RecordName, _FieldName, RawValue) ->
   RawValue.
+
+maybe_decode_consumer_group_member_metadata(Bin) ->
+  try
+    {GroupMemberMetadata, <<>>} =
+      decode(kpro_ConsumerGroupProtocolMetadata, Bin),
+    GroupMemberMetadata
+  catch error : {badmatch, _} ->
+    %% in case not consumer group protocol
+    %% leave it for the higher level user to decode
+    Bin
+  end.
+
+maybe_decode_consumer_group_member_assignment(Bin) ->
+  try
+    {MemberAssignment, <<>>} = decode(kpro_ConsumerGroupMemberAssignment, Bin),
+    MemberAssignment
+  catch error : {badmatch, _} ->
+    %% in case not consumer group protocol
+    %% leave it for the higher level user to decode
+    Bin
+  end.
 
 copy_bytes(-1, Bin) ->
   {undefined, Bin};

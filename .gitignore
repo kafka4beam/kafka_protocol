@@ -4,3 +4,5 @@
 include/kpro.hrl
 src/kpro_structs.erl
 xrefr
+doc/
+logs/

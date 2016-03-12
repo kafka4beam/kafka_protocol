@@ -210,10 +210,12 @@ gen_marshaller(Records) ->
 all_requests() ->
   lists:flatten(
     lists:map(
-      fun(ApiKey) -> ?API_KEY_TO_REQ(ApiKey) end, ?ALL_API_KEYS)).
+      fun(ApiKey) -> ?API_KEY_TO_REQ(ApiKey) end, ?ALL_API_KEYS)) ++
+  ?CONSUMER_GROUP_STRUCTS.
 
 all_responses() ->
-  lists:map(fun(ApiKey) -> ?API_KEY_TO_RSP(ApiKey) end, ?ALL_API_KEYS).
+  lists:map(fun(ApiKey) -> ?API_KEY_TO_RSP(ApiKey) end, ?ALL_API_KEYS) ++
+  ?CONSUMER_GROUP_STRUCTS.
 
 gen_clauses(EncDec, Records) ->
   Names = case EncDec of

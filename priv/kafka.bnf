@@ -169,27 +169,39 @@ JoinGroupRequest => GroupId SessionTimeout MemberId ProtocolType [GroupProtocol]
     ProtocolName => string
     ProtocolMetadata => bytes
 
-JoinGroupResponse => ErrorCode GenerationId GroupProtocol LeaderId MemberId [GroupMemberMetadata]
+JoinGroupResponse => ErrorCode GenerationId ProtocolName LeaderId MemberId [GroupMemberMetadata]
   ErrorCode => int16
   GenerationId => int32
-  GroupProtocol => string
+  ProtocolName => string
   LeaderId => string
   MemberId => string
-  GroupMemberMetadata => MemberId Metadata
-    MemberId => string
-    Metadata => bytes
+
+GroupMemberMetadata => MemberId ProtocolMetadata
+  MemberId => string
+  ProtocolMetadata => bytes
+
+# embeded in 'bytes' content of
+# JoinGroupRequest.GroupProtocol.ProtocolMetadata
+# JoinGroupResponse.Members.ProtocolMetadata
+ConsumerGroupProtocolMetadata => Version [TopicName] UserData
+  Version => int16
+  TopicName => string
+  UserData => bytes
 
 SyncGroupRequest => GroupId GenerationId MemberId [GroupAssignment]
   GroupId => string
   GenerationId => int32
   MemberId => string
-  GroupAssignment => MemberId MemberAssignment
-    MemberId => string
-    MemberAssignment => bytes
 
-MemberAssignment => Version [PartitionAssignment]
+GroupAssignment => MemberId MemberAssignment
+  MemberId => string
+  MemberAssignment => bytes
+
+## embeded in 'bytes' content of
+## SyncGroupRequest.GroupAssignment.MemverAssignment
+ConsumerGroupMemberAssignment => Version [ConsumerGroupPartitionAssignment]
   Version => int16
-  PartitionAssignment => TopicName [Partition]
+  ConsumerGroupPartitionAssignment => TopicName [Partition]
     TopicName => string
     Partition => int32
   UserData => bytes

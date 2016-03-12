@@ -20,6 +20,8 @@ include erlang.mk
 $(GEN_CODE):: include/kpro_common.hrl priv/kpro_gen.escript priv/kafka.bnf priv/kpro_scanner.xrl priv/kpro_parser.yrl
 	priv/kpro_gen.escript
 
+$(PROJECT).d:: $(GEN_CODE)
+
 gen-code: $(GEN_CODE)
 	$(verbose) :
 
