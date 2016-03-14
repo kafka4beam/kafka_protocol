@@ -321,12 +321,13 @@ decode(kpro_FetchResponsePartition, Bin) ->
   %% messages in messageset are not array elements, but stream
   Messages = decode_message_stream(MsgsBin, []),
   PartitionMessages =
-    #kpro_FetchResponsePartition{ partition           = Partition
-                                , errorCode           = ErrorCode
-                                , highWatermarkOffset = HighWmOffset
-                                , messageSetSize      = MessageSetSize
-                                , message_L           = Messages
-                                },
+    #kpro_FetchResponsePartition
+      { partition           = Partition
+      , errorCode           = kpro_ErrorCode:decode(ErrorCode)
+      , highWatermarkOffset = HighWmOffset
+      , messageSetSize      = MessageSetSize
+      , message_L           = Messages
+      },
   {PartitionMessages, Rest};
 decode(StructName, Bin) when is_atom(StructName) ->
   kpro_structs:decode(StructName, Bin).
