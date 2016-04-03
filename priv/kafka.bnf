@@ -198,8 +198,8 @@ GroupAssignment => MemberId MemberAssignment
   MemberAssignment => bytes
 
 ## embeded in 'bytes' content of
-## SyncGroupRequest.GroupAssignment.MemverAssignment
-ConsumerGroupMemberAssignment => Version [ConsumerGroupPartitionAssignment]
+## SyncGroupRequest.GroupAssignment.MemberAssignment
+ConsumerGroupMemberAssignment => Version [ConsumerGroupPartitionAssignment] UserData
   Version => int16
   ConsumerGroupPartitionAssignment => TopicName [Partition]
     TopicName => string
