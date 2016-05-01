@@ -340,7 +340,13 @@ decode_message_stream(Bin, Acc) ->
     catch error : {badmatch, _} ->
       {?incomplete_message, <<>>}
     end,
-  decode_message_stream(Rest, [Msg | Acc]).
+  if
+    Msg#kpro_Message.attributes == ?KPRO_COMPRESS_GZIP ->
+      Messages  = decode_message_stream(zlib:gunzip(Msg#kpro_Message.value), Acc),
+      decode_message_stream(Rest, Messages);
+    true ->
+      decode_message_stream(Rest, [Msg | Acc])
+  end.
 
 decode_fields(RecordName, Fields, Bin) ->
   {FieldValues, BinRest} = do_decode_fields(RecordName, Fields, Bin, _Acc = []),
