@@ -23,10 +23,21 @@
 -define(KAFKA_VERSION, {0,9,0}). %% by default
 -endif.
 
+-type kpro_compress_option() :: no_compression | gzip | snappy | lz4.
+
 %% Compression attributes
--define(KPRO_COMPRESS_NONE, 0).
--define(KPRO_COMPRESS_GZIP, 1).
+-define(KPRO_COMPRESS_NONE,   0).
+-define(KPRO_COMPRESS_GZIP,   1).
 -define(KPRO_COMPRESS_SNAPPY, 2).
+-define(KPRO_COMPRESS_LZ4,    3).
+
+-define(KPRO_COMPRESSION_MASK, 7).
+-define(KPRO_IS_GZIP_ATTR(ATTR),
+        ((?KPRO_COMPRESSION_MASK band ATTR) =:= ?KPRO_COMPRESS_GZIP)).
+-define(KPRO_IS_SNAPPY_ATTR(ATTR),
+        ((?KPRO_COMPRESSION_MASK band ATTR) =:= ?KPRO_COMPRESS_SNAPPY)).
+-define(KPRO_IS_LZ4_ATTR(ATTR),
+        ((?KPRO_COMPRESSION_MASK band ATTR) =:= ?KPRO_COMPRESS_LZ4)).
 
 %% some pre-defined default values
 -define(KPRO_REPLICA_ID, -1).

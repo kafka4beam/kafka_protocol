@@ -20,6 +20,7 @@
 -export([ fetch_request/6
         , offset_request/4
         , produce_request/5
+        , produce_request/6
         ]).
 
 -export([ decode_response/1
@@ -80,21 +81,25 @@ fetch_request(Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
                     }.
 
 
+%% @equiv produce_request(Topic, Partition, KvList, RequiredAcks,
+%%                        AckTimeout, no_compression).
+%% @end
+-spec produce_request(topic(), partition(), [{binary(), binary()}],
+                      integer(), non_neg_integer()) ->
+                        kpro_ProduceRequest().
+produce_request(Topic, Partition, KafkaKvList, RequiredAcks, AckTimeout) ->
+  produce_request(Topic, Partition, KafkaKvList, RequiredAcks, AckTimeout,
+                  no_compression).
+
 %% @doc Help function to construct a #kpro_ProduceRequest{} for
 %% messages targeting one single topic-partition.
 %% @end
 -spec produce_request(topic(), partition(), [{binary(), binary()}],
-                      integer(), non_neg_integer()) ->
-                         kpro_ProduceRequest().
-produce_request(Topic, Partition, KafkaKvList, RequiredAcks, AckTimeout) ->
-  Messages =
-    lists:map(fun({K, V}) ->
-                  #kpro_Message{ magicByte  = ?KPRO_MAGIC_BYTE
-                               , attributes = ?KPRO_ATTRIBUTES
-                               , key        = K
-                               , value      = V
-                               }
-              end, KafkaKvList),
+                      integer(), non_neg_integer(),
+                      kpro_compress_option()) -> kpro_ProduceRequest().
+produce_request(Topic, Partition, KafkaKvList,
+                RequiredAcks, AckTimeout, CompressOption) ->
+  Messages = messages(KafkaKvList, CompressOption),
   PartitionMsgSet =
     #kpro_PartitionMessageSet{ partition = Partition
                              , message_L = Messages
@@ -177,6 +182,36 @@ encode_request(#kpro_Request{ apiVersion     = ApiVersion0
   [encode({int32, Size}), IoData].
 
 %%%_* Internal functions =======================================================
+
+messages(KafkaKvList, Compression) ->
+  Messages =
+    lists:map(fun({K, V}) ->
+                #kpro_Message{ attributes = ?KPRO_COMPRESS_NONE
+                             , key        = K
+                             , value      = V
+                             }
+              end, KafkaKvList),
+  case Compression =:= no_compression of
+    true  -> Messages;
+    false -> compress(Compression, Messages)
+  end.
+
+compress(Method, Messages) ->
+  IoData = [encode(Message) || Message <- Messages],
+  Attributes = case Method of
+                 gzip   -> ?KPRO_COMPRESS_GZIP;
+                 snappy -> ?KPRO_COMPRESS_SNAPPY;
+                 lz4    -> ?KPRO_COMPRESS_LZ4
+               end,
+  Msg = #kpro_Message{ attributes = Attributes
+                     , key        = <<>>
+                     , value      = do_compress(Method, IoData)
+                     },
+  [Msg].
+
+%% TODO: add snappy and lz4 compression
+do_compress(gzip, IoData) ->
+  zlib:gzip(IoData).
 
 get_api_version(#kpro_OffsetCommitRequestV1{}) -> 1;
 get_api_version(#kpro_OffsetCommitRequestV2{}) -> 2;
@@ -319,7 +354,8 @@ decode(kpro_FetchResponsePartition, Bin) ->
     MsgsBin:MessageSetSize/binary,
     Rest/binary>> = Bin,
   %% messages in messageset are not array elements, but stream
-  Messages = decode_message_stream(MsgsBin, []),
+  Messages0 = decode_message_stream(MsgsBin, []),
+  Messages = lists:reverse(Messages0),
   PartitionMessages =
     #kpro_FetchResponsePartition
       { partition           = Partition
@@ -333,20 +369,25 @@ decode(StructName, Bin) when is_atom(StructName) ->
   kpro_structs:decode(StructName, Bin).
 
 decode_message_stream(<<>>, Acc) ->
-  lists:reverse(Acc);
+  Acc;
 decode_message_stream(Bin, Acc) ->
   {Msg, Rest} =
     try decode(kpro_Message, Bin)
     catch error : {badmatch, _} ->
       {?incomplete_message, <<>>}
     end,
-  Messages = case Msg#kpro_Message.attributes of
-    ?KPRO_COMPRESS_GZIP ->
-      decode_message_stream(zlib:gunzip(Msg#kpro_Message.value), Acc);
-    _Else ->
-      [Msg | Acc]
-  end,
-  decode_message_stream(Rest, Messages).
+  NewAcc =
+    case Msg of
+      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_GZIP_ATTR(Attr) ->
+        decode_message_stream(zlib:gunzip(Msg#kpro_Message.value), Acc);
+      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_SNAPPY_ATTR(Attr) ->
+        decode_message_stream(java_snappy_unpack(Msg#kpro_Message.value), Acc);
+      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_LZ4_ATTR(Attr) ->
+        decode_message_stream(lz4_unpack(Msg#kpro_Message.value), Acc);
+      _Else ->
+        [Msg | Acc]
+    end,
+  decode_message_stream(Rest, NewAcc).
 
 decode_fields(RecordName, Fields, Bin) ->
   {FieldValues, BinRest} = do_decode_fields(RecordName, Fields, Bin, _Acc = []),
@@ -423,6 +464,34 @@ req_to_api_key(Req) when is_tuple(Req) ->
   req_to_api_key(element(1, Req));
 req_to_api_key(Req) when is_atom(Req) ->
   ?REQ_TO_API_KEY(Req).
+
+%% @private snappy-java adds its own header (SnappyCodec)
+%% which is not compatible with the official Snappy
+%% implementation.
+%% 8: magic, 4: version, 4: compatible
+%% followed by any number of chunks:
+%%    4: length
+%%  ...: snappy-compressed data.
+java_snappy_unpack(Bin) ->
+  <<_:16/binary, Chunks/binary>> = Bin,
+  java_snappy_unpack_chunks(Chunks, []).
+
+java_snappy_unpack_chunks(<<>>, Acc) ->
+  iolist_to_binary(Acc);
+java_snappy_unpack_chunks(Chunks, Acc) ->
+  <<Len:32/unsigned-integer, Rest/binary>> = Chunks,
+  case Len =:= 0 of
+    true ->
+      Rest =:= <<>> orelse erlang:error({Len, Rest}), %% assert
+      Acc;
+    false ->
+      erlang:error({no_impl, snappy})
+      %<<Data:Len/binary, Tail/binary>> = Rest,
+      %{ok, Decompressed} = snappy:decompress(Data),
+      %java_snappy_unpack_chunks(Tail, [Acc, Decompressed])
+  end.
+
+lz4_unpack(_) -> erlang:error({no_impl, lz4}).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
