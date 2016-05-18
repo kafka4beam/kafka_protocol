@@ -6,3 +6,5 @@ src/kpro_structs.erl
 xrefr
 doc/
 logs/
+.erlang.mk/
+deps/
