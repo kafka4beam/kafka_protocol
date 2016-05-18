@@ -1,6 +1,6 @@
 {application,kafka_protocol,
              [{description,"Kafka protocol erlang library"},
-              {vsn,"0.3.0"},
+              {vsn,"0.3.1"},
               {registered,[]},
               {applications,[kernel,stdlib]},
               {env,[]},
@@ -8,6 +8,7 @@
               {maintainers,["Shi Zaiming","Ivan Dyachkov"]},
               {licenses,["Apache License 2.0"]},
               {links,[{"Github","https://github.com/klarna/kafka_protocol"}]},
+              {build_tools, ["make", "rebar3"]},
               {files,["src","include","priv","rebar.config","rebar.lock",
                       "README.md","LICENSE","NOTICE","Makefile",
                       "erlang.mk"]}]}.
