@@ -8,3 +8,4 @@ doc/
 logs/
 .erlang.mk/
 deps/
+/rebar.lock
