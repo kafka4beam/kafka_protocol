@@ -48,8 +48,10 @@ parse(TokensList) ->
 to_records(Defs) ->
   lists:flatten(lists:map(fun records/1, Defs)).
 
-gname(Name) ->
-  list_to_atom("kpro_" ++ string:strip(atom_to_list(Name), both, $')).
+gname(Name) when is_atom(Name) ->
+  gname(atom_to_list(Name));
+gname(NameStr) when is_list(NameStr) ->
+  list_to_atom("kpro_" ++ string:strip(NameStr, both, $')).
 
 records(Def) -> records(Def, Def).
 
@@ -66,7 +68,7 @@ fields(Fields, Def) ->
             end, Fields).
 
 field_name(Name) when is_atom(Name) ->
-  lower_case_leading(Name);
+  lowercase_leading(Name);
 field_name({array, Name}) ->
   %% for array fields, append a _L suffix to the name
   list_to_atom(atom_to_list(field_name(Name)) ++ "_L").
@@ -127,36 +129,49 @@ gen_records([Rec | Rest]) ->
   [gen_record(Rec), gen_records(Rest)].
 
 gen_record({Name, Fields}) ->
+  {FieldLines, TypeRefs} = gen_record_fields(Fields, [], []),
   ["-record(", atom_to_list(Name), ",\n",
    "        { ",
-              infix(gen_record_fields(Fields), "        , "),
-   "        }).\n\n"
+              infix(FieldLines, "        , "),
+   "        }).\n\n",
+   TypeRefs
   ].
 
 %% change the first char to lower case
-lower_case_leading(Name) ->
+lowercase_leading(Name) ->
   [H | T] = atom_to_list(Name),
   list_to_atom([H + ($a - $A) | T]).
 
-gen_record_fields([]) ->
-  [];
-gen_record_fields([{Name, Type} | Fields]) ->
-  FieldName = atom_to_list(Name),
-  [ [ FieldName, " :: "
-    , case Type of
-        {one_of, Refs} -> gen_union_type(Refs, length(FieldName)+12);
-        _              -> gen_field_type(list_to_atom(FieldName), Type)
-      end
-    , "\n"
-    ]
-  | gen_record_fields(Fields)
-  ].
+uppercase_leading(Name) ->
+  [H | T] = atom_to_list(Name),
+  [H - ($a - $A) | T].
 
-gen_union_type(Refs, Width) ->
+gen_record_fields([], FieldLines, TypeRefs) ->
+  {lists:reverse(FieldLines), TypeRefs};
+gen_record_fields([{Name, Type} | Fields], FieldLines, TypeRefs0) ->
+  FieldName = atom_to_list(Name),
+  {FieldType, TypeRefs} =
+    case Type of
+      {one_of, Refs} ->
+        gen_union_type(Name, Refs, TypeRefs0);
+      _ ->
+        {gen_field_type(list_to_atom(FieldName), Type), TypeRefs0}
+    end,
+  FieldLine = iolist_to_binary([ FieldName, " :: ", FieldType, "\n" ]),
+  gen_record_fields(Fields, [FieldLine | FieldLines], TypeRefs).
+
+gen_union_type(FieldName, TypeRefs, IoDataAcc) ->
+  RefTypeNameStr = atom_to_list(gname(uppercase_leading(FieldName))),
+  Width = length(RefTypeNameStr) + length("-type  :: "),
   Sep = "\n" ++ lists:duplicate(Width, $\s) ++ "| ",
-  infix(lists:map(fun(Name) ->
-                    atom_to_list(Name) ++ "()"
-                  end, Refs), Sep).
+  { RefTypeNameStr ++ "()"
+  , [ IoDataAcc
+    , "-type ", RefTypeNameStr, "() :: "
+    , infix(lists:map(fun(Name) ->
+                        atom_to_list(Name) ++ "()"
+                      end, TypeRefs), Sep)
+    , ".\n\n"
+    ]}.
 
 %% generate special pre-defined types.
 gen_field_type(errorCode, _)     -> "error_code()";
