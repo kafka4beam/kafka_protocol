@@ -121,7 +121,7 @@ next_corr_id(CorrId)       -> CorrId + 1.
 %% @doc Parse binary stream received from kafka broker.
 %%      Return a list of kpro_Response() and the remaining bytes.
 %% @end
--spec decode_response(binary()) -> {kpro_Response(), binary()}.
+-spec decode_response(binary()) -> {[kpro_Response()], binary()}.
 decode_response(Bin) ->
   decode_response(Bin, []).
 
@@ -134,22 +134,7 @@ decode_response(Bin, Acc) ->
   end.
 
 %% @doc help function to encode kpro_XxxRequest into kafka wire format.
--spec encode_request(client_id(), corr_id(), RequestMessage) -> iodata()
-        when RequestMessage:: kpro_ProduceRequest()
-                            | kpro_FetchRequest()
-                            | kpro_OffsetRequest()
-                            | kpro_MetadataRequest()
-                            | kpro_OffsetCommitRequestV0()
-                            | kpro_OffsetCommitRequestV1()
-                            | kpro_OffsetCommitRequestV2()
-                            | kpro_OffsetFetchRequest()
-                            | kpro_GroupCoordinatorRequest()
-                            | kpro_JoinGroupRequest()
-                            | kpro_HeartbeatRequest()
-                            | kpro_LeaveGroupRequest()
-                            | kpro_SyncGroupRequest()
-                            | kpro_DescribeGroupsRequest()
-                            | kpro_ListGroupsRequest().
+-spec encode_request(client_id(), corr_id(), kpro_RequestMessage()) -> iodata().
 encode_request(ClientId, CorrId, Request) ->
   R = #kpro_Request{ correlationId  = CorrId
                    , clientId       = ClientId

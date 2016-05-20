@@ -118,6 +118,10 @@ gen_header_file(Records) ->
   ok = file:write_file(Filename, IoData).
 
 gen_types([]) -> [];
+gen_types([{kpro_Message, _Fields} | Rest]) ->
+  %% a special clause for incomplete message
+  ["\n-type kpro_Message() :: incomplete_message | #kpro_Message{}.",
+   gen_types(Rest)];
 gen_types([{Name, _Fields} | Rest]) ->
   RecName = atom_to_list(Name),
   [ bin(["\n-type ", RecName, "() :: #", RecName, "{}."])
@@ -174,7 +178,11 @@ gen_union_type(FieldName, TypeRefs, IoDataAcc) ->
     ]}.
 
 %% generate special pre-defined types.
+%% all 'errorCode' fields should have error_code() spec
+%% use 'any()' spec for all embeded 'bytes' fields
 gen_field_type(errorCode, _)     -> "error_code()";
+gen_field_type(protocolMetadata, bytes) -> "any()";
+gen_field_type(memberAssignment, bytes) -> "any()";
 gen_field_type(_FieldName, Type) -> gen_field_type(Type).
 
 gen_field_type(int8)   -> "int8()";
