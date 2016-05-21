@@ -1,6 +1,6 @@
 PROJECT = kafka_protocol
 PROJECT_DESCRIPTION = Kafka protocol erlang library
-PROJECT_VERSION = 0.3.1
+PROJECT_VERSION = 0.3.2
 
 COVER = true
 
