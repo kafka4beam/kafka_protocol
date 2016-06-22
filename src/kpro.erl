@@ -29,10 +29,13 @@
         , next_corr_id/1
         ]).
 
-%% exported for internal use
+%% exported for caller defined schema
 -export([ decode/2
-        , decode_fields/3
         , encode/1
+        ]).
+
+%% exported for internal use
+-export([ decode_fields/3
         ]).
 
 -include("kpro.hrl").
@@ -82,7 +85,7 @@ fetch_request(Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
 
 
 %% @equiv produce_request(Topic, Partition, KvList, RequiredAcks,
-%%                        AckTimeout, no_compression).
+%%                        AckTimeout, no_compression)
 %% @end
 -spec produce_request(topic(), partition(), [{binary(), binary()}],
                       integer(), non_neg_integer()) ->
@@ -230,6 +233,7 @@ do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
 do_decode_response( Bin) ->
   {incomplete, Bin}.
 
+encode({Fun, Data}) when is_function(Fun, 1) -> Fun(Data);
 encode({int8,  I}) when is_integer(I) -> <<I:8/?INT>>;
 encode({int16, I}) when is_integer(I) -> <<I:16/?INT>>;
 encode({int32, I}) when is_integer(I) -> <<I:32/?INT>>;
@@ -309,6 +313,8 @@ encode(#kpro_GroupProtocol{protocolMetadata = PM} = GP) ->
 encode(Struct) when is_tuple(Struct) ->
   kpro_structs:encode(Struct).
 
+decode(Fun, Bin) when is_function(Fun, 1) ->
+  Fun(Bin);
 decode(int8, Bin) ->
   <<Value:8/?INT, Rest/binary>> = Bin,
   {Value, Rest};
