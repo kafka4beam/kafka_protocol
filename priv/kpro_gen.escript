@@ -213,7 +213,7 @@ gen_marshaller(Records) ->
     [ "%% generated code, do not edit!"
     , "-module(kpro_structs)."
     , "-export([encode/1])."
-    , "-export([decode/2])."
+    , "-export([decode/3])."
     , "-include(\"kpro.hrl\")."
     ],
   IoData =
@@ -303,9 +303,9 @@ gen_clause(encoder, Name, Fields) ->
   , "  ]"
   ];
 gen_clause(decoder, Name, Fields) ->
-  [ "decode(", atom_to_list(Name) ,", Bin) ->\n"
+  [ "decode(UseMaps, ", atom_to_list(Name) ,", Bin) ->\n"
   , "Fields = ", gen_field_types(Fields), ","
-  , "kpro:decode_fields(", atom_to_list(Name), ", Fields, Bin)"
+  , "kpro:decode_fields(UseMaps, ", atom_to_list(Name), ", Fields, Bin)"
   ].
 
 gen_field_encoders(_Prefix, []) -> [];
