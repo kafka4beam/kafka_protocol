@@ -4,6 +4,7 @@
 /ebin
 include/kpro.hrl
 src/kpro_structs.erl
+src/kpro_records.erl
 xrefr
 doc/
 logs/

@@ -1,6 +1,6 @@
 PROJECT = kafka_protocol
 PROJECT_DESCRIPTION = Kafka protocol erlang library
-PROJECT_VERSION = 0.4.0
+PROJECT_VERSION = 0.5.0
 
 COVER = true
 
@@ -8,7 +8,7 @@ EUNIT_OPTS = verbose
 ERLC_OPTS = -Werror +warn_unused_vars +warn_shadow_vars +warn_unused_import +warn_obsolete_guard +debug_info
 CT_OPTS = -ct_use_short_names true
 
-GEN_CODE = include/kpro.hrl src/kpro_structs.erl
+GEN_CODE = include/kpro.hrl src/kpro_structs.erl src/kpro_records.erl
 
 app:: gen-code
 clean:: gen-clean
