@@ -41,7 +41,7 @@ is_error(_)        -> true.
 %% @doc Decode kafka protocol error code integer into atoms
 %% for undefined error codes, return the original integer
 %% @end
--spec decode(int16()) -> error_code().
+-spec decode(kpro:int16()) -> kpro:error_code().
 decode(-1) -> ?EC_UNKNOWN;
 decode(0)  -> ?EC_NONE;
 decode(1)  -> ?EC_OFFSET_OUT_OF_RANGE;
@@ -78,12 +78,12 @@ decode(31) -> ?EC_CLUSTER_AUTHORIZATION_FAILED;
 decode(X)  -> (true = is_integer(X)) andalso X.
 
 %% @doc Get description string of error codes.
--spec desc(error_code()) -> binary().
+-spec desc(kpro:error_code()) -> binary().
 desc(ErrorCode) when is_integer(ErrorCode) -> do_desc(decode(ErrorCode));
 desc(ErrorCode) when is_atom(ErrorCode)    -> do_desc(ErrorCode).
 
 %% @private Get description string for erro codes, take decoded error code only.
--spec do_desc(error_code()) -> binary().
+-spec do_desc(kpro:error_code()) -> binary().
 do_desc(?EC_UNKNOWN) ->
   <<"The server experienced an unexpected error when processing the request">>;
 do_desc(?EC_NONE) ->

@@ -206,16 +206,18 @@ gen_union_type(FieldName, TypeRefs, IoDataAcc) ->
 %% generate special pre-defined types.
 %% all 'errorCode' fields should have error_code() spec
 %% use 'any()' spec for all embeded 'bytes' fields
-gen_field_type(errorCode, _)     -> "error_code()";
+gen_field_type(errorCode, _)     -> "kpro:error_code()";
 gen_field_type(protocolMetadata, bytes) -> "any()";
 gen_field_type(memberAssignment, bytes) -> "any()";
+gen_field_type(key, bytes) -> "kpro:kafka_key()";
+gen_field_type(value, bytes) -> "kpro:kafka_value()";
 gen_field_type(_FieldName, Type) -> gen_field_type(Type).
 
-gen_field_type(int8)   -> "int8()";
-gen_field_type(int16)  -> "int16()";
-gen_field_type(int32)  -> "int32()";
-gen_field_type(int64)  -> "int64()";
-gen_field_type(string) -> "str()";
+gen_field_type(int8)   -> "kpro:int8()";
+gen_field_type(int16)  -> "kpro:int16()";
+gen_field_type(int32)  -> "kpro:int32()";
+gen_field_type(int64)  -> "kpro:int64()";
+gen_field_type(string) -> "kpro:str()";
 gen_field_type(bytes)  -> "binary()";
 gen_field_type({array, Name}) ->
   "[" ++ gen_field_type(Name) ++ "]";

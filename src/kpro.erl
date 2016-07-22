@@ -38,7 +38,42 @@
 -export([ decode_fields/3
         ]).
 
+-export_type([ int8/0
+             , int16/0
+             , int32/0
+             , int64/0
+             , str/0
+             , bytes/0
+             , api_key/0
+             , error_code/0
+             , client_id/0
+             , topic/0
+             , partition/0
+             , offset/0
+             , kafka_key/0
+             , kafka_value/0
+             ]).
+
 -include("kpro.hrl").
+
+-type int8()       :: -128..127.
+-type int16()      :: -32768..32767.
+-type int32()      :: -2147483648..2147483647.
+-type int64()      :: -9223372036854775808..9223372036854775807.
+-type str()        :: undefined | string() | binary().
+-type bytes()      :: undefined | binary().
+-type api_key()    :: 0..16.
+-type error_code() :: int16() | atom().
+
+%% type re-define for readability
+-type client_id() :: str().
+-type corr_id()   :: int32().
+-type topic()     :: str().
+-type partition() :: int32().
+-type offset()    :: int64().
+-type kafka_key() :: undefined | binary().
+-type kafka_value() :: undefined | binary() |
+                       [{kafka_key(), ?MODULE:kafka_value()}].
 
 -define(INT, signed-integer).
 
