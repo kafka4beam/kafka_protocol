@@ -1,4 +1,3 @@
-%%%
 %%%   Copyright (c) 2014-2016, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +26,7 @@
         , encode_request/1
         , encode_request/3
         , next_corr_id/1
+        , to_maps/1
         ]).
 
 %% exported for caller defined schema
@@ -169,7 +169,30 @@ encode_request(#kpro_Request{ apiVersion     = ApiVersion0
   Size = data_size(IoData),
   [encode({int32, Size}), IoData].
 
+%% @doc Convert decoded records to maps.
+to_maps(R) when is_tuple(R) ->
+  RecordName = element(1, R),
+  case kpro_records:fields(RecordName) of
+    FieldNames when is_list(FieldNames) ->
+      "kpro_" ++ Tag = atom_to_list(RecordName),
+      Values = [to_maps(V) || V <- tl(tuple_to_list(R))],
+      KVL = [{kpro_tag, Tag} | lists:zip(FieldNames, Values)],
+      do_to_maps(KVL);
+    false ->
+      R
+  end;
+to_maps(L) when is_list(L) ->
+  [to_maps(I) || I <- L];
+to_maps(Other) ->
+  Other.
+
 %%%_* Internal functions =======================================================
+
+-ifndef(NO_MAPS).
+do_to_maps(KVL) -> maps:from_list(KVL).
+-else.
+do_to_maps(KVL) -> KVL.
+-endif.
 
 messages(KafkaKvList, Compression) ->
   Messages =

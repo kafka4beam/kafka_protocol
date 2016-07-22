@@ -48,16 +48,16 @@ parse(TokensList) ->
 to_records(Defs) ->
   lists:flatten(lists:map(fun records/1, Defs)).
 
-gname(Name) when is_atom(Name) ->
-  gname(atom_to_list(Name));
-gname(NameStr) when is_list(NameStr) ->
+global_name_atom(Name) when is_atom(Name) ->
+  global_name_atom(atom_to_list(Name));
+global_name_atom(NameStr) when is_list(NameStr) ->
   list_to_atom("kpro_" ++ string:strip(NameStr, both, $')).
 
 records(Def) -> records(Def, Def).
 
 records([], _Def) -> [];
 records([{Name, Fields} | Rest], Def) when is_list(Fields) ->
-  Rec = {gname(Name), fields(Fields, Def)},
+  Rec = {global_name_atom(Name), fields(Fields, Def)},
   [Rec | records(Rest, Def)];
 records([_ | Rest], Def) ->
   records(Rest, Def).
@@ -79,10 +79,10 @@ field_type(Name, Def) when is_atom(Name) ->
       %% They claim the bnf to be context free, however there are still
       %% few cases where external reference is used, such as message set
       %% definition.
-      gname(Name);
+      global_name_atom(Name);
     {_, Fields} when is_list(Fields) ->
       %% internal reference
-      gname(Name);
+      global_name_atom(Name);
     {_, Type} when is_atom(Type) ->
       %% this is a primitive type field, such as int8, string, bytes etc.
       Type;
@@ -91,13 +91,14 @@ field_type(Name, Def) when is_atom(Name) ->
       true = ?IS_KAFKA_PRIMITIVE(Type),
       {array, Type};
     {_, {one_of, Refs}} ->
-      {one_of, [gname(R) || R <- Refs]}
+      {one_of, [global_name_atom(R) || R <- Refs]}
   end;
 field_type({array, Name}, Def) ->
   {array, field_type(Name, Def)}.
 
 generate_code(Records) ->
   ok = gen_header_file(Records),
+  ok = gen_records_module(Records),
   ok = gen_marshaller(Records).
 
 gen_header_file(Records) ->
@@ -141,6 +142,30 @@ gen_record({Name, Fields}) ->
    TypeRefs
   ].
 
+gen_records_module(Records) ->
+  Blocks =
+    [ "%% generated code, do not edit!"
+    , ""
+    , "-module(kpro_records)."
+    , "-export([fields/1])."
+    , "-include(\"kpro.hrl\")."
+    , ""
+    , [ [gen_record_fields_clause(Record) || Record <- Records]
+      , "fields(_Unknown) -> false."
+      ]
+    ],
+  IoData = infix(Blocks, "\n"),
+  Filename = filename:join(["..", "src", "kpro_records.erl"]),
+  ok = file:write_file(Filename, IoData).
+
+%% fields(#kpro_Xyz{} = R) ->
+%%  record_info(fields, kpro_Xyz);
+gen_record_fields_clause({RecordName, _Fields}) ->
+  Name = atom_to_list(RecordName),
+  [ "fields(", Name, ") ->\n"
+  , "  record_info(fields, ", Name, ");\n"
+  ].
+
 %% change the first char to lower case
 lowercase_leading(Name) ->
   [H | T] = atom_to_list(Name),
@@ -165,7 +190,8 @@ gen_record_fields([{Name, Type} | Fields], FieldLines, TypeRefs0) ->
   gen_record_fields(Fields, [FieldLine | FieldLines], TypeRefs).
 
 gen_union_type(FieldName, TypeRefs, IoDataAcc) ->
-  RefTypeNameStr = atom_to_list(gname(uppercase_leading(FieldName))),
+  GNameAtom = global_name_atom(uppercase_leading(FieldName)),
+  RefTypeNameStr = atom_to_list(GNameAtom),
   Width = length(RefTypeNameStr) + length("-type  :: "),
   Sep = "\n" ++ lists:duplicate(Width, $\s) ++ "| ",
   { RefTypeNameStr ++ "()"
