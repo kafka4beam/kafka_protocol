@@ -50,8 +50,11 @@
              , topic/0
              , partition/0
              , offset/0
+             , key/0
+             , value/0
              , kafka_key/0
              , kafka_value/0
+             , corr_id/0
              ]).
 
 -include("kpro.hrl").
@@ -71,9 +74,13 @@
 -type topic()     :: str().
 -type partition() :: int32().
 -type offset()    :: int64().
--type kafka_key() :: undefined | binary().
--type kafka_value() :: undefined | binary() |
-                       [{kafka_key(), ?MODULE:kafka_value()}].
+
+-type key() :: undefined | iodata().
+-type value() :: undefined | iodata() | [{key(), kv_list()}].
+-type kv_list() :: [{key(), value()}].
+
+-type kafka_key() :: key().
+-type kafka_value() :: undefined | iodata() | [kpro_Message()].
 
 -define(INT, signed-integer).
 
@@ -122,22 +129,22 @@ fetch_request(Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
 %% @equiv produce_request(Topic, Partition, KvList, RequiredAcks,
 %%                        AckTimeout, no_compression)
 %% @end
--spec produce_request(topic(), partition(), [{binary(), binary()}],
+-spec produce_request(topic(), partition(), kv_list(),
                       integer(), non_neg_integer()) ->
                         kpro_ProduceRequest().
-produce_request(Topic, Partition, KafkaKvList, RequiredAcks, AckTimeout) ->
-  produce_request(Topic, Partition, KafkaKvList, RequiredAcks, AckTimeout,
+produce_request(Topic, Partition, KvList, RequiredAcks, AckTimeout) ->
+  produce_request(Topic, Partition, KvList, RequiredAcks, AckTimeout,
                   no_compression).
 
 %% @doc Help function to construct a #kpro_ProduceRequest{} for
 %% messages targeting one single topic-partition.
 %% @end
--spec produce_request(topic(), partition(), [{binary(), binary()}],
+-spec produce_request(topic(), partition(), kv_list(),
                       integer(), non_neg_integer(),
                       kpro_compress_option()) -> kpro_ProduceRequest().
-produce_request(Topic, Partition, KafkaKvList,
+produce_request(Topic, Partition, KvList,
                 RequiredAcks, AckTimeout, CompressOption) ->
-  Messages = messages(KafkaKvList, CompressOption),
+  Messages = encode_messages(KvList, CompressOption),
   PartitionMsgSet =
     #kpro_PartitionMessageSet{ partition = Partition
                              , message_L = Messages
@@ -190,10 +197,7 @@ encode_request(#kpro_Request{ apiVersion     = ApiVersion0
   true = (CorrId0 =< ?MAX_CORR_ID), %% assert
   ApiKey = req_to_api_key(RequestMessage),
   CorrId = (ApiKey bsl ?CORR_ID_BITS) bor CorrId0,
-  ApiVersion = case ApiVersion0 =:= undefined of
-                  true  -> get_api_version(RequestMessage);
-                  false -> ApiVersion0
-               end,
+  ApiVersion = get_api_version(ApiVersion0, RequestMessage),
   IoData =
     [ encode({int16, ApiKey})
     , encode({int16, ApiVersion})
@@ -229,21 +233,27 @@ do_to_maps(KVL) -> maps:from_list(KVL).
 do_to_maps(KVL) -> KVL.
 -endif.
 
-messages(KafkaKvList, Compression) ->
-  Messages =
-    lists:map(fun({K, V}) ->
-                #kpro_Message{ attributes = ?KPRO_COMPRESS_NONE
-                             , key        = K
-                             , value      = V
-                             }
-              end, KafkaKvList),
+-spec encode_messages(kv_list(), kpro_compress_option()) -> iodata().
+encode_messages(KvList, Compression) ->
+  Encoded = encode_messages(KvList),
   case Compression =:= no_compression of
-    true  -> Messages;
-    false -> compress(Compression, Messages)
+    true  -> Encoded;
+    false -> compress(Compression, Encoded)
   end.
 
-compress(Method, Messages) ->
-  IoData = [encode(Message) || Message <- Messages],
+encode_messages([]) -> [];
+encode_messages([{_K, [{_NestedK, _NestedV} | _] = NestedKvList} | KvList]) ->
+  [ encode_messages(NestedKvList)
+  | encode_messages(KvList)
+  ];
+encode_messages([{K, V} | KvList]) ->
+  Msg = #kpro_Message{ attributes = ?KPRO_COMPRESS_NONE
+                     , key        = K
+                     , value      = V
+                     },
+  [encode(Msg) | encode_messages(KvList)].
+
+compress(Method, IoData) ->
   Attributes = case Method of
                  gzip   -> ?KPRO_COMPRESS_GZIP;
                  snappy -> ?KPRO_COMPRESS_SNAPPY;
@@ -253,16 +263,23 @@ compress(Method, Messages) ->
                      , key        = <<>>
                      , value      = do_compress(Method, IoData)
                      },
-  [Msg].
+  [encode(Msg)].
+
 
 %% TODO: add snappy and lz4 compression
+-spec do_compress(kpro_compress_option(), iodata()) -> iodata().
 do_compress(gzip, IoData) ->
   zlib:gzip(IoData).
 
-get_api_version(#kpro_OffsetCommitRequestV1{}) -> 1;
-get_api_version(#kpro_OffsetCommitRequestV2{}) -> 2;
-get_api_version(#kpro_OffsetFetchRequest{})    -> 1;
-get_api_version(_)                             -> 0.
+-spec get_api_version(int16() | undefined, kpro_RequestMessage()) -> int16().
+get_api_version(V, _Msg) when is_integer(V) -> V;
+get_api_version(undefined, Msg)             -> api_version(Msg).
+
+-spec api_version(kpro_RequestMessage()) -> int16().
+api_version(#kpro_OffsetCommitRequestV1{}) -> 1;
+api_version(#kpro_OffsetCommitRequestV2{}) -> 2;
+api_version(#kpro_OffsetFetchRequest{})    -> 1;
+api_version(_Default)                      -> 0.
 
 %% @private Decode responses received from kafka broker.
 %% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
@@ -322,11 +339,11 @@ encode({array, L}) when is_list(L) ->
   [<<Length:32/?INT>>, [encode(I) || I <- L]];
 encode(#kpro_PartitionMessageSet{} = R) ->
   %% messages in messageset is a stream, not an array
-  MessageSet = [encode(M) || M <- R#kpro_PartitionMessageSet.message_L],
-  Size = data_size(MessageSet),
+  EncodedMessages = R#kpro_PartitionMessageSet.message_L,
+  Size = data_size(EncodedMessages),
   [encode({int32, R#kpro_PartitionMessageSet.partition}),
    encode({int32, Size}),
-   MessageSet
+   EncodedMessages
   ];
 encode(#kpro_Message{} = R) ->
   MagicByte = case R#kpro_Message.magicByte of
@@ -337,11 +354,11 @@ encode(#kpro_Message{} = R) ->
                  undefined            -> ?KPRO_ATTRIBUTES;
                  A when is_integer(A) -> A
                end,
-  Body =
-    [encode({int8, MagicByte}),
-     encode({int8, Attributes}),
-     encode({bytes, R#kpro_Message.key}),
-     encode({bytes, R#kpro_Message.value})],
+  Body = [ encode({int8, MagicByte})
+         , encode({int8, Attributes})
+         , encode({bytes, R#kpro_Message.key})
+         , encode({bytes, R#kpro_Message.value})
+         ],
   Crc  = encode({int32, erlang:crc32(Body)}),
   Size = data_size([Crc, Body]),
   [encode({int64, -1}),
