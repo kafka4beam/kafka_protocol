@@ -23,6 +23,7 @@
         ]).
 
 -export([ decode_response/1
+        , decode_response/2
         , encode_request/1
         , encode_request/3
         , next_corr_id/1
@@ -30,12 +31,12 @@
         ]).
 
 %% exported for caller defined schema
--export([ decode/2
+-export([ decode/3
         , encode/1
         ]).
 
 %% exported for internal use
--export([ decode_fields/3
+-export([ decode_fields/4
         ]).
 
 -include("kpro.hrl").
@@ -121,19 +122,23 @@ produce_request(Topic, Partition, KafkaKvList,
 next_corr_id(?MAX_CORR_ID) -> 0;
 next_corr_id(CorrId)       -> CorrId + 1.
 
+%% @equiv decode_response(false, Bin)
+decode_response(Bin) ->
+  decode_response(false, Bin).
+
 %% @doc Parse binary stream received from kafka broker.
 %%      Return a list of kpro_Response() and the remaining bytes.
 %% @end
--spec decode_response(binary()) -> {[kpro_Response()], binary()}.
-decode_response(Bin) ->
-  decode_response(Bin, []).
+-spec decode_response(boolean(), binary()) -> {[kpro_Response() | #{}], binary()}.
+decode_response(UseMaps, Bin) ->
+  decode_response(UseMaps, Bin, []).
 
-decode_response(Bin, Acc) ->
-  case do_decode_response(Bin) of
+decode_response(UseMaps, Bin, Acc) ->
+  case do_decode_response(UseMaps, Bin) of
     {incomplete, Rest} ->
       {lists:reverse(Acc), Rest};
     {Response, Rest} ->
-      decode_response(Rest, [Response | Acc])
+      decode_response(UseMaps, Rest, [Response | Acc])
   end.
 
 %% @doc help function to encode kpro_XxxRequest into kafka wire format.
@@ -232,15 +237,15 @@ get_api_version(_)                             -> 0.
 %% @private Decode responses received from kafka broker.
 %% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
 %% @end
--spec do_decode_response(binary()) -> {incomplete | #kpro_Response{}, binary()}.
-do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
+-spec do_decode_response(boolean(), binary()) -> {incomplete | #kpro_Response{} | #{}, binary()}.
+do_decode_response(UseMaps, <<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
   <<I:32/integer, Rest0/binary>> = Bin,
   ApiKey = I bsr ?CORR_ID_BITS,
   CorrId = I band ?MAX_CORR_ID,
   Type = ?API_KEY_TO_RSP(ApiKey),
   {Message, Rest} =
     try
-      decode(Type, Rest0)
+      decode(UseMaps, Type, Rest0)
     catch error : E ->
       Context = [ {api_key, ApiKey}
                 , {corr_id, CorrId}
@@ -248,13 +253,16 @@ do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
                 ],
       erlang:error({E, Context, erlang:get_stacktrace()})
     end,
-  Result =
-    #kpro_Response{ correlationId   = CorrId
-                  , responseMessage = Message
-                  },
+  Result = kpro_response(UseMaps, CorrId, Message),
   {Result, Rest};
-do_decode_response( Bin) ->
+do_decode_response(_UseMaps, Bin) ->
   {incomplete, Bin}.
+
+kpro_response(false = _UseMaps, CorrId, Message) ->
+  #kpro_Response{ correlationId   = CorrId
+                , responseMessage = Message};
+kpro_response(true = _UseMaps, CorrId, Message) ->
+  #{correlationId => CorrId, message => Message}.
 
 encode({Fun, Data}) when is_function(Fun, 1) -> Fun(Data);
 encode({int8,  I}) when is_integer(I) -> <<I:8/?INT>>;
@@ -336,30 +344,32 @@ encode(#kpro_GroupProtocol{protocolMetadata = PM} = GP) ->
 encode(Struct) when is_tuple(Struct) ->
   kpro_structs:encode(Struct).
 
-decode(Fun, Bin) when is_function(Fun, 1) ->
+decode(_UseMaps, Fun, Bin) when is_function(Fun, 1) ->
   Fun(Bin);
-decode(int8, Bin) ->
+decode(UseMaps, Fun, Bin) when is_function(Fun, 2) ->
+  Fun(UseMaps, Bin);
+decode(_UseMaps, int8, Bin) ->
   <<Value:8/?INT, Rest/binary>> = Bin,
   {Value, Rest};
-decode(int16, Bin) ->
+decode(_UseMaps, int16, Bin) ->
   <<Value:16/?INT, Rest/binary>> = Bin,
   {Value, Rest};
-decode(int32, Bin) ->
+decode(_UseMaps, int32, Bin) ->
   <<Value:32/?INT, Rest/binary>> = Bin,
   {Value, Rest};
-decode(int64, Bin) ->
+decode(_UseMaps, int64, Bin) ->
   <<Value:64/?INT, Rest/binary>> = Bin,
   {Value, Rest};
-decode(string, Bin) ->
+decode(_UseMaps, string, Bin) ->
   <<Size:16/?INT, Rest/binary>> = Bin,
   copy_bytes(Size, Rest);
-decode(bytes, Bin) ->
+decode(_UseMaps, bytes, Bin) ->
   <<Size:32/?INT, Rest/binary>> = Bin,
   copy_bytes(Size, Rest);
-decode({array, Type}, Bin) ->
+decode(UseMaps, {array, Type}, Bin) ->
   <<Length:32/?INT, Rest/binary>> = Bin,
-  decode_array_elements(Length, Type, Rest, _Acc = []);
-decode(kpro_FetchResponsePartition, Bin) ->
+  decode_array_elements(UseMaps, Length, Type, Rest, _Acc = []);
+decode(UseMaps, kpro_FetchResponsePartition, Bin) ->
   %% special treat since message sets may get partially delivered
   <<Partition:32/?INT,
     ErrorCode:16/?INT,
@@ -368,69 +378,89 @@ decode(kpro_FetchResponsePartition, Bin) ->
     MsgsBin:MessageSetSize/binary,
     Rest/binary>> = Bin,
   %% messages in messageset are not array elements, but stream
-  Messages0 = decode_message_stream(MsgsBin, []),
+  Messages0 = decode_message_stream(UseMaps, MsgsBin, []),
   Messages = lists:reverse(Messages0),
   PartitionMessages =
-    #kpro_FetchResponsePartition
-      { partition           = Partition
-      , errorCode           = kpro_ErrorCode:decode(ErrorCode)
-      , highWatermarkOffset = HighWmOffset
-      , messageSetSize      = MessageSetSize
-      , message_L           = Messages
-      },
+    case UseMaps of
+      false ->
+        #kpro_FetchResponsePartition
+          { partition           = Partition
+          , errorCode           = kpro_ErrorCode:decode(ErrorCode)
+          , highWatermarkOffset = HighWmOffset
+          , messageSetSize      = MessageSetSize
+          , message_L           = Messages
+          };
+      true ->
+        #{ partition           => Partition
+         , errorCode           => kpro_ErrorCode:decode(ErrorCode)
+         , highWatermarkOffset => HighWmOffset
+         , messageSetSize      => MessageSetSize
+         , messages            => Messages}
+    end,
   {PartitionMessages, Rest};
-decode(StructName, Bin) when is_atom(StructName) ->
-  kpro_structs:decode(StructName, Bin).
+decode(UseMaps, StructName, Bin) when is_atom(StructName) ->
+  kpro_structs:decode(UseMaps, StructName, Bin).
 
-decode_message_stream(<<>>, Acc) ->
+decode_message_stream(_UseMaps, <<>>, Acc) ->
   Acc;
-decode_message_stream(Bin, Acc) ->
+decode_message_stream(UseMaps, Bin, Acc) ->
   {Msg, Rest} =
-    try decode(kpro_Message, Bin)
+    try kpro_structs:decode(UseMaps, kpro_Message, Bin)
     catch error : {badmatch, _} ->
       {?incomplete_message, <<>>}
     end,
   NewAcc =
-    case Msg of
-      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_GZIP_ATTR(Attr) ->
-        decode_message_stream(zlib:gunzip(Msg#kpro_Message.value), Acc);
-      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_SNAPPY_ATTR(Attr) ->
-        decode_message_stream(java_snappy_unpack(Msg#kpro_Message.value), Acc);
-      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_LZ4_ATTR(Attr) ->
-        decode_message_stream(lz4_unpack(Msg#kpro_Message.value), Acc);
+    case kpro_message:attributes(Msg) of
+      Attr when ?KPRO_IS_GZIP_ATTR(Attr) ->
+        decode_message_stream(UseMaps, zlib:gunzip(kpro_message:value(Msg)), Acc);
+      Attr when ?KPRO_IS_SNAPPY_ATTR(Attr) ->
+        decode_message_stream(UseMaps, java_snappy_unpack(kpro_message:value(Msg)), Acc);
+      Attr when ?KPRO_IS_LZ4_ATTR(Attr) ->
+        decode_message_stream(UseMaps, lz4_unpack(kpro_message:value(Msg)), Acc);
       _Else ->
         [Msg | Acc]
     end,
-  decode_message_stream(Rest, NewAcc).
+  decode_message_stream(UseMaps, Rest, NewAcc).
 
-decode_fields(RecordName, Fields, Bin) ->
-  {FieldValues, BinRest} = do_decode_fields(RecordName, Fields, Bin, _Acc = []),
+decode_fields(false = UseMaps, RecordName, Fields, Bin) ->
+  {FieldValues, BinRest} = do_decode_fields(UseMaps, RecordName, Fields, Bin, _Acc = []),
   %% make the record.
-  {list_to_tuple([RecordName | FieldValues]), BinRest}.
+  {list_to_tuple([RecordName | FieldValues]), BinRest};
+decode_fields(true = UseMaps, RecordName, Fields, Bin) ->
+  do_decode_fields(UseMaps, RecordName, Fields, Bin, _Acc = #{}).
+  %{Acc, BinRest} = do_decode_fields(UseMaps, RecordName, Fields, Bin, _Acc = #{}),
+  %[$k, $p, $r, $o, $_ | ShortRecordName] = atom_to_list(RecordName),
+  %{#{list_to_atom(ShortRecordName) => Acc}, BinRest}.
 
-do_decode_fields(_RecordName, _Fields = [], Bin, Acc) ->
+do_decode_fields(false = _UseMaps, _RecordName, _Fields = [], Bin, Acc) ->
   {lists:reverse(Acc), Bin};
-do_decode_fields(RecordName, [{FieldName, FieldType} | Rest], Bin, Acc) ->
-  {FieldValue0, BinRest} = decode(FieldType, Bin),
-  FieldValue = maybe_translate(RecordName, FieldName, FieldValue0),
-  do_decode_fields(RecordName, Rest, BinRest, [FieldValue | Acc]).
+do_decode_fields(true = _UseMaps, _RecordName, _Fields = [], Bin, Acc) ->
+  {Acc, Bin};
+do_decode_fields(false = UseMaps, RecordName, [{FieldName, FieldType} | Rest], Bin, Acc) ->
+  {FieldValue0, BinRest} = decode(UseMaps, FieldType, Bin),
+  FieldValue = maybe_translate(UseMaps, RecordName, FieldName, FieldValue0),
+  do_decode_fields(UseMaps, RecordName, Rest, BinRest, [FieldValue | Acc]);
+do_decode_fields(true = UseMaps, RecordName, [{FieldName, FieldType} | Rest], Bin, Acc) ->
+  {FieldValue0, BinRest} = decode(UseMaps, FieldType, Bin),
+  FieldValue = maybe_translate(UseMaps, RecordName, FieldName, FieldValue0),
+  do_decode_fields(UseMaps, RecordName, Rest, BinRest, maps:put(FieldName, FieldValue, Acc)).
 
 %% Translate specific values to human readable format.
 %% or decode nested structure in embeded bytes
 %% e.g. error codes.
-maybe_translate(_RecordName, errorCode, Code) ->
+maybe_translate(_UseMaps, _RecordName, errorCode, Code) ->
   kpro_ErrorCode:decode(Code);
-maybe_translate(kpro_GroupMemberMetadata, protocolMetadata, Bin) ->
-  maybe_decode_consumer_group_member_metadata(Bin);
-maybe_translate(_, memberAssignment, Bin) ->
-  maybe_decode_consumer_group_member_assignment(Bin);
-maybe_translate(_RecordName, _FieldName, RawValue) ->
+maybe_translate(UseMaps, kpro_GroupMemberMetadata, protocolMetadata, Bin) ->
+  maybe_decode_consumer_group_member_metadata(UseMaps, Bin);
+maybe_translate(UseMaps, _, memberAssignment, Bin) ->
+  maybe_decode_consumer_group_member_assignment(UseMaps, Bin);
+maybe_translate(_UseMaps, _RecordName, _FieldName, RawValue) ->
   RawValue.
 
-maybe_decode_consumer_group_member_metadata(Bin) ->
+maybe_decode_consumer_group_member_metadata(UseMaps, Bin) ->
   try
     {GroupMemberMetadata, <<>>} =
-      decode(kpro_ConsumerGroupProtocolMetadata, Bin),
+      kpro_structs:decode(UseMaps, kpro_ConsumerGroupProtocolMetadata, Bin),
     GroupMemberMetadata
   catch error : {badmatch, _} ->
     %% in case not consumer group protocol
@@ -438,9 +468,10 @@ maybe_decode_consumer_group_member_metadata(Bin) ->
     Bin
   end.
 
-maybe_decode_consumer_group_member_assignment(Bin) ->
+maybe_decode_consumer_group_member_assignment(UseMaps, Bin) ->
   try
-    {MemberAssignment, <<>>} = decode(kpro_ConsumerGroupMemberAssignment, Bin),
+    {MemberAssignment, <<>>} =
+      kpro_structs:decode(UseMaps, kpro_ConsumerGroupMemberAssignment, Bin),
     MemberAssignment
   catch error : {badmatch, _} ->
     %% in case not consumer group protocol
@@ -454,11 +485,11 @@ copy_bytes(Size, Bin) ->
   <<Bytes:Size/binary, Rest/binary>> = Bin,
   {binary:copy(Bytes), Rest}.
 
-decode_array_elements(0, _Type, Bin, Acc) ->
+decode_array_elements(_UseMaps, 0, _Type, Bin, Acc) ->
   {lists:reverse(Acc), Bin};
-decode_array_elements(N, Type, Bin, Acc) ->
-  {Element, Rest} = decode(Type, Bin),
-  decode_array_elements(N-1, Type, Rest, [Element | Acc]).
+decode_array_elements(UseMaps, N, Type, Bin, Acc) ->
+  {Element, Rest} = decode(UseMaps, Type, Bin),
+  decode_array_elements(UseMaps, N-1, Type, Rest, [Element | Acc]).
 
 -define(IS_BYTE(I), (I>=0 andalso I<256)).
 
