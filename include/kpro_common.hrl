@@ -51,23 +51,6 @@
 -define(CORR_ID_BITS, 27).
 -define(MAX_CORR_ID, 134217727).
 
-%% kafka wire format primitive types
-
--type int8()       :: -128..127.
--type int16()      :: -32768..32767.
--type int32()      :: -2147483648..2147483647.
--type int64()      :: -9223372036854775808..9223372036854775807.
--type str()        :: undefined | string() | binary().
--type bytes()      :: undefined | binary().
--type api_key()    :: 0..16.
--type error_code() :: int16() | atom().
-
-%% type re-define for readability
--type client_id() :: str().
--type corr_id()   :: int32().
--type topic()     :: str().
--type partition() :: int32().
--type offset()    :: int64().
 
 -define(incomplete_message, incomplete_message).
 
