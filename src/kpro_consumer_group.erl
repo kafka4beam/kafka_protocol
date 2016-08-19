@@ -17,7 +17,7 @@
 %% This module decodes messages in __consumer_offsets topic
 -module(kpro_consumer_group).
 
--export([decode/2]).
+-export([decode/2, to_maps/1]).
 
 -export_type([decoded/0]).
 
@@ -49,7 +49,7 @@
 %% Value Fields (when key version is 0 | 1):
 %%   version     :: 0 | 1
 %%   offset      :: integer()
-%%   metdata     :: binary()
+%%   metadata    :: binary()
 %%   timestamp   :: integer() when version = 0
 %%   commit_time :: integer() when version = 1
 %%   expire_time :: integer() when version = 1
@@ -78,6 +78,27 @@
 decode(KeyBin, ValueBin) ->
   {Tag, Key} = key(KeyBin),
   value(Tag, Key, ValueBin).
+
+to_maps({Tag, Key0, Value0}) ->
+  Key = lists:keydelete(version, 1, Key0),
+  Value = lists:keydelete(version, 1, Value0),
+  Data = Key ++ Value,
+  M = maps:map(fun do_to_maps/2, maps:from_list(Data)),
+  M#{tag => Tag}.
+
+do_to_maps(_K, [X | _] = V) when is_list(X) ->
+  lists:map(fun do_to_maps/1, V);
+do_to_maps(_K, [X | _] = V) when is_tuple(X) ->
+  maps:map(fun do_to_maps/2, maps:from_list(V));
+do_to_maps(_K, V) ->
+  V.
+
+do_to_maps([X | _] = V) when is_list(X) ->
+  lists:map(fun do_to_maps/1, V);
+do_to_maps([X | _] = V) when is_tuple(X) ->
+  maps:map(fun do_to_maps/2, maps:from_list(V));
+do_to_maps(V) ->
+  V.
 
 %%%_* Internal functions =======================================================
 
