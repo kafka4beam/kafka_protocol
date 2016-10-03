@@ -266,10 +266,13 @@ compress(Method, IoData) ->
   [encode(Msg)].
 
 
-%% TODO: add snappy and lz4 compression
+%% TODO: lz4 compression
 -spec do_compress(kpro_compress_option(), iodata()) -> iodata().
 do_compress(gzip, IoData) ->
-  zlib:gzip(IoData).
+  zlib:gzip(IoData);
+do_compress(snappy, IoData) ->
+  {ok, Compressed} = snappyer:compress(IoData),
+  Compressed.
 
 -spec get_api_version(int16() | undefined, kpro_RequestMessage()) -> int16().
 get_api_version(V, _Msg) when is_integer(V) -> V;
@@ -551,10 +554,9 @@ java_snappy_unpack_chunks(Chunks, Acc) ->
       Rest =:= <<>> orelse erlang:error({Len, Rest}), %% assert
       Acc;
     false ->
-      erlang:error({no_impl, snappy})
-      %<<Data:Len/binary, Tail/binary>> = Rest,
-      %{ok, Decompressed} = snappy:decompress(Data),
-      %java_snappy_unpack_chunks(Tail, [Acc, Decompressed])
+      <<Data:Len/binary, Tail/binary>> = Rest,
+      {ok, Decompressed} = snappyer:decompress(Data),
+      java_snappy_unpack_chunks(Tail, [Acc, Decompressed])
   end.
 
 lz4_unpack(_) -> erlang:error({no_impl, lz4}).
