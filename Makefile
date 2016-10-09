@@ -1,6 +1,6 @@
 PROJECT = kafka_protocol
 PROJECT_DESCRIPTION = Kafka protocol erlang library
-PROJECT_VERSION = 0.7.1
+PROJECT_VERSION = 0.7.2
 
 DEPS = snappyer
 
