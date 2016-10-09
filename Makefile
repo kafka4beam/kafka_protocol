@@ -1,10 +1,10 @@
 PROJECT = kafka_protocol
 PROJECT_DESCRIPTION = Kafka protocol erlang library
-PROJECT_VERSION = 0.7.0
+PROJECT_VERSION = 0.7.1
 
 DEPS = snappyer
 
-dep_snappyer_commit = 1.1.3-1.0.2
+dep_snappyer_commit = 1.1.3-1.0.3
 
 COVER = true
 
@@ -31,5 +31,10 @@ gen-code: $(GEN_CODE)
 	$(verbose) :
 
 gen-clean:
-	rm -f $(GEN_CODE) src/kpro_structs.erl.bak
+	rm -f $(GEN_CODE) src/kpro_structs.erl.bak priv/*.beam priv/*.erl
 
+vsn-check:
+	$(verbose) ./vsn-check.sh $(PROJECT_VERSION) $(dep_snappyer_commit) 
+
+hex-publish: distclean
+	$(verbose) rebar3 hex publish

@@ -1,0 +1,24 @@
+language: erlang
+
+sudo: required
+
+notifications:
+  email: false
+
+otp_release:
+  - 18.2.1
+  - 17.5
+
+script:
+  - make vsn-check
+  - make
+  - make xref
+  - make edoc
+  - make distclean
+  - rebar get-deps
+  - rebar compile
+  - make distclean
+  - wget https://s3.amazonaws.com/rebar3/rebar3
+  - chmod 755 rebar3
+  - ./rebar3 compile
+

@@ -1,0 +1,11 @@
+IsRebar3 = erlang:function_exported(rebar3, main, 1),
+case IsRebar3 of
+  true ->
+    CONFIG;
+  false ->
+    [{snappyer, Tag}] = proplists:get_value(deps, CONFIG),
+    Url = "https://github.com/zmstone/snappyer",
+    Rebar2Deps = [{snappyer, ".*", {git, Url, {tag, Tag}}}],
+    lists:keyreplace(deps, 1, CONFIG, {deps, Rebar2Deps})
+end.
+
