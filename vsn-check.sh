@@ -10,6 +10,10 @@ if [ "$PROJECT_VERSION" != "$APP_VSN" ]; then
   exit 1
 fi
 
+if [ -z "$SNAPPYER_VSN" ]; then
+  exit 0
+fi
+
 SNAPPYER_VSN_REBAR=$(erl -noshell -eval '{ok, Config} = file:consult("rebar.config"), [{snappyer, Vsn}] = proplists:get_value(deps, Config), io:format("~s", [Vsn]), halt(0).')
 
 if [ "$SNAPPYER_VSN" != "$SNAPPYER_VSN_REBAR" ]; then

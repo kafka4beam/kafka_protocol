@@ -271,8 +271,7 @@ compress(Method, IoData) ->
 do_compress(gzip, IoData) ->
   zlib:gzip(IoData);
 do_compress(snappy, IoData) ->
-  {ok, Compressed} = snappyer:compress(IoData),
-  Compressed.
+  snappy_compress(IoData).
 
 -spec get_api_version(int16() | undefined, kpro_RequestMessage()) -> int16().
 get_api_version(V, _Msg) when is_integer(V) -> V;
@@ -555,11 +554,32 @@ java_snappy_unpack_chunks(Chunks, Acc) ->
       Acc;
     false ->
       <<Data:Len/binary, Tail/binary>> = Rest,
-      {ok, Decompressed} = snappyer:decompress(Data),
+      Decompressed = snappy_decompress(Data),
       java_snappy_unpack_chunks(Tail, [Acc, Decompressed])
   end.
 
 lz4_unpack(_) -> erlang:error({no_impl, lz4}).
+
+-ifndef(SNAPPY_DISABLED).
+
+snappy_compress(IoData) ->
+  {ok, Compressed} = snappyer:compress(IoData),
+  Compressed.
+
+snappy_decompress(BinData) ->
+  {ok, Decompressed} = snappyer:decompress(BinData),
+  Decompressed.
+
+-else.
+
+snappy_compress(_IoData) ->
+  erlang:error(kafka_protocol_no_snappy).
+
+snappy_decompress(_BinData) ->
+  erlang:error(kafka_protocol_no_snappy).
+
+-endif.
+
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

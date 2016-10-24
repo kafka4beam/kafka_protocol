@@ -1,6 +1,0 @@
-{"1.1.0",
-[{<<"snappyer">>,{pkg,<<"snappyer">>,<<"1.1.3-1.0.3">>},0}]}.
-[
-{pkg_hash,[
- {<<"snappyer">>, <<"964F889E9EFAFBC5B4036EFE257BCB2EAD679BC6CAF72544F759EAECA9C0A36C">>}]}
-].

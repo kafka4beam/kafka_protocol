@@ -12,4 +12,6 @@ logs/
 deps/
 _build
 erl_crash.dump
+*.crashdump
 .rebar/
+rebar.lock
