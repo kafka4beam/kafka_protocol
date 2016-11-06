@@ -57,7 +57,7 @@ fields(Fields, Def) ->
             end, Fields).
 
 field_name(Name) when is_atom(Name) ->
-  lowercase_leading(Name);
+  maybe_lowercase_leading(Name);
 field_name({array, Name}) ->
   %% for array fields, append a _L suffix to the name
   list_to_atom(atom_to_list(field_name(Name)) ++ "_L").
@@ -156,9 +156,12 @@ gen_record_fields_clause({RecordName, _Fields}) ->
   ].
 
 %% change the first char to lower case
-lowercase_leading(Name) ->
-  [H | T] = atom_to_list(Name),
-  list_to_atom([H + ($a - $A) | T]).
+maybe_lowercase_leading(Name) when is_atom(Name) ->
+  maybe_lowercase_leading(atom_to_list(Name));
+maybe_lowercase_leading([H | T]) when H < 97 ->
+  list_to_atom([H + ($a - $A) | T]);
+maybe_lowercase_leading(Name) ->
+  list_to_atom(Name).
 
 uppercase_leading(Name) ->
   [H | T] = atom_to_list(Name),
@@ -195,12 +198,13 @@ gen_union_type(FieldName, TypeRefs, IoDataAcc) ->
 %% generate special pre-defined types.
 %% all 'errorCode' fields should have error_code() spec
 %% use 'any()' spec for all embeded 'bytes' fields
-gen_field_type(errorCode, _)     -> "kpro:error_code()";
-gen_field_type(protocolMetadata, bytes) -> "any()";
-gen_field_type(memberAssignment, bytes) -> "any()";
+gen_field_type(error_code, _)     -> "kpro:error_code()";
+gen_field_type(protocol_metadata, bytes) -> "any()";
+gen_field_type(member_assignment, bytes) -> "any()";
 gen_field_type(key, bytes) -> "kpro:kafka_key()";
 gen_field_type(value, bytes) -> "kpro:kafka_value()";
-gen_field_type(_FieldName, Type) -> gen_field_type(Type).
+gen_field_type(_FieldName, Type) ->
+  gen_field_type(Type).
 
 gen_field_type(int8)   -> "kpro:int8()";
 gen_field_type(int16)  -> "kpro:int16()";
@@ -250,12 +254,10 @@ gen_marshaller(Records) ->
 all_requests() ->
   lists:flatten(
     lists:map(
-      fun(ApiKey) -> ?API_KEY_TO_REQ(ApiKey) end, ?ALL_API_KEYS)) ++
-  ?CONSUMER_GROUP_STRUCTS.
+      fun(ApiKey) -> ?API_KEY_TO_REQ(ApiKey) end, ?ALL_API_KEYS)).
 
 all_responses() ->
-  lists:map(fun(ApiKey) -> ?API_KEY_TO_RSP(ApiKey) end, ?ALL_API_KEYS) ++
-  ?CONSUMER_GROUP_STRUCTS.
+  lists:map(fun(ApiKey) -> ?API_KEY_TO_RSP(ApiKey) end, ?ALL_API_KEYS).
 
 gen_clauses(EncDec, Records) ->
   Names = case EncDec of
@@ -275,7 +277,13 @@ gen_clauses(EncDec, Name, Records) when is_atom(Name) ->
   case get({EncDec, Name}) of
     undefined ->
       put({EncDec, Name}, generated),
-      {_, Fields} = lists:keyfind(Name, 1, Records),
+      Fields =
+        try
+          {_, X} = lists:keyfind(Name, 1, Records),
+          X
+        catch _:_ ->
+            erlang:exit({not_found, Name, erlang:get_stacktrace()})
+        end,
       IoData = gen_clause(EncDec, Name, Fields),
       RefNames = get_ref_names(Fields),
       [ iolist_to_binary(IoData)
@@ -345,3 +353,7 @@ bin(IoList) -> iolist_to_binary(IoList).
 gen_field_types(Fields) ->
   io_lib:format("~p", [Fields]).
 
+%%% Local Variables:
+%%% allout-layout: t
+%%% erlang-indent-level: 2
+%%% End:

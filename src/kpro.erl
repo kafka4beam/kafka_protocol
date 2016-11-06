@@ -15,7 +15,7 @@
 
 -module(kpro).
 
-%% help apis to constricut kpro_Xxx structures.
+%% help apis to build some of most common kpro_Xxx structures.
 -export([ fetch_request/6
         , offset_request/4
         , produce_request/5
@@ -45,6 +45,7 @@
              , int64/0
              , str/0
              , bytes/0
+             , records/0
              , api_key/0
              , error_code/0
              , client_id/0
@@ -67,6 +68,7 @@
 -type int64()      :: -9223372036854775808..9223372036854775807.
 -type str()        :: undefined | string() | binary().
 -type bytes()      :: undefined | binary().
+-type records()    :: undefined | binary().
 -type api_key()    :: 0..17.
 -type error_code() :: int16() | atom().
 
