@@ -15,6 +15,10 @@
 %%%
 
 %% This module decodes messages in __consumer_offsets topic
+%% data schema can be found here:
+%% https://github.com/apache/kafka/blob/0.10.1/
+%% core/src/main/scala/kafka/coordinator/GroupMetadataManager.scala
+
 -module(kpro_consumer_group).
 
 -export([decode/2]).
@@ -115,28 +119,41 @@ value(offset, Key, <<1:16/integer, _/binary>> = Bin) ->
            ],
   {offset, Key, dec(Schema, Bin)};
 value(group, Key, ValueBin) ->
-  {version, Version} = lists:keyfind(version, 1, Key),
-  {group, Key, group(Version, ValueBin)}.
+  {version, KeyVersion} = lists:keyfind(version, 1, Key),
+  {group, Key, group(KeyVersion, ValueBin)}.
 
-group(2, Bin) ->
+group(_KeyVersion = 2, <<ValueVersion:16/integer, _/binary>> = Bin) ->
+  MemberMetadataDecodeFun =
+    fun(MetadataBin) ->
+      MetadataSchema = group_member_metadata_schema(ValueVersion),
+      do_dec(MetadataSchema, MetadataBin, [])
+    end,
   Schema = [ {version, int16}
            , {protocol_type, string}
            , {generation_id, int32}
            , {protocol, string}
            , {leader, string}
-           , {members, {array, fun group_member/1}}
+           , {members, {array, MemberMetadataDecodeFun}}
            ],
   dec(Schema, Bin).
 
-group_member(Bin) ->
-  Schema = [ {member_id, string}
-           , {client_id, string}
-           , {client_host, string}
-           , {session_timeout, int32}
-           , {subscription, fun subscription/1}
-           , {assignment, fun assignment/1}
-           ],
-  do_dec(Schema, Bin, []).
+group_member_metadata_schema(_Version = 0)->
+  [ {member_id, string}
+  , {client_id, string}
+  , {client_host, string}
+  , {session_timeout, int32}
+  , {subscription, fun subscription/1}
+  , {assignment, fun assignment/1}
+  ];
+group_member_metadata_schema(_Version = 1) ->
+  [ {member_id, string}
+  , {client_id, string}
+  , {client_host, string}
+  , {rebalance_timeout, int32}
+  , {session_timeout, int32}
+  , {subscription, fun subscription/1}
+  , {assignment, fun assignment/1}
+  ].
 
 subscription(Bin) ->
   {Bytes, Rest} = kpro:decode(bytes, Bin),
