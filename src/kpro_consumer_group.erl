@@ -73,10 +73,10 @@
 %%           version    :: integer()
 %%           topics     :: [binary()]
 %%           user_data  :: binary()
-%%   assignment
-%%       version          :: integer()
-%%       topic_partitions :: [{Topic::binary(), [Partition::integer()]}]
-%%       user_data        :: undefined | binary()
+%%       assignment (nullable)
+%%           version          :: integer()
+%%           topic_partitions :: [{Topic::binary(), [Partition::integer()]}]
+%%           user_data        :: undefined | binary()
 %% @end
 -spec decode(binary(), undefined | binary()) -> decoded().
 decode(KeyBin, ValueBin) ->
@@ -155,21 +155,30 @@ group_member_metadata_schema(_Version = 1) ->
   , {assignment, fun assignment/1}
   ].
 
-subscription(Bin) ->
-  {Bytes, Rest} = kpro:decode(bytes, Bin),
+nullable_bytes(Bin, BytesDecoder) ->
+  case kpro:decode(bytes, Bin) of
+    {<<>>, Rest} ->
+      {undefined, Rest};
+    {Bytes, Rest} ->
+      {BytesDecoder(Bytes), Rest}
+  end.
+
+subscription(Bytes) -> nullable_bytes(Bytes, fun decode_subscription/1).
+
+assignment(Bytes) -> nullable_bytes(Bytes, fun decode_assignment/1).
+
+decode_subscription(Bytes) ->
   {M, <<>>} = kpro:decode(kpro_ConsumerGroupProtocolMetadata, Bytes),
   #kpro_ConsumerGroupProtocolMetadata{ version = Version
                                      , topicName_L = Topics
                                      , userData = UserData
                                      } = M,
-  Fields = [ {version, Version}
-           , {topics, Topics}
-           , {user_data, UserData}
-           ],
-  {Fields, Rest}.
+  [ {version, Version}
+  , {topics, Topics}
+  , {user_data, UserData}
+  ].
 
-assignment(Bin) ->
-  {Bytes, Rest} = kpro:decode(bytes, Bin),
+decode_assignment(Bytes) ->
   {Assignment, <<>>} = kpro:decode(kpro_ConsumerGroupMemberAssignment, Bytes),
   #kpro_ConsumerGroupMemberAssignment{ version = Version
                                      , consumerGroupPartitionAssignment_L = PL
@@ -180,12 +189,10 @@ assignment(Bin) ->
       || #kpro_ConsumerGroupPartitionAssignment{ topicName = Topic
                                                , partition_L = Partitions
                                                } <- PL ],
-  Fields =
-    [ {version, Version}
-    , {topic_partitions, TPs}
-    , {user_data, UserData}
-    ],
-  {Fields, Rest}.
+  [ {version, Version}
+  , {topic_partitions, TPs}
+  , {user_data, UserData}
+  ].
 
 dec(Schema, Bin) ->
   {Fields, <<>>} = do_dec(Schema, Bin, []),
