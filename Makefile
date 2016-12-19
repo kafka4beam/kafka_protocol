@@ -1,6 +1,6 @@
 PROJECT = kafka_protocol
 PROJECT_DESCRIPTION = Kafka protocol erlang library
-PROJECT_VERSION = 0.7.7
+PROJECT_VERSION = 0.7.8
 
 EUNIT_OPTS = verbose
 ERLC_OPTS = -Werror +warn_unused_vars +warn_shadow_vars +warn_unused_import +warn_obsolete_guard +debug_info
@@ -8,7 +8,7 @@ CT_OPTS = -ct_use_short_names true
 
 ifeq ($(KAFKA_PROTOCOL_NO_SNAPPY),)
 DEPS = snappyer
-dep_snappyer_commit = 1.1.3-1.0.4
+dep_snappyer_commit = 1.1.3-1.0.5
 else
 ERLC_OPTS += -DSNAPPY_DISABLED
 endif
