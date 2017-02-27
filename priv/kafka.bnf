@@ -10,11 +10,11 @@ Request => ApiKey ApiVersion CorrelationId ClientId RequestMessage
   ApiVersion => int16
   CorrelationId => int32
   ClientId => string
-  RequestMessage => ProduceRequest | FetchRequest | OffsetRequest | MetadataRequest | OffsetCommitRequestV0 | OffsetCommitRequestV1 | OffsetCommitRequestV2 | OffsetFetchRequest | GroupCoordinatorRequest | JoinGroupRequest | HeartbeatRequest | LeaveGroupRequest | SyncGroupRequest | DescribeGroupsRequest | ListGroupsRequest
+  RequestMessage => ProduceRequest | FetchRequest | OffsetRequest | MetadataRequest | OffsetCommitRequestV0 | OffsetCommitRequestV1 | OffsetCommitRequestV2 | OffsetFetchRequest | GroupCoordinatorRequest | JoinGroupRequest | HeartbeatRequest | LeaveGroupRequest | SyncGroupRequest | DescribeGroupsRequest | ListGroupsRequest | SaslHandshakeRequest
 
 Response => CorrelationId ResponseMessage
   CorrelationId => int32
-  ResponseMessage => ProduceResponse | FetchResponse | OffsetResponse | MetadataResponse | OffsetCommitResponse | OffsetFetchResponse | GroupCoordinatorResponse | JoinGroupResponse | HeartbeatResponse | LeaveGroupResponse | SyncGroupResponse | DescribeGroupsResponse | ListGroupsResponse
+  ResponseMessage => ProduceResponse | FetchResponse | OffsetResponse | MetadataResponse | OffsetCommitResponse | OffsetFetchResponse | GroupCoordinatorResponse | JoinGroupResponse | HeartbeatResponse | LeaveGroupResponse | SyncGroupResponse | DescribeGroupsResponse | ListGroupsResponse | SaslHandshakeResponse
 
 Message => Offset MessageSize Crc MagicByte Attributes Key Value
   Offset => int64
@@ -250,3 +250,9 @@ DescribeGroupsResponse => [GroupDescription]
     MemberMetadata => bytes
     MemberAssignment => bytes
 
+SaslHandshakeRequest => Mechanism
+  Mechanism => string
+
+SaslHandshakeResponse => ErrorCode [EnabledMechanisms]
+  ErrorCode => int16
+  EnabledMechanisms => string

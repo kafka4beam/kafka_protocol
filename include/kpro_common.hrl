@@ -75,6 +75,7 @@
 -define(API_SyncGroupRequest,        14).
 -define(API_DescribeGroupsRequest,   15).
 -define(API_ListGroupsRequest,       16).
+-define(API_SaslHandshakeRequest,    17).
 
 -define(ALL_API_KEYS,
         [ ?API_ProduceRequest
@@ -90,6 +91,7 @@
         , ?API_SyncGroupRequest
         , ?API_DescribeGroupsRequest
         , ?API_ListGroupsRequest
+        , ?API_SaslHandshakeRequest
         ]).
 
 -define(REQ_TO_API_KEY(Req),
@@ -108,7 +110,8 @@
           kpro_LeaveGroupRequest       -> ?API_LeaveGroupRequest;
           kpro_SyncGroupRequest        -> ?API_SyncGroupRequest;
           kpro_DescribeGroupsRequest   -> ?API_DescribeGroupsRequest;
-          kpro_ListGroupsRequest       -> ?API_ListGroupsRequest
+          kpro_ListGroupsRequest       -> ?API_ListGroupsRequest;
+          kpro_SaslHandshakeRequest    -> ?API_SaslHandshakeRequest
         end).
 
 -define(API_KEY_TO_REQ(ApiKey),
@@ -128,7 +131,8 @@
           ?API_LeaveGroupRequest       -> kpro_LeaveGroupRequest;
           ?API_SyncGroupRequest        -> kpro_SyncGroupRequest;
           ?API_DescribeGroupsRequest   -> kpro_DescribeGroupsRequest;
-          ?API_ListGroupsRequest       -> kpro_ListGroupsRequest
+          ?API_ListGroupsRequest       -> kpro_ListGroupsRequest;
+          ?API_SaslHandshakeRequest    -> kpro_SaslHandshakeRequest
         end).
 
 -define(API_KEY_TO_RSP(ApiKey),
@@ -145,7 +149,8 @@
           ?API_LeaveGroupRequest       -> kpro_LeaveGroupResponse;
           ?API_SyncGroupRequest        -> kpro_SyncGroupResponse;
           ?API_DescribeGroupsRequest   -> kpro_DescribeGroupsResponse;
-          ?API_ListGroupsRequest       -> kpro_ListGroupsResponse
+          ?API_ListGroupsRequest       -> kpro_ListGroupsResponse;
+          ?API_SaslHandshakeRequest    -> kpro_SaslHandshakeResponse
         end).
 
 -define(CONSUMER_GROUP_STRUCTS, [ kpro_ConsumerGroupProtocolMetadata
@@ -191,6 +196,8 @@
 -define(EC_TOPIC_AUTHORIZATION_FAILED,   'TopicAuthorizationFailed').       % 29
 -define(EC_GROUP_AUTHORIZATION_FAILED,   'GroupAuthorizationFailed').       % 30
 -define(EC_CLUSTER_AUTHORIZATION_FAILED, 'ClusterAuthorizationFailed').     % 31
+-define(EC_UNSUPPORTED_SASL_MECHANISM,   'UnsupportedSaslMechanism').       % 33
+-define(EC_ILLEGAL_SASL_STATE,           'IllegalSaslState').               % 34
 
 -endif.
 
