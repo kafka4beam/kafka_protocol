@@ -75,6 +75,8 @@ decode(28) -> ?EC_INVALID_COMMIT_OFFSET_SIZE;
 decode(29) -> ?EC_TOPIC_AUTHORIZATION_FAILED;
 decode(30) -> ?EC_GROUP_AUTHORIZATION_FAILED;
 decode(31) -> ?EC_CLUSTER_AUTHORIZATION_FAILED;
+decode(33) -> ?EC_UNSUPPORTED_SASL_MECHANISM;
+decode(34) -> ?EC_ILLEGAL_SASL_STATE;
 decode(X)  -> (true = is_integer(X)) andalso X.
 
 %% @doc Get description string of error codes.
@@ -159,6 +161,10 @@ do_desc(?EC_GROUP_AUTHORIZATION_FAILED) ->
   <<"Group authorization failed.">>;
 do_desc(?EC_CLUSTER_AUTHORIZATION_FAILED) ->
   <<"Cluster authorization failed.">>;
+do_desc(?EC_UNSUPPORTED_SASL_MECHANISM) ->
+  <<"The broker does not support the requested SASL mechanism.">>;
+do_desc(?EC_ILLEGAL_SASL_STATE) ->
+  <<"Request is not valid given the current SASL state.">>;
 do_desc(X) when is_integer(X) ->
   <<"Undefined error code for kafka ", ?KAFKA_VERSION_STR/binary>>.
 
