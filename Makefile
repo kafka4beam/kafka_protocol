@@ -8,7 +8,7 @@ CT_OPTS = -ct_use_short_names true
 
 ifeq ($(KAFKA_PROTOCOL_NO_SNAPPY),)
 DEPS = snappyer
-dep_snappyer_commit = 1.1.3-1.0.5
+dep_snappyer_commit = 1.2.0
 else
 ERLC_OPTS += -DSNAPPY_DISABLED
 endif
