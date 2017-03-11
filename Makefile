@@ -1,6 +1,6 @@
 PROJECT = kafka_protocol
 PROJECT_DESCRIPTION = Kafka protocol erlang library
-PROJECT_VERSION = 0.8.0
+PROJECT_VERSION = 0.9.0
 
 EUNIT_OPTS = verbose
 ERLC_OPTS = -Werror +warn_unused_vars +warn_shadow_vars +warn_unused_import +warn_obsolete_guard +debug_info
