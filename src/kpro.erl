@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2014-2016, Klarna AB
+%%%   Copyright (c) 2014-2017, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@
         ]).
 
 -export([ decode_response/1
+        , decode_message_set/1
         , encode_request/1
         , encode_request/3
         , next_corr_id/1
@@ -153,9 +154,15 @@ produce_request(Topic, Partition, KvList,
     #kpro_TopicMessageSet{ topicName             = Topic
                          , partitionMessageSet_L = [PartitionMsgSet]
                          },
+  %% Encode message set here right now.
+  %% Instead of keeping a possibily very large array
+  %% and passing it around processes
+  %% e.g. in brod, the message set can be encoded in producer
+  %% worker before sending it down to socket process
+  MessageSetBin = iolist_to_binary(encode({array, [TopicMessageSet]})),
   #kpro_ProduceRequest{ requiredAcks      = RequiredAcks
                       , timeout           = AckTimeout
-                      , topicMessageSet_L = [TopicMessageSet]
+                      , topicMessageSet_L = {already_encoded, MessageSetBin}
                       }.
 
 %% @doc Get the next correlation ID.
@@ -310,7 +317,15 @@ do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
 do_decode_response( Bin) ->
   {incomplete, Bin}.
 
+%% @doc The messageset is not decoded upon receiving (in socket process)
+%% Pass the message set as binary to the consumer process and decode there
+%% @end
+decode_message_set(MessageSetBin) when is_binary(MessageSetBin) ->
+  lists:reverse(decode_message_stream(MessageSetBin, [])).
+
+%% @hidden
 encode({Fun, Data}) when is_function(Fun, 1) -> Fun(Data);
+encode({_, {already_encoded, Data}})  -> Data;
 encode({int8,  I}) when is_integer(I) -> <<I:8/?INT>>;
 encode({int16, I}) when is_integer(I) -> <<I:16/?INT>>;
 encode({int32, I}) when is_integer(I) -> <<I:32/?INT>>;
@@ -390,6 +405,7 @@ encode(#kpro_GroupProtocol{protocolMetadata = PM} = GP) ->
 encode(Struct) when is_tuple(Struct) ->
   kpro_structs:encode(Struct).
 
+%% @hidden
 decode(Fun, Bin) when is_function(Fun, 1) ->
   Fun(Bin);
 decode(int8, Bin) ->
@@ -419,24 +435,26 @@ decode(kpro_FetchResponsePartition, Bin) ->
     ErrorCode:16/?INT,
     HighWmOffset:64/?INT,
     MessageSetSize:32/?INT,
-    MsgsBin:MessageSetSize/binary,
+    MessageSetBin:MessageSetSize/binary,
     Rest/binary>> = Bin,
-  %% messages in messageset are not array elements, but stream
-  Messages0 = decode_message_stream(MsgsBin, []),
-  Messages = lists:reverse(Messages0),
   PartitionMessages =
     #kpro_FetchResponsePartition
       { partition           = Partition
       , errorCode           = kpro_ErrorCode:decode(ErrorCode)
       , highWatermarkOffset = HighWmOffset
       , messageSetSize      = MessageSetSize
-      , message_L           = Messages
+      , message_L           = MessageSetBin
       },
   {PartitionMessages, Rest};
 decode(StructName, Bin) when is_atom(StructName) ->
   kpro_structs:decode(StructName, Bin).
 
+%% @private
+-spec decode_message_stream(binary(), Decoded) -> Decoded
+        when Decoded :: [?incomplete_message | #kpro_Message{}].
 decode_message_stream(<<>>, Acc) ->
+  %% Do not reverse here!
+  %% as the input is recursive when compressed
   Acc;
 decode_message_stream(Bin, Acc) ->
   {Msg, Rest} =
