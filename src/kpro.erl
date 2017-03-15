@@ -56,6 +56,7 @@
              , kafka_key/0
              , kafka_value/0
              , corr_id/0
+             , incomplete_message/0
              ]).
 
 -include("kpro.hrl").
@@ -82,6 +83,8 @@
 
 -type kafka_key() :: key().
 -type kafka_value() :: undefined | iodata() | [kpro_Message()].
+
+-type incomplete_message() :: {?incomplete_message, int32()}.
 
 -define(INT, signed-integer).
 
@@ -450,18 +453,28 @@ decode(StructName, Bin) when is_atom(StructName) ->
   kpro_structs:decode(StructName, Bin).
 
 %% @private
+-spec decode_message(binary()) ->
+        {kpro_Message() | incomplete_message(), binary()}.
+decode_message(<<_Offset:64/?INT, MsgSize:32/?INT, T/binary>> = Bin) ->
+  case size(T) < MsgSize of
+    true  -> {{?incomplete_message, MsgSize + 12}, <<>>};
+    false -> decode(kpro_Message, Bin)
+  end;
+decode_message(_) ->
+  %% need to fetch at least 12 bytes to know the message size
+  {{?incomplete_message, 12}, <<>>}.
+
+%% @private Decode byte stream of kafka messages.
+%% Return messages in reversed order.
+%% @end
 -spec decode_message_stream(binary(), Decoded) -> Decoded
-        when Decoded :: [?incomplete_message | #kpro_Message{}].
+        when Decoded :: [kpro_Message() | incomplete_message()].
 decode_message_stream(<<>>, Acc) ->
   %% Do not reverse here!
   %% as the input is recursive when compressed
   Acc;
 decode_message_stream(Bin, Acc) ->
-  {Msg, Rest} =
-    try decode(kpro_Message, Bin)
-    catch error : {badmatch, _} ->
-      {?incomplete_message, <<>>}
-    end,
+  {Msg, Rest} = decode_message(Bin),
   NewAcc =
     case Msg of
       #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_GZIP_ATTR(Attr) ->
