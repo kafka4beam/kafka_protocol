@@ -5,7 +5,6 @@ import org.apache.kafka.common.protocol.types.Field;
 import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Type;
 import org.apache.kafka.common.protocol.Protocol;
-import org.apache.commons.lang3.text.WordUtils;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -22,9 +21,9 @@ public class KafkaProtocolBnf {
         return b.toString();
     }
 
-    private static String underscoreToCamelCase(String text) {
+    private static String underscoreToCapitalCase(String text) {
         StringTokenizer token = new StringTokenizer(text, "_");
-        StringBuilder str = new StringBuilder(token.nextToken());
+        StringBuilder str = new StringBuilder();
         while (token.hasMoreTokens()) {
             String s = token.nextToken();
             str.append(Character.toUpperCase(s.charAt(0))).append(s.substring(1));
@@ -52,7 +51,7 @@ public class KafkaProtocolBnf {
         int index = 0;
         int length = schema.fields().length;
         for (Field field: schema.fields()) {
-            String fieldName = WordUtils.capitalize(underscoreToCamelCase(field.name));
+            String fieldName = underscoreToCapitalCase(field.name);
             if (field.type instanceof ArrayOf) {
                 b.append("[");
                 b.append(fieldName);
@@ -102,7 +101,7 @@ public class KafkaProtocolBnf {
             if (field.doc.isEmpty())
                 continue;
             b.append("# ");
-            b.append(WordUtils.capitalize(underscoreToCamelCase(field.name)));
+            b.append(underscoreToCapitalCase(field.name));
             b.append(": ");
             b.append(field.doc);
             b.append("\n");

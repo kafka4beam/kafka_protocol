@@ -12,11 +12,10 @@ Kafka version might be different, path to kafka_protocol might be different. Adj
 
     git clone https://github.com/apache/kafka.git
     cd kafka
-    git apply ~/src//kafka_protocol/priv/kafka-gradle.diff
     gradle
     cp ~/src/kafka_protocol/priv/KafkaProtocolBnf.java clients/src/main/java/org/apache/kafka/common/protocol/
     ./gradlew jar
-    java -cp clients/build/libs/kafka-clients-0.10.3.0-SNAPSHOT.jar:core/build/dependant-libs-2.10.6/commons-lang3-3.5.jar org.apache.kafka.common.protocol.KafkaProtocolBnf > ~/src/kafka_protocol/priv/kafka.bnf
+    java -cp clients/build/libs/kafka-clients-0.10.1.1-SNAPSHOT.jar org.apache.kafka.common.protocol.KafkaProtocolBnf > ~/src/kafka_protocol/priv/kafka.bnf
 
 ## Usage
 Set environment variable `KAFKA_PROTOCOL_NO_SNAPPY=1` to compile without 
