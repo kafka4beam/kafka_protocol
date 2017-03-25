@@ -18,27 +18,27 @@ Erlang code.
 file(Filename) ->
   {ok, Fd} = file:open(Filename, [read]),
   try
-    read_lines(Fd, [], [])
+    read_lines(Fd, [], [], 1)
   after
     file:close(Fd)
   end.
 
-read_lines(Fd, Def, Defs) ->
+read_lines(Fd, Def, Defs, LineNr) ->
   case file:read_line(Fd) of
     eof ->
       lists:reverse([lists:reverse(Def) | Defs]);
     {ok, [$# | _]} ->
       %% ignore comment line
-      read_lines(Fd, Def, Defs);
+      read_lines(Fd, Def, Defs, LineNr+1);
     {ok, Line} ->
-      {ok, Tokens, _LineNum} = string(Line),
+      {ok, Tokens, _LineNum} = string(Line, LineNr),
       case is_new_def(Def, Line) of
         true ->
           NewDef = lists:reverse(Def),
-          read_lines(Fd, [Tokens], [NewDef | Defs]);
+          read_lines(Fd, [Tokens], [NewDef | Defs], LineNr+1);
         false ->
           NewDef = add_tokens(Tokens, Def),
-          read_lines(Fd, NewDef, Defs)
+          read_lines(Fd, NewDef, Defs, LineNr+1)
       end
   end.
 
