@@ -10,6 +10,7 @@ Rules.
 \| : {token, {'|', TokenLine}}.
 \s : skip_token.
 \n : skip_token.
+#.* : skip_token.
 
 Erlang code.
 
@@ -27,9 +28,6 @@ read_lines(Fd, Def, Defs, LineNr) ->
   case file:read_line(Fd) of
     eof ->
       lists:reverse([lists:reverse(Def) | Defs]);
-    {ok, [$# | _]} ->
-      %% ignore comment line
-      read_lines(Fd, Def, Defs, LineNr+1);
     {ok, Line} ->
       {ok, Tokens, _LineNum} = string(Line, LineNr),
       case is_new_def(Def, Line) of
