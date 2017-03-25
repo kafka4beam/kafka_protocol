@@ -25,25 +25,14 @@
 main(_) ->
   ok = file:set_cwd(this_dir()),
   {ok, _} = leex:file(kpro_scanner),
-  {ok, _} = compile:file("kpro_scanner.erl", [debug_info]),
+  {ok, _} = compile:file(kpro_scanner, [debug_info]),
   {ok, _} = yecc:file(kpro_parser),
-  {ok, _} = compile:file("kpro_parser.erl", [debug_info]),
-  Tokens = kpro_scanner:file("kafka.bnf"),
-  Records = to_records(parse(Tokens, [])),
+  {ok, _} = compile:file(kpro_parser, [debug_info]),
+  {ok, Contents} = file:read_file("kafka.bnf"),
+  {ok, Tokens, _EndLine} = kpro_scanner:string(binary_to_list(Contents)),
+  {ok, DefGroups} = kpro_parser:parse(Tokens),
+  Records = to_records(DefGroups),
   generate_code(Records).
-
-parse([], Acc) ->
-  lists:reverse(Acc);
-parse([Def | Defs], Acc) ->
-  ParsedDef = parse(Def),
-  parse(Defs, [ParsedDef | Acc]).
-
-parse(TokensList) ->
-  lists:map(
-    fun(Tokens) ->
-      {ok, {Tag, Def}} = kpro_parser:parse(Tokens),
-      {Tag, Def}
-    end, TokensList).
 
 to_records(Defs) ->
   lists:flatten(lists:map(fun records/1, Defs)).
