@@ -2,7 +2,9 @@ Definitions.
 
 Rules.
 
-[A-Za-z][A-Za-z0-9]* : {token, name_or_prim(TokenChars, TokenLine)}.
+% longest match wins, first match if both of the same length. "prims" are all caps.
+[A-Z][_0-9A-Z]* : {token, {prim, TokenLine, list_to_atom(string:to_lower(TokenChars))}}.
+[A-Za-z][_0-9a-zA-Z]* : {token, {name, TokenLine, list_to_atom(TokenChars)}}.
 => : {token, {'=>', TokenLine}}.
 \[ : {token, {'[', TokenLine}}.
 \] : {token, {']', TokenLine}}.
@@ -44,15 +46,3 @@ is_new_def(_, _)           -> false.
 
 add_tokens([], Def)             -> Def;
 add_tokens([_|_] = Tokens, Def) -> [Tokens | Def].
-
-is_lowercase(C) when C >= $a, C =< $z -> true;
-is_lowercase(_) -> false.
-
-name_or_prim(TokenChars, TokenLine) ->
-  % has lowercase letters?
-  case lists:any(fun is_lowercase/1, TokenChars) of
-  true ->
-    {name, TokenLine, list_to_atom(TokenChars)};
-  false ->
-    {prim, TokenLine, list_to_atom(string:to_lower(TokenChars))}
-  end.
