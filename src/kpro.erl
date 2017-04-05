@@ -69,7 +69,7 @@
 -type str()        :: undefined | string() | binary().
 -type bytes()      :: undefined | binary().
 -type records()    :: undefined | binary().
--type api_key()    :: 0..17.
+-type api_key()    :: 0..20.
 -type error_code() :: int16() | atom().
 
 %% type re-define for readability

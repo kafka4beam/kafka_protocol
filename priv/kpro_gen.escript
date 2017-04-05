@@ -212,6 +212,7 @@ gen_field_type(int16)  -> "kpro:int16()";
 gen_field_type(int32)  -> "kpro:int32()";
 gen_field_type(int64)  -> "kpro:int64()";
 gen_field_type(string) -> "kpro:str()";
+gen_field_type(nullable_string) -> "kpro:str()";
 gen_field_type(bytes)  -> "binary()";
 gen_field_type({array, Name}) ->
   "[" ++ gen_field_type(Name) ++ "]";

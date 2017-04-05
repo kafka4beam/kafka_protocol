@@ -90,6 +90,10 @@
         , ?API_FetchRequest
         , ?API_OffsetsRequest
         , ?API_MetadataRequest
+        , ?API_LeaderAndIsrRequest
+        , ?API_StopReplicaRequest
+        , ?API_UpdateMetadataRequest
+        , ?API_ControlledShutdownRequest
         , ?API_OffsetCommitRequest
         , ?API_OffsetFetchRequest
         , ?API_GroupCoordinatorRequest
@@ -100,6 +104,9 @@
         , ?API_DescribeGroupsRequest
         , ?API_ListGroupsRequest
         , ?API_SaslHandshakeRequest
+        , ?API_ApiVersionsRequest
+        , ?API_CreateTopicsRequest
+        , ?API_DeleteTopicsRequest
         ]).
 
 -define(REQ_TO_API_KEY(Req),
@@ -116,6 +123,12 @@
           kpro_MetadataRequestV2         -> ?API_MetadataRequest;
           kpro_MetadataRequestV1         -> ?API_MetadataRequest;
           kpro_MetadataRequestV0         -> ?API_MetadataRequest;
+          kpro_LeaderAndIsrRequestV0     -> ?API_LeaderAndIsrRequest;
+          kpro_StopReplicaRequestV0      -> ?API_StopReplicaRequest;
+          kpro_UpdateMetadataRequestV2   -> ?API_UpdateMetadataRequest;
+          kpro_UpdateMetadataRequestV1   -> ?API_UpdateMetadataRequest;
+          kpro_UpdateMetadataRequestV0   -> ?API_UpdateMetadataRequest;
+          kpro_ControlledShutdownRequestV1 -> ?API_ControlledShutdownRequest;
           kpro_OffsetCommitRequestV2     -> ?API_OffsetCommitRequest;
           kpro_OffsetCommitRequestV1     -> ?API_OffsetCommitRequest;
           kpro_OffsetCommitRequestV0     -> ?API_OffsetCommitRequest;
@@ -129,7 +142,12 @@
           kpro_LeaveGroupRequestV0       -> ?API_LeaveGroupRequest;
           kpro_SyncGroupRequestV0        -> ?API_SyncGroupRequest;
           kpro_DescribeGroupsRequestV0   -> ?API_DescribeGroupsRequest;
-          kpro_ListGroupsRequestV0       -> ?API_ListGroupsRequest
+          kpro_ListGroupsRequestV0       -> ?API_ListGroupsRequest;
+          kpro_SaslHandshakeRequestV0    -> ?API_SaslHandshakeRequest;
+          kpro_ApiVersionsRequestV0      -> ?API_ApiVersionsRequest;
+          kpro_CreateTopicsRequestV0     -> ?API_CreateTopicsRequest;
+          kpro_CreateTopicsRequestV1     -> ?API_CreateTopicsRequest;
+          kpro_DeleteTopicsRequestV0     -> ?API_DeleteTopicsRequest
         end).
 
 -define(API_KEY_TO_REQ(ApiKey),
@@ -149,6 +167,16 @@
           ?API_MetadataRequest         -> [ kpro_MetadataRequestV2
                                           , kpro_MetadataRequestV1
                                           , kpro_MetadataRequestV0
+                                          ];
+          ?API_LeaderAndIsrRequest     -> [ kpro_LeaderAndIsrRequestV0
+                                          ];
+          ?API_StopReplicaRequest      -> [ kpro_StopReplicaRequestV0
+                                          ];
+          ?API_UpdateMetadataRequest   -> [ kpro_UpdateMetadataRequestV2
+                                          , kpro_UpdateMetadataRequestV1
+                                          , kpro_UpdateMetadataRequestV0
+                                          ];
+          ?API_ControlledShutdownRequest -> [ kpro_ControlledShutdownRequestV1
                                           ];
           ?API_OffsetCommitRequest     -> [ kpro_OffsetCommitRequestV2
                                           , kpro_OffsetCommitRequestV1
@@ -172,6 +200,15 @@
           ?API_DescribeGroupsRequest   -> [ kpro_DescribeGroupsRequestV0
                                           ];
           ?API_ListGroupsRequest       -> [ kpro_ListGroupsRequestV0
+                                          ];
+          ?API_SaslHandshakeRequest    -> [ kpro_SaslHandshakeRequestV0
+                                          ];
+          ?API_ApiVersionsRequest      -> [ kpro_ApiVersionsRequestV0
+                                          ];
+          ?API_CreateTopicsRequest     -> [ kpro_CreateTopicsRequestV0
+                                          , kpro_CreateTopicsRequestV1
+                                          ];
+          ?API_DeleteTopicsRequest     -> [ kpro_DeleteTopicsRequestV0
                                           ]
         end).
 
@@ -192,6 +229,16 @@
           ?API_MetadataRequest         -> [ kpro_MetadataResponseV2
                                           , kpro_MetadataResponseV1
                                           , kpro_MetadataResponseV0
+                                          ];
+          ?API_LeaderAndIsrRequest     -> [ kpro_LeaderAndIsrResponseV0
+                                          ];
+          ?API_StopReplicaRequest      -> [ kpro_StopReplicaResponseV0
+                                          ];
+          ?API_UpdateMetadataRequest   -> [ kpro_UpdateMetadataResponseV2
+                                          , kpro_UpdateMetadataResponseV1
+                                          , kpro_UpdateMetadataResponseV0
+                                          ];
+          ?API_ControlledShutdownRequest -> [ kpro_ControlledShutdownResponseV1
                                           ];
           ?API_OffsetCommitRequest     -> [ kpro_OffsetCommitResponseV2
                                           , kpro_OffsetCommitResponseV1
@@ -215,6 +262,15 @@
           ?API_DescribeGroupsRequest   -> [ kpro_DescribeGroupsResponseV0
                                           ];
           ?API_ListGroupsRequest       -> [ kpro_ListGroupsResponseV0
+                                          ];
+          ?API_SaslHandshakeRequest    -> [ kpro_SaslHandshakeResponseV0
+                                          ];
+          ?API_ApiVersionsRequest      -> [ kpro_ApiVersionsResponseV0
+                                          ];
+          ?API_CreateTopicsRequest     -> [ kpro_CreateTopicsResponseV0
+                                          , kpro_CreateTopicsResponseV1
+                                          ];
+          ?API_DeleteTopicsRequest     -> [ kpro_DeleteTopicsResponseV0
                                           ]
         end).
 
@@ -259,6 +315,17 @@
 -define(EC_CLUSTER_AUTHORIZATION_FAILED, 'ClusterAuthorizationFailed').     % 31
 -define(EC_UNSUPPORTED_SASL_MECHANISM,   'UnsupportedSaslMechanism').       % 33
 -define(EC_ILLEGAL_SASL_STATE,           'IllegalSaslState').               % 34
+-define(EC_UNSUPPORTED_VERSION,          'UnsupportedVersion').             % 35
+-define(EC_TOPIC_ALREADY_EXISTS,         'TopicExists').                    % 36
+-define(EC_INVALID_PARTITIONS,           'InvalidPartitions').              % 37
+-define(EC_INVALID_REPLICATION_FACTOR,   'InvalidReplicationFactor').       % 38
+-define(EC_INVALID_REPLICA_ASSIGNMENT,   'InvalidReplicaAssignment').       % 39
+-define(EC_INVALID_CONFIG,               'InvalidConfiguration').           % 40
+-define(EC_NOT_CONTROLLER,               'NotController').                  % 41
+-define(EC_INVALID_REQUEST,              'InvalidRequest').                 % 42
+-define(EC_UNSUPPORTED_FOR_MESSAGE_FORMAT,
+        'UnsupportedForMessageFormat').                                     % 43
+-define(EC_POLICY_VIOLATION,             'PolicyViolation').                % 44
 
 -endif.
 
