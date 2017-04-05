@@ -20,16 +20,6 @@ public class KafkaProtocolBnf {
         return b.toString();
     }
 
-    private static String underscoreToCapitalCase(String text) {
-        StringTokenizer token = new StringTokenizer(text, "_");
-        StringBuilder str = new StringBuilder();
-        while (token.hasMoreTokens()) {
-            String s = token.nextToken();
-            str.append(Character.toUpperCase(s.charAt(0))).append(s.substring(1));
-        }
-        return str.toString();
-    }
-
     private static void populateSchemaFields(Schema schema, Set<Field> fields) {
         for (Field field: schema.fields()) {
             fields.add(field);
@@ -50,7 +40,7 @@ public class KafkaProtocolBnf {
         int index = 0;
         int length = schema.fields().length;
         for (Field field: schema.fields()) {
-            String fieldName = underscoreToCapitalCase(field.name);
+            String fieldName = field.name;
             if (field.type instanceof ArrayOf) {
                 b.append("[");
                 b.append(fieldName);
@@ -86,7 +76,7 @@ public class KafkaProtocolBnf {
                 b.append(indentStr);
                 b.append(entry.getKey());
                 b.append(" => ");
-                b.append(entry.getValue().toString().toLowerCase());
+                b.append(entry.getValue().toString());
                 b.append("\n");
             }
         }
@@ -100,22 +90,24 @@ public class KafkaProtocolBnf {
             if (field.doc.isEmpty())
                 continue;
             b.append("# ");
-            b.append(underscoreToCapitalCase(field.name));
+            b.append(field.name);
             b.append(": ");
             b.append(field.doc);
             b.append("\n");
         }
-        b.append("\n");
     }
 
     public static String toText() {
         final StringBuilder b = new StringBuilder();
-        b.append("Packet => Size Payload\n");
-        b.append("  Size => int32\n");
-        b.append("  Payload => Request | Response\n");
+        b.append("Packet => size payload\n");
+        b.append("  size => INT32\n");
+        b.append("  payload => Request | Response\n");
         b.append("\n");
-        b.append("Request => RequestHeader RequestMessage\n");
-        b.append("  RequestMessage => ");
+
+        b.append("Request => header message\n");
+        b.append("  header => ");
+        schemaToBnf(Protocol.REQUEST_HEADER, b, 4);
+        b.append("  message => ");
         int apiKeysCnt = ApiKeys.values().length;
         int apiKeyIndex = 0;
         for (ApiKeys key : ApiKeys.values()) {
@@ -136,8 +128,13 @@ public class KafkaProtocolBnf {
             apiKeyIndex++;
         }
         b.append("\n\n");
-        b.append("Response => ResponseHeader ResponseMessage\n");
-        b.append("  ResponseMessage => ");
+        schemaToFieldTableText(Protocol.REQUEST_HEADER, b);
+        b.append("\n\n");
+
+        b.append("Response => header message\n");
+        b.append("  header => ");
+        schemaToBnf(Protocol.RESPONSE_HEADER, b, 4);
+        b.append("  message => ");
         apiKeyIndex = 0;
         for (ApiKeys key : ApiKeys.values()) {
             Schema[] responses = Protocol.RESPONSES[key.id];
@@ -158,16 +155,8 @@ public class KafkaProtocolBnf {
             apiKeyIndex++;
         }
         b.append("\n\n");
-
-        b.append("RequestHeader => ");
-        schemaToBnf(Protocol.REQUEST_HEADER, b, 2);
-        b.append("\n");
-        schemaToFieldTableText(Protocol.REQUEST_HEADER, b);
-
-        b.append("ResponseHeader => ");
-        schemaToBnf(Protocol.RESPONSE_HEADER, b, 2);
-        b.append("\n");
         schemaToFieldTableText(Protocol.RESPONSE_HEADER, b);
+        b.append("\n\n");
 
         for (ApiKeys key : ApiKeys.values()) {
             // Requests
@@ -182,9 +171,10 @@ public class KafkaProtocolBnf {
                     b.append(i);
                     b.append(" => ");
                     schemaToBnf(requests[i], b, 2);
+                    b.append("\n");
                     schemaToFieldTableText(requests[i], b);
                 }
-                b.append("\n");
+                b.append("\n\n");
             }
 
             // Responses
@@ -202,7 +192,7 @@ public class KafkaProtocolBnf {
                     b.append("\n");
                     schemaToFieldTableText(responses[i], b);
                 }
-                b.append("\n");
+                b.append("\n\n");
             }
         }
 
