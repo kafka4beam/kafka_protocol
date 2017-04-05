@@ -1,10 +1,9 @@
-package org.apache.kafka.common.protocol;
-
 import org.apache.kafka.common.protocol.types.ArrayOf;
 import org.apache.kafka.common.protocol.types.Field;
 import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Type;
 import org.apache.kafka.common.protocol.Protocol;
+import org.apache.kafka.common.protocol.ApiKeys;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
