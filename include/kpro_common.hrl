@@ -111,166 +111,166 @@
 
 -define(REQ_TO_API_KEY(Req),
         case Req of
-          kpro_ProduceRequestV2          -> ?API_ProduceRequest;
-          kpro_ProduceRequestV1          -> ?API_ProduceRequest;
-          kpro_ProduceRequestV0          -> ?API_ProduceRequest;
-          kpro_FetchRequestV3            -> ?API_FetchRequest;
-          kpro_FetchRequestV2            -> ?API_FetchRequest;
-          kpro_FetchRequestV1            -> ?API_FetchRequest;
-          kpro_FetchRequestV0            -> ?API_FetchRequest;
-          kpro_OffsetsRequestV1          -> ?API_OffsetsRequest;
-          kpro_OffsetsRequestV0          -> ?API_OffsetsRequest;
-          kpro_MetadataRequestV2         -> ?API_MetadataRequest;
-          kpro_MetadataRequestV1         -> ?API_MetadataRequest;
-          kpro_MetadataRequestV0         -> ?API_MetadataRequest;
-          kpro_LeaderAndIsrRequestV0     -> ?API_LeaderAndIsrRequest;
-          kpro_StopReplicaRequestV0      -> ?API_StopReplicaRequest;
-          kpro_UpdateMetadataRequestV2   -> ?API_UpdateMetadataRequest;
-          kpro_UpdateMetadataRequestV1   -> ?API_UpdateMetadataRequest;
-          kpro_UpdateMetadataRequestV0   -> ?API_UpdateMetadataRequest;
-          kpro_ControlledShutdownRequestV1 -> ?API_ControlledShutdownRequest;
-          kpro_OffsetCommitRequestV2     -> ?API_OffsetCommitRequest;
-          kpro_OffsetCommitRequestV1     -> ?API_OffsetCommitRequest;
-          kpro_OffsetCommitRequestV0     -> ?API_OffsetCommitRequest;
-          kpro_OffsetFetchRequestV2      -> ?API_OffsetFetchRequest;
-          kpro_OffsetFetchRequestV1      -> ?API_OffsetFetchRequest;
-          kpro_OffsetFetchRequestV0      -> ?API_OffsetFetchRequest;
-          kpro_GroupCoordinatorRequestV0 -> ?API_GroupCoordinatorRequest;
-          kpro_JoinGroupRequestV1        -> ?API_JoinGroupRequest;
-          kpro_JoinGroupRequestV0        -> ?API_JoinGroupRequest;
-          kpro_HeartbeatRequestV0        -> ?API_HeartbeatRequest;
-          kpro_LeaveGroupRequestV0       -> ?API_LeaveGroupRequest;
-          kpro_SyncGroupRequestV0        -> ?API_SyncGroupRequest;
-          kpro_DescribeGroupsRequestV0   -> ?API_DescribeGroupsRequest;
-          kpro_ListGroupsRequestV0       -> ?API_ListGroupsRequest;
-          kpro_SaslHandshakeRequestV0    -> ?API_SaslHandshakeRequest;
-          kpro_ApiVersionsRequestV0      -> ?API_ApiVersionsRequest;
-          kpro_CreateTopicsRequestV0     -> ?API_CreateTopicsRequest;
-          kpro_CreateTopicsRequestV1     -> ?API_CreateTopicsRequest;
-          kpro_DeleteTopicsRequestV0     -> ?API_DeleteTopicsRequest
+          kpro_produce_request_v2 -> ?API_ProduceRequest;
+          kpro_produce_request_v1 -> ?API_ProduceRequest;
+          kpro_produce_request_v0 -> ?API_ProduceRequest;
+          kpro_fetch_request_v3 -> ?API_FetchRequest;
+          kpro_fetch_request_v2 -> ?API_FetchRequest;
+          kpro_fetch_request_v1 -> ?API_FetchRequest;
+          kpro_fetch_request_v0 -> ?API_FetchRequest;
+          kpro_offsets_request_v1 -> ?API_OffsetsRequest;
+          kpro_offsets_request_v0 -> ?API_OffsetsRequest;
+          kpro_metadata_request_v2 -> ?API_MetadataRequest;
+          kpro_metadata_request_v1 -> ?API_MetadataRequest;
+          kpro_metadata_request_v0 -> ?API_MetadataRequest;
+          kpro_leader_and_isr_request_v0 -> ?API_LeaderAndIsrRequest;
+          kpro_stop_replica_request_v0 -> ?API_StopReplicaRequest;
+          kpro_update_metadata_request_v2 -> ?API_UpdateMetadataRequest;
+          kpro_update_metadata_request_v1 -> ?API_UpdateMetadataRequest;
+          kpro_update_metadata_request_v0 -> ?API_UpdateMetadataRequest;
+          kpro_controlled_shutdown_request_v1 -> ?API_ControlledShutdownRequest;
+          kpro_offset_commit_request_v2 -> ?API_OffsetCommitRequest;
+          kpro_offset_commit_request_v1 -> ?API_OffsetCommitRequest;
+          kpro_offset_commit_request_v0 -> ?API_OffsetCommitRequest;
+          kpro_offset_fetch_request_v2 -> ?API_OffsetFetchRequest;
+          kpro_offset_fetch_request_v1 -> ?API_OffsetFetchRequest;
+          kpro_offset_fetch_request_v0 -> ?API_OffsetFetchRequest;
+          kpro_group_coordinator_request_v0 -> ?API_GroupCoordinatorRequest;
+          kpro_join_group_request_v1 -> ?API_JoinGroupRequest;
+          kpro_join_group_request_v0 -> ?API_JoinGroupRequest;
+          kpro_heartbeat_request_v0 -> ?API_HeartbeatRequest;
+          kpro_leave_group_request_v0 -> ?API_LeaveGroupRequest;
+          kpro_sync_group_request_v0 -> ?API_SyncGroupRequest;
+          kpro_describe_groups_request_v0 -> ?API_DescribeGroupsRequest;
+          kpro_list_groups_request_v0 -> ?API_ListGroupsRequest;
+          kpro_sasl_handshake_request_v0 -> ?API_SaslHandshakeRequest;
+          kpro_api_versions_request_v0 -> ?API_ApiVersionsRequest;
+          kpro_create_topics_request_v0 -> ?API_CreateTopicsRequest;
+          kpro_create_topics_request_v1 -> ?API_CreateTopicsRequest;
+          kpro_delete_topics_request_v0 -> ?API_DeleteTopicsRequest
         end).
 
 -define(API_KEY_TO_REQ(ApiKey),
         case ApiKey of
-          ?API_ProduceRequest          -> [ kpro_ProduceRequestV2
-                                          , kpro_ProduceRequestV1
-                                          , kpro_ProduceRequestV0
+          ?API_ProduceRequest          -> [ kpro_produce_request_v2
+                                          , kpro_produce_request_v1
+                                          , kpro_produce_request_v0
                                           ];
-          ?API_FetchRequest            -> [ kpro_FetchRequestV3
-                                          , kpro_FetchRequestV2
-                                          , kpro_FetchRequestV1
-                                          , kpro_FetchRequestV0
+          ?API_FetchRequest            -> [ kpro_fetch_request_v3
+                                          , kpro_fetch_request_v2
+                                          , kpro_fetch_request_v1
+                                          , kpro_fetch_request_v0
                                           ];
-          ?API_OffsetsRequest          -> [ kpro_OffsetsRequestV1
-                                          , kpro_OffsetsRequestV0
+          ?API_OffsetsRequest          -> [ kpro_offsets_request_v1
+                                          , kpro_offsets_request_v0
                                           ];
-          ?API_MetadataRequest         -> [ kpro_MetadataRequestV2
-                                          , kpro_MetadataRequestV1
-                                          , kpro_MetadataRequestV0
+          ?API_MetadataRequest         -> [ kpro_metadata_request_v2
+                                          , kpro_metadata_request_v1
+                                          , kpro_metadata_request_v0
                                           ];
-          ?API_LeaderAndIsrRequest     -> [ kpro_LeaderAndIsrRequestV0
+          ?API_LeaderAndIsrRequest     -> [ kpro_leader_and_isr_request_v0
                                           ];
-          ?API_StopReplicaRequest      -> [ kpro_StopReplicaRequestV0
+          ?API_StopReplicaRequest      -> [ kpro_stop_replica_request_v0
                                           ];
-          ?API_UpdateMetadataRequest   -> [ kpro_UpdateMetadataRequestV2
-                                          , kpro_UpdateMetadataRequestV1
-                                          , kpro_UpdateMetadataRequestV0
+          ?API_UpdateMetadataRequest   -> [ kpro_update_metadata_request_v2
+                                          , kpro_update_metadata_request_v1
+                                          , kpro_update_metadata_request_v0
                                           ];
-          ?API_ControlledShutdownRequest -> [ kpro_ControlledShutdownRequestV1
+          ?API_ControlledShutdownRequest -> [ kpro_controlled_shutdown_request_v1
                                           ];
-          ?API_OffsetCommitRequest     -> [ kpro_OffsetCommitRequestV2
-                                          , kpro_OffsetCommitRequestV1
-                                          , kpro_OffsetCommitRequestV0
+          ?API_OffsetCommitRequest     -> [ kpro_offset_commit_request_v2
+                                          , kpro_offset_commit_request_v1
+                                          , kpro_offset_commit_request_v0
                                           ];
-          ?API_OffsetFetchRequest      -> [ kpro_OffsetFetchRequestV2
-                                          , kpro_OffsetFetchRequestV1
-                                          , kpro_OffsetFetchRequestV0
+          ?API_OffsetFetchRequest      -> [ kpro_offset_fetch_request_v2
+                                          , kpro_offset_fetch_request_v1
+                                          , kpro_offset_fetch_request_v0
                                           ];
-          ?API_GroupCoordinatorRequest -> [ kpro_GroupCoordinatorRequestV0
+          ?API_GroupCoordinatorRequest -> [ kpro_group_coordinator_request_v0
                                           ];
-          ?API_JoinGroupRequest        -> [ kpro_JoinGroupRequestV1
-                                          , kpro_JoinGroupRequestV0
+          ?API_JoinGroupRequest        -> [ kpro_join_group_request_v1
+                                          , kpro_join_group_request_v0
                                           ];
-          ?API_HeartbeatRequest        -> [ kpro_HeartbeatRequestV0
+          ?API_HeartbeatRequest        -> [ kpro_heartbeat_request_v0
                                           ];
-          ?API_LeaveGroupRequest       -> [ kpro_LeaveGroupRequestV0
+          ?API_LeaveGroupRequest       -> [ kpro_leave_group_request_v0
                                           ];
-          ?API_SyncGroupRequest        -> [ kpro_SyncGroupRequestV0
+          ?API_SyncGroupRequest        -> [ kpro_sync_group_request_v0
                                           ];
-          ?API_DescribeGroupsRequest   -> [ kpro_DescribeGroupsRequestV0
+          ?API_DescribeGroupsRequest   -> [ kpro_describe_groups_request_v0
                                           ];
-          ?API_ListGroupsRequest       -> [ kpro_ListGroupsRequestV0
+          ?API_ListGroupsRequest       -> [ kpro_list_groups_request_v0
                                           ];
-          ?API_SaslHandshakeRequest    -> [ kpro_SaslHandshakeRequestV0
+          ?API_SaslHandshakeRequest    -> [ kpro_sasl_handshake_request_v0
                                           ];
-          ?API_ApiVersionsRequest      -> [ kpro_ApiVersionsRequestV0
+          ?API_ApiVersionsRequest      -> [ kpro_api_versions_request_v0
                                           ];
-          ?API_CreateTopicsRequest     -> [ kpro_CreateTopicsRequestV0
-                                          , kpro_CreateTopicsRequestV1
+          ?API_CreateTopicsRequest     -> [ kpro_create_topics_request_v0
+                                          , kpro_create_topics_request_v1
                                           ];
-          ?API_DeleteTopicsRequest     -> [ kpro_DeleteTopicsRequestV0
+          ?API_DeleteTopicsRequest     -> [ kpro_delete_topics_request_v0
                                           ]
         end).
 
 -define(API_KEY_TO_RSP(ApiKey),
         case ApiKey of
-          ?API_ProduceRequest          -> [ kpro_ProduceResponseV2
-                                          , kpro_ProduceResponseV1
-                                          , kpro_ProduceResponseV0
+          ?API_ProduceRequest          -> [ kpro_produce_response_v2
+                                          , kpro_produce_response_v1
+                                          , kpro_produce_response_v0
                                           ];
-          ?API_FetchRequest            -> [ kpro_FetchResponseV3
-                                          , kpro_FetchResponseV2
-                                          , kpro_FetchResponseV1
-                                          , kpro_FetchResponseV0
+          ?API_FetchRequest            -> [ kpro_fetch_response_v3
+                                          , kpro_fetch_response_v2
+                                          , kpro_fetch_response_v1
+                                          , kpro_fetch_response_v0
                                           ];
-          ?API_OffsetsRequest          -> [ kpro_OffsetsResponseV1
-                                          , kpro_OffsetsResponseV0
+          ?API_OffsetsRequest          -> [ kpro_offsets_response_v1
+                                          , kpro_offsets_response_v0
                                           ];
-          ?API_MetadataRequest         -> [ kpro_MetadataResponseV2
-                                          , kpro_MetadataResponseV1
-                                          , kpro_MetadataResponseV0
+          ?API_MetadataRequest         -> [ kpro_metadata_response_v2
+                                          , kpro_metadata_response_v1
+                                          , kpro_metadata_response_v0
                                           ];
-          ?API_LeaderAndIsrRequest     -> [ kpro_LeaderAndIsrResponseV0
+          ?API_LeaderAndIsrRequest     -> [ kpro_leader_and_isr_response_v0
                                           ];
-          ?API_StopReplicaRequest      -> [ kpro_StopReplicaResponseV0
+          ?API_StopReplicaRequest      -> [ kpro_stop_replica_response_v0
                                           ];
-          ?API_UpdateMetadataRequest   -> [ kpro_UpdateMetadataResponseV2
-                                          , kpro_UpdateMetadataResponseV1
-                                          , kpro_UpdateMetadataResponseV0
+          ?API_UpdateMetadataRequest   -> [ kpro_update_metadata_response_v2
+                                          , kpro_update_metadata_response_v1
+                                          , kpro_update_metadata_response_v0
                                           ];
-          ?API_ControlledShutdownRequest -> [ kpro_ControlledShutdownResponseV1
+          ?API_ControlledShutdownRequest -> [ kpro_controlled_shutdown_response_v1
                                           ];
-          ?API_OffsetCommitRequest     -> [ kpro_OffsetCommitResponseV2
-                                          , kpro_OffsetCommitResponseV1
-                                          , kpro_OffsetCommitResponseV0
+          ?API_OffsetCommitRequest     -> [ kpro_offset_commit_response_v2
+                                          , kpro_offset_commit_response_v1
+                                          , kpro_offset_commit_response_v0
                                           ];
-          ?API_OffsetFetchRequest      -> [ kpro_OffsetFetchResponseV2
-                                          , kpro_OffsetFetchResponseV1
-                                          , kpro_OffsetFetchResponseV0
+          ?API_OffsetFetchRequest      -> [ kpro_offset_fetch_response_v2
+                                          , kpro_offset_fetch_response_v1
+                                          , kpro_offset_fetch_response_v0
                                           ];
-          ?API_GroupCoordinatorRequest -> [ kpro_GroupCoordinatorResponseV0
+          ?API_GroupCoordinatorRequest -> [ kpro_group_coordinator_response_v0
                                           ];
-          ?API_JoinGroupRequest        -> [ kpro_JoinGroupResponseV1
-                                          , kpro_JoinGroupResponseV0
+          ?API_JoinGroupRequest        -> [ kpro_join_group_response_v1
+                                          , kpro_join_group_response_v0
                                           ];
-          ?API_HeartbeatRequest        -> [ kpro_HeartbeatResponseV0
+          ?API_HeartbeatRequest        -> [ kpro_heartbeat_response_v0
                                           ];
-          ?API_LeaveGroupRequest       -> [ kpro_LeaveGroupResponseV0
+          ?API_LeaveGroupRequest       -> [ kpro_leave_group_response_v0
                                           ];
-          ?API_SyncGroupRequest        -> [ kpro_SyncGroupResponseV0
+          ?API_SyncGroupRequest        -> [ kpro_sync_group_response_v0
                                           ];
-          ?API_DescribeGroupsRequest   -> [ kpro_DescribeGroupsResponseV0
+          ?API_DescribeGroupsRequest   -> [ kpro_describe_groups_response_v0
                                           ];
-          ?API_ListGroupsRequest       -> [ kpro_ListGroupsResponseV0
+          ?API_ListGroupsRequest       -> [ kpro_list_groups_response_v0
                                           ];
-          ?API_SaslHandshakeRequest    -> [ kpro_SaslHandshakeResponseV0
+          ?API_SaslHandshakeRequest    -> [ kpro_sasl_handshake_response_v0
                                           ];
-          ?API_ApiVersionsRequest      -> [ kpro_ApiVersionsResponseV0
+          ?API_ApiVersionsRequest      -> [ kpro_api_versions_response_v0
                                           ];
-          ?API_CreateTopicsRequest     -> [ kpro_CreateTopicsResponseV0
-                                          , kpro_CreateTopicsResponseV1
+          ?API_CreateTopicsRequest     -> [ kpro_create_topics_response_v0
+                                          , kpro_create_topics_response_v1
                                           ];
-          ?API_DeleteTopicsRequest     -> [ kpro_DeleteTopicsResponseV0
+          ?API_DeleteTopicsRequest     -> [ kpro_delete_topics_response_v0
                                           ]
         end).
 

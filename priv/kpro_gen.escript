@@ -34,62 +34,110 @@ main(_) ->
   Records = to_records(DefGroups),
   generate_code(Records).
 
-to_records(Defs) ->
-  lists:flatten(lists:map(fun records/1, Defs)).
-
-global_name_atom(Name) when is_atom(Name) ->
-  global_name_atom(atom_to_list(Name));
-global_name_atom(NameStr) when is_list(NameStr) ->
-  list_to_atom("kpro_" ++ string:strip(NameStr, both, $')).
-
-records(Def) -> records(Def, Def).
-
-records([], _Def) -> [];
-records([{Name, Fields} | Rest], Def) when is_list(Fields) ->
-  Rec = {global_name_atom(Name), fields(Fields, Def)},
-  [Rec | records(Rest, Def)];
-records([_ | Rest], Def) ->
-  records(Rest, Def).
-
-fields(Fields, Def) ->
-  lists:map(fun(Field) ->
-              {field_name(Field), field_type(Field, Def)}
-            end, Fields).
-
-field_name(Name) when is_atom(Name) ->
-  maybe_lowercase_leading(Name);
-field_name({array, Name}) ->
-  %% for array fields, append a _L suffix to the name
-  list_to_atom(atom_to_list(field_name(Name)) ++ "_L").
-
-field_type(Name, Def) when is_atom(Name) ->
-  case lists:keyfind(Name, 1, Def) of
-    false ->
-      %% They claim the bnf to be context free, however there are still
-      %% few cases where external reference is used, such as message set
-      %% definition.
-      global_name_atom(Name);
-    {_, Fields} when is_list(Fields) ->
-      %% internal reference
-      global_name_atom(Name);
-    {_, Type} when is_atom(Type) ->
-      %% this is a primitive type field, such as int8, string, bytes etc.
-      Type;
-    {_, {array, Type}} ->
-      %% only primitive types possible here
-      true = ?IS_KAFKA_PRIMITIVE(Type),
-      {array, Type};
-    {_, {one_of, Refs}} ->
-      {one_of, [global_name_atom(R) || R <- Refs]}
-  end;
-field_type({array, Name}, Def) ->
-  {array, field_type(Name, Def)}.
+this_dir() ->
+  ThisScript = escript:script_name(),
+  filename:dirname(ThisScript).
 
 generate_code(Records) ->
   ok = gen_header_file(Records),
   ok = gen_records_module(Records),
   ok = gen_marshaller(Records).
 
+
+to_records(DefGroups) ->
+  lists:flatmap(fun records/1, DefGroups).
+
+global_name_atom(Name) ->
+  global_name_atom(kpro, Name).
+
+global_name_atom(Namespace, Name) when is_atom(Namespace) ->
+  global_name_atom(atom_to_list(Namespace), Name);
+global_name_atom(Namespace, Name) when is_atom(Name) ->
+  global_name_atom(Namespace, atom_to_list(Name));
+global_name_atom(NamespaceStr, NameStr) ->
+  list_to_atom(NamespaceStr ++ "_" ++ atom_to_list(underscorize(NameStr))).
+
+% for a whole group
+records(Defs) -> records(Defs, Defs).
+
+% for the first (top level) record in group
+records([], _Defs) -> [];
+% records/2 is for top level in def group.
+% this is a field expansion record:
+records([{Name, Fields} | Rest], Defs) when is_list(Fields) ->
+  Namespace = global_name_atom(Name),
+  Rec = {Namespace, fields(Namespace, Fields, Defs)},
+  [Rec | records(Namespace, Rest, Defs)];
+% this is a {one_of, ...} record?
+records([{Name, {one_of, Refs}} | Rest], Defs) ->
+  Namespace = global_name_atom(Name),
+  Rec = {global_name_atom(Name), {one_of, [global_name_atom(R) || R <- Refs]}},
+  [Rec | records(Namespace, Rest, Defs)];
+% skip a core type record:
+records([_ | Rest], Defs) ->
+  records(Rest, Defs).
+
+records(_Namespace, [], _Defs) -> [];
+% this is a field expansion record:
+records(Namespace, [{Name, Fields} | Rest], Defs) when is_list(Fields) ->
+  Rec = {global_name_atom(Namespace, Name), fields(Namespace, Fields, Defs)},
+  [Rec | records(Namespace, Rest, Defs)];
+% this is a {one_of, ...} record?
+records(Namespace, [{Name, {one_of, Refs}} | Rest], Defs) ->
+  Rec = {global_name_atom(Namespace, Name), {one_of, [global_name_atom(R) || R <- Refs]}},
+  [Rec | records(Namespace, Rest, Defs)];
+% skip a core type record:
+records(Namespace, [_ | Rest], Defs) ->
+  records(Namespace, Rest, Defs).
+
+fields(Namespace, Fields, Def) ->
+  lists:map(fun(Field) ->
+              {field_name(Field), field_type(Namespace, Field, Def)}
+            end, Fields).
+
+field_name(Name) when is_atom(Name) -> Name;
+field_name({array, Name}) -> Name.
+
+field_type(Namespace, Name, Def) when is_atom(Name) ->
+  case lists:keyfind(Name, 1, Def) of
+    % false ->
+    %  %% They claim the bnf to be context free, however there are still
+    %  %% few cases where external reference is used, such as message set
+    %  %% definition.
+    %  %% FIXME doesn't work right now, should work as primitive type field
+    %  global_name_atom(Name);
+    {_, Fields} when is_list(Fields) ->
+      %% internal reference
+      global_name_atom(Namespace, Name);
+    {_, {one_of, _}} ->
+      %% internal reference to one_of
+      global_name_atom(Namespace, Name);
+    {_, Type} when is_atom(Type) ->
+      %% this is a primitive type field, such as int8, string, bytes etc.
+      Type;
+    {_, {array, Type}} ->
+      %% only primitive types possible here
+      true = ?IS_KAFKA_PRIMITIVE(Type),
+      {array, Type}
+  end;
+field_type(Namespace, {array, Name}, Def) ->
+  {array, field_type(Namespace, Name, Def)}.
+
+%% 'FooBarV1' -> foo_bar_v1
+underscorize(Name) when is_atom(Name) ->
+  underscorize(atom_to_list(Name));
+underscorize([H | T]) ->
+  list_to_atom(
+    [ string:to_lower(H) |
+      lists:flatmap(
+        fun(C) ->
+            case $A =< C andalso C =< $Z  of
+               true -> [$_, string:to_lower(C)];
+               false -> [C]
+            end
+        end, T)]).
+
+%% generate include/kpro.hrl
 gen_header_file(Records) ->
   Blocks =
     [ "%% generated code, do not edit!"
@@ -99,7 +147,8 @@ gen_header_file(Records) ->
     , ""
     , "-include(\"kpro_common.hrl\")."
     , ""
-    , [gen_records(Records), gen_types(Records)]
+    , gen_records(Records)
+    , gen_types(Records)
     , ""
     , "-endif.\n"
     ],
@@ -107,21 +156,24 @@ gen_header_file(Records) ->
   Filename = filename:join(["..", "include", "kpro.hrl"]),
   ok = file:write_file(Filename, IoData).
 
-gen_types([]) -> [];
-gen_types([{kpro_Message, _Fields} | Rest]) ->
-  %% a special clause for incomplete message
-  ["\n-type kpro_Message() :: incomplete_message | #kpro_Message{}.",
-   gen_types(Rest)];
-gen_types([{Name, _Fields} | Rest]) ->
+gen_types(Records) -> lists:map(fun gen_type/1, Records).
+
+gen_type({Name, {one_of, Refs}}) ->
   RecName = atom_to_list(Name),
-  [ bin(["\n-type ", RecName, "() :: #", RecName, "{}."])
-  | gen_types(Rest)
-  ].
+  Header = "-type " ++ RecName ++ "() :: ",
+  Sep = "\n" ++ lists:duplicate(length(Header) - 2, $\s) ++ "| ",
+  [ Header,
+    infix([atom_to_list(Ref) ++ "()" || Ref <- Refs], Sep),
+    ".\n"
+  ];
+gen_type({Name, _Fields}) ->
+  RecName = atom_to_list(Name),
+  ["-type ", RecName, "() :: #", RecName, "{}.\n"].
 
-gen_records([]) -> [];
-gen_records([Rec | Rest]) ->
-  [gen_record(Rec), gen_records(Rest)].
+gen_records(Records) -> lists:map(fun gen_record/1, Records).
 
+gen_record({_Name, {one_of, _Refs}}) ->
+  [];
 gen_record({Name, Fields}) ->
   {FieldLines, TypeRefs} = gen_record_fields(Fields, [], []),
   ["-record(", atom_to_list(Name), ",\n",
@@ -131,69 +183,13 @@ gen_record({Name, Fields}) ->
    TypeRefs
   ].
 
-gen_records_module(Records) ->
-  Blocks =
-    [ "%% generated code, do not edit!"
-    , ""
-    , "-module(kpro_records)."
-    , "-export([fields/1])."
-    , "-include(\"kpro.hrl\")."
-    , ""
-    , [ [gen_record_fields_clause(Record) || Record <- Records]
-      , "fields(_Unknown) -> false."
-      ]
-    ],
-  IoData = infix(Blocks, "\n"),
-  Filename = filename:join(["..", "src", "kpro_records.erl"]),
-  ok = file:write_file(Filename, IoData).
-
-%% fields(#kpro_Xyz{} = R) ->
-%%  record_info(fields, kpro_Xyz);
-gen_record_fields_clause({RecordName, _Fields}) ->
-  Name = atom_to_list(RecordName),
-  [ "fields(", Name, ") ->\n"
-  , "  record_info(fields, ", Name, ");\n"
-  ].
-
-%% change the first char to lower case
-maybe_lowercase_leading(Name) when is_atom(Name) ->
-  maybe_lowercase_leading(atom_to_list(Name));
-maybe_lowercase_leading([H | T]) when H < 97 ->
-  list_to_atom([H + ($a - $A) | T]);
-maybe_lowercase_leading(Name) ->
-  list_to_atom(Name).
-
-uppercase_leading(Name) ->
-  [H | T] = atom_to_list(Name),
-  [H - ($a - $A) | T].
-
 gen_record_fields([], FieldLines, TypeRefs) ->
   {lists:reverse(FieldLines), TypeRefs};
-gen_record_fields([{Name, Type} | Fields], FieldLines, TypeRefs0) ->
+gen_record_fields([{Name, Type} | Fields], FieldLines, TypeRefs) ->
   FieldName = atom_to_list(Name),
-  {FieldType, TypeRefs} =
-    case Type of
-      {one_of, Refs} ->
-        gen_union_type(Name, Refs, TypeRefs0);
-      _ ->
-        {gen_field_type(list_to_atom(FieldName), Type), TypeRefs0}
-    end,
+  FieldType = gen_field_type(list_to_atom(FieldName), Type),
   FieldLine = iolist_to_binary([ FieldName, " :: ", FieldType, "\n" ]),
   gen_record_fields(Fields, [FieldLine | FieldLines], TypeRefs).
-
-gen_union_type(FieldName, TypeRefs, IoDataAcc) ->
-  GNameAtom = global_name_atom(uppercase_leading(FieldName)),
-  RefTypeNameStr = atom_to_list(GNameAtom),
-  Width = length(RefTypeNameStr) + length("-type  :: "),
-  Sep = "\n" ++ lists:duplicate(Width, $\s) ++ "| ",
-  { RefTypeNameStr ++ "()"
-  , [ IoDataAcc
-    , "-type ", RefTypeNameStr, "() :: "
-    , infix(lists:map(fun(Name) ->
-                        atom_to_list(Name) ++ "()"
-                      end, TypeRefs), Sep)
-    , ".\n\n"
-    ]}.
 
 %% generate special pre-defined types.
 %% all 'errorCode' fields should have error_code() spec
@@ -219,17 +215,35 @@ gen_field_type({array, Name}) ->
 gen_field_type(Name) when is_atom(Name) ->
   atom_to_list(Name) ++ "()".
 
-infix([], _Sep) -> [];
-infix([Str], _Sep) -> [Str];
-infix([H | T], Sep) -> [H, Sep | infix(T, Sep)].
+%% generate src/kpro_records.erl
+gen_records_module(Records) ->
+  Blocks =
+    [ "%% generated code, do not edit!"
+    , ""
+    , "-module(kpro_records)."
+    , "-export([fields/1])."
+    , "-include(\"kpro.hrl\")."
+    , ""
+    , [ [gen_record_fields_clause(Record) || Record <- Records]
+      , "fields(_Unknown) -> false."
+      ]
+    ],
+  IoData = infix(Blocks, "\n"),
+  Filename = filename:join(["..", "src", "kpro_records.erl"]),
+  ok = file:write_file(Filename, IoData),
+  ok = erl_tidy:file(Filename).
 
-record_pattern(Name) ->
-  "#" ++ atom_to_list(Name) ++ "{}".
+%% fields(#kpro_xyz{} = R) ->
+%%  record_info(fields, kpro_xyz);
+gen_record_fields_clause({_RecordName, {one_of, _Fields}}) -> [];
+gen_record_fields_clause({RecordName, _Fields}) ->
+  Name = atom_to_list(RecordName),
+  [ "fields(", Name, ") ->\n"
+  , "  record_info(fields, ", Name, ");\n"
+  ].
 
-this_dir() ->
-  ThisScript = escript:script_name(),
-  filename:dirname(ThisScript).
 
+% src/kpro_structs.erl
 gen_marshaller(Records) ->
   Filename = filename:join(["..", "src", "kpro_structs.erl"]),
   Header0 =
@@ -350,10 +364,20 @@ encode_arg_code({array, _T}, V) ->
 encode_arg_code(_T, V) ->
   V.
 
+record_pattern(Name) ->
+  "#" ++ atom_to_list(Name) ++ "{}".
+
 bin(IoList) -> iolist_to_binary(IoList).
 
 gen_field_types(Fields) ->
   io_lib:format("~p", [Fields]).
+
+%% common utils
+
+infix([], _Sep) -> [];
+infix([Str], _Sep) -> [Str];
+infix([H | T], Sep) -> [H, Sep | infix(T, Sep)].
+
 
 %%% Local Variables:
 %%% allout-layout: t
