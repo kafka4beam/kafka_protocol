@@ -55,7 +55,7 @@
 -define(incomplete_message, incomplete_message).
 
 -define(IS_KAFKA_PRIMITIVE(T),
-        (T =:= int8 orelse T =:= int16 orelse
+        (T =:= boolean orelse T =:= int8 orelse T =:= int16 orelse
          T =:= int32 orelse T =:= int64 orelse
          T =:= string orelse T =:= nullable_string orelse
          T =:= bytes orelse T =:= records)).

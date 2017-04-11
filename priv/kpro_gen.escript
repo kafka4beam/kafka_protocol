@@ -206,6 +206,7 @@ gen_field_type(value, bytes) -> "kpro:kafka_value()";
 gen_field_type(_FieldName, Type) ->
   gen_field_type(Type).
 
+gen_field_type(boolean)-> "boolean()";
 gen_field_type(int8)   -> "kpro:int8()";
 gen_field_type(int16)  -> "kpro:int16()";
 gen_field_type(int32)  -> "kpro:int32()";

@@ -331,6 +331,8 @@ decode_message_set(MessageSetBin) when is_binary(MessageSetBin) ->
 %% @hidden
 encode({Fun, Data}) when is_function(Fun, 1) -> Fun(Data);
 encode({_, {already_encoded, Data}})  -> Data;
+encode({boolean, true}) -> <<1:8/?INT>>;
+encode({boolean, false}) -> <<0:8/?INT>>;
 encode({int8,  I}) when is_integer(I) -> <<I:8/?INT>>;
 encode({int16, I}) when is_integer(I) -> <<I:16/?INT>>;
 encode({int32, I}) when is_integer(I) -> <<I:32/?INT>>;
@@ -413,6 +415,9 @@ encode(Struct) when is_tuple(Struct) ->
 %% @hidden
 decode(Fun, Bin) when is_function(Fun, 1) ->
   Fun(Bin);
+decode(boolean, Bin) ->
+  <<Value:8/?INT, Rest/binary>> = Bin,
+  {Value =/= 0, Rest};
 decode(int8, Bin) ->
   <<Value:8/?INT, Rest/binary>> = Bin,
   {Value, Rest};
