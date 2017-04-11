@@ -55,7 +55,7 @@ global_name_atom(Namespace, Name) when is_atom(Namespace) ->
 global_name_atom(Namespace, Name) when is_atom(Name) ->
   global_name_atom(Namespace, atom_to_list(Name));
 global_name_atom(NamespaceStr, NameStr) ->
-  list_to_atom(NamespaceStr ++ "_" ++ atom_to_list(underscorize(NameStr))).
+  list_to_atom(NamespaceStr ++ "_" ++ singular(underscorize(NameStr))).
 
 % for a whole group
 records(Defs) -> records(Defs, Defs).
@@ -123,11 +123,12 @@ field_type(Namespace, Name, Def) when is_atom(Name) ->
 field_type(Namespace, {array, Name}, Def) ->
   {array, field_type(Namespace, Name, Def)}.
 
-%% 'FooBarV1' -> foo_bar_v1
-underscorize(Name) when is_atom(Name) ->
-  underscorize(atom_to_list(Name));
+%% "foo_responses" -> "foo_response".
+%% Very, very naive and dangerous implementation!
+singular(Plural) -> string:strip(Plural, right, $s).
+
+%% "FooBarV1" -> "foo_bar_v1"
 underscorize([H | T]) ->
-  list_to_atom(
     [ string:to_lower(H) |
       lists:flatmap(
         fun(C) ->
@@ -135,7 +136,7 @@ underscorize([H | T]) ->
                true -> [$_, string:to_lower(C)];
                false -> [C]
             end
-        end, T)]).
+        end, T)].
 
 %% generate include/kpro.hrl
 gen_header_file(Records) ->
