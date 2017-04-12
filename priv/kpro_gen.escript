@@ -46,13 +46,12 @@
 main(_) ->
   ok = file:set_cwd(this_dir()),
   {ok, _} = leex:file(kpro_scanner),
-  {ok, _} = compile:file(kpro_scanner, [debug_info]),
+  {ok, _} = compile:file(kpro_scanner, [report_errors]),
   {ok, _} = yecc:file(kpro_parser),
-  {ok, _} = compile:file(kpro_parser, [debug_info]),
-  {ok, Contents} = file:read_file("kafka.bnf"),
-  {ok, Tokens, _EndLine} = kpro_scanner:string(binary_to_list(Contents)),
-  {ok, DefGroups} = kpro_parser:parse(Tokens),
-  Records = to_records(DefGroups),
+  {ok, _} = compile:file(kpro_parser, [report_errors]),
+  {ok, DefGroupsPrelude} = kpro_parser:file("kafka_prelude.bnf"),
+  {ok, DefGroups} = kpro_parser:file("kafka.bnf"),
+  Records = to_records(DefGroupsPrelude ++ DefGroups),
   generate_code(Records).
 
 this_dir() ->

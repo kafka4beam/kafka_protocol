@@ -1,0 +1,12 @@
+Packet => size payload
+  size => INT32
+  payload => Request | Response
+
+Message => offset size crc magic_byte attributes key value
+  offset => INT64
+  size => INT32
+  crc => INT32
+  magic_byte => INT8
+  attributes => INT8
+  key => BYTES
+  value => BYTES

@@ -1,6 +1,4 @@
-Packet => size payload
-  size => INT32
-  payload => Request | Response
+# generated code, do not edit!
 
 Request => header message
   header => api_key api_version correlation_id client_id

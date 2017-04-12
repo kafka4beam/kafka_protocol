@@ -36,4 +36,11 @@ new_line_and_indent -> some_empty_lines one_new_line_and_indent.
 
 Erlang code.
 
+-export([file/1]).
+
 v({_Tag, _Line, Value}) -> Value.
+
+file(Filename) ->
+  {ok, Contents} = file:read_file(Filename),
+  {ok, Tokens, _EndLine} = kpro_scanner:string(binary_to_list(Contents)),
+  parse(Tokens).

@@ -99,10 +99,7 @@ public class KafkaProtocolBnf {
 
     public static String toText() {
         final StringBuilder b = new StringBuilder();
-        b.append("Packet => size payload\n");
-        b.append("  size => INT32\n");
-        b.append("  payload => Request | Response\n");
-        b.append("\n");
+        b.append("# generated code, do not edit!\n\n");
 
         b.append("Request => header message\n");
         b.append("  header => ");
