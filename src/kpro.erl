@@ -84,7 +84,7 @@
 -type kv_list() :: [{key(), value()}].
 
 -type kafka_key() :: key().
--type kafka_value() :: undefined | iodata() | [kpro_Message()].
+-type kafka_value() :: undefined | iodata() | [kpro_message()].
 
 -type incomplete_message() :: {?incomplete_message, int32()}.
 
@@ -262,7 +262,7 @@ encode_messages([{_K, [{_NestedK, _NestedV} | _] = NestedKvList} | KvList]) ->
   | encode_messages(KvList)
   ];
 encode_messages([{K, V} | KvList]) ->
-  Msg = #kpro_Message{ attributes = ?KPRO_COMPRESS_NONE
+  Msg = #kpro_message{ attributes = ?KPRO_COMPRESS_NONE
                      , key        = K
                      , value      = V
                      },
@@ -274,7 +274,7 @@ compress(Method, IoData) ->
                  snappy -> ?KPRO_COMPRESS_SNAPPY;
                  lz4    -> ?KPRO_COMPRESS_LZ4
                end,
-  Msg = #kpro_Message{ attributes = Attributes
+  Msg = #kpro_message{ attributes = Attributes
                      , key        = <<>>
                      , value      = do_compress(Method, IoData)
                      },
@@ -373,19 +373,19 @@ encode(#kpro_PartitionMessageSet{} = R) ->
    encode({int32, Size}),
    EncodedMessages
   ];
-encode(#kpro_Message{} = R) ->
-  MagicByte = case R#kpro_Message.magicByte of
+encode(#kpro_message{} = R) ->
+  MagicByte = case R#kpro_message.magic_byte of
                 undefined            -> ?KPRO_MAGIC_BYTE;
                 M when is_integer(M) -> M
               end,
-  Attributes = case R#kpro_Message.attributes of
+  Attributes = case R#kpro_message.attributes of
                  undefined            -> ?KPRO_ATTRIBUTES;
                  A when is_integer(A) -> A
                end,
   Body = [ encode({int8, MagicByte})
          , encode({int8, Attributes})
-         , encode({bytes, R#kpro_Message.key})
-         , encode({bytes, R#kpro_Message.value})
+         , encode({bytes, R#kpro_message.key})
+         , encode({bytes, R#kpro_message.value})
          ],
   Crc  = encode({int32, erlang:crc32(Body)}),
   Size = data_size([Crc, Body]),
@@ -465,11 +465,11 @@ decode(StructName, Bin) when is_atom(StructName) ->
 
 %% @private
 -spec decode_message(binary()) ->
-        {kpro_Message() | incomplete_message(), binary()}.
+        {kpro_message() | incomplete_message(), binary()}.
 decode_message(<<_Offset:64/?INT, MsgSize:32/?INT, T/binary>> = Bin) ->
   case size(T) < MsgSize of
     true  -> {{?incomplete_message, MsgSize + 12}, <<>>};
-    false -> decode(kpro_Message, Bin)
+    false -> decode(kpro_message, Bin)
   end;
 decode_message(_) ->
   %% need to fetch at least 12 bytes to know the message size
@@ -479,21 +479,22 @@ decode_message(_) ->
 %% Return messages in reversed order.
 %% @end
 -spec decode_message_stream(binary(), Decoded) -> Decoded
-        when Decoded :: [kpro_Message() | incomplete_message()].
+        when Decoded :: [kpro_message() | incomplete_message()].
 decode_message_stream(<<>>, Acc) ->
   %% Do not reverse here!
   %% as the input is recursive when compressed
   Acc;
+% FIXME cleanup
 decode_message_stream(Bin, Acc) ->
   {Msg, Rest} = decode_message(Bin),
   NewAcc =
     case Msg of
-      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_GZIP_ATTR(Attr) ->
-        decode_message_stream(zlib:gunzip(Msg#kpro_Message.value), Acc);
-      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_SNAPPY_ATTR(Attr) ->
-        decode_message_stream(java_snappy_unpack(Msg#kpro_Message.value), Acc);
-      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_LZ4_ATTR(Attr) ->
-        decode_message_stream(lz4_unpack(Msg#kpro_Message.value), Acc);
+      #kpro_message{attributes = Attr} = Msg when ?KPRO_IS_GZIP_ATTR(Attr) ->
+        decode_message_stream(zlib:gunzip(Msg#kpro_message.value), Acc);
+      #kpro_message{attributes = Attr} = Msg when ?KPRO_IS_SNAPPY_ATTR(Attr) ->
+        decode_message_stream(java_snappy_unpack(Msg#kpro_message.value), Acc);
+      #kpro_message{attributes = Attr} = Msg when ?KPRO_IS_LZ4_ATTR(Attr) ->
+        decode_message_stream(lz4_unpack(Msg#kpro_message.value), Acc);
       _Else ->
         [Msg | Acc]
     end,
