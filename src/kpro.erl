@@ -364,12 +364,14 @@ encode({{array, T}, L}) when is_list(L) ->
 encode({array, L}) when is_list(L) ->
   Length = length(L),
   [<<Length:32/?INT>>, [encode(I) || I <- L]];
-%% FIXME translate this
-encode(#kpro_PartitionMessageSet{} = R) ->
+%% FIXME encoder could be better? also what about  ...v1_data and ...v2_data
+%% probably should be done with encode(records, Bin) for RECORDS type)
+encode(#kpro_produce_request_v0_data{} = R) ->
   %% messages in messageset is a stream, not an array
-  EncodedMessages = R#kpro_PartitionMessageSet.message_L,
+  %% FIXME what is the difference between stream and array here?
+  EncodedMessages = R#kpro_produce_request_v0_data.record_set,
   Size = data_size(EncodedMessages),
-  [encode({int32, R#kpro_PartitionMessageSet.partition}),
+  [encode({int32, R#kpro_produce_request_v0_data.partition}),
    encode({int32, Size}),
    EncodedMessages
   ];
@@ -393,22 +395,30 @@ encode(#kpro_message{} = R) ->
    encode({int32, Size}),
    Crc, Body
   ];
-encode(#kpro_GroupAssignment{memberAssignment = MA} = GA) ->
+
+% FIXME isn't it replaceable by custom
+%   kpro:encode({bytes, #kpro_consumer_group_member_assignment{}}) clause?
+% Type spec would be off, but they are off already.
+encode(#kpro_sync_group_request_v0_group_assignment{member_assignment = MA} = GA) ->
   case MA of
-    #kpro_ConsumerGroupMemberAssignment{} ->
+    #kpro_consumer_group_member_assignment{} ->
       %% member assignment is an embeded 'bytes' blob
       Bytes = encode(MA),
-      kpro_structs:encode(GA#kpro_GroupAssignment{memberAssignment = Bytes});
+      kpro_structs:encode(
+        GA#kpro_sync_group_request_v0_group_assignment{
+          member_assignment = Bytes});
     _IoData ->
       %% the higher level user may have it encoded already
       kpro_structs:encode(GA)
   end;
-encode(#kpro_GroupProtocol{protocolMetadata = PM} = GP) ->
+encode(#kpro_join_group_request_v0_group_protocol{protocol_metadata = PM} = GP) ->
   case PM of
-    #kpro_ConsumerGroupProtocolMetadata{} ->
+    #kpro_consumer_group_protocol_metadata{} ->
       %% Group protocol metadata is an embeded 'bytes' blob
       Bytes = encode(PM),
-      kpro_structs:encode(GP#kpro_GroupProtocol{protocolMetadata = Bytes});
+      kpro_structs:encode(
+        GP#kpro_join_group_request_v0_group_protocol{
+          protocol_metadata = Bytes});
     _IoData ->
       %% the higher level user may have it encoded already
       kpro_structs:encode(GP)
@@ -443,7 +453,9 @@ decode(bytes, Bin) ->
 decode({array, Type}, Bin) ->
   <<Length:32/?INT, Rest/binary>> = Bin,
   decode_array_elements(Length, Type, Rest, _Acc = []);
-decode(kpro_FetchResponsePartition, Bin) ->
+% FIXME think about kpro_fetch_response_v1, v2 and so on
+% should be done with RECORDS decoder?
+decode(kpro_fetch_response_v0_partition_response, Bin) ->
   %% special treat since message sets may get partially delivered
   <<Partition:32/?INT,
     ErrorCode:16/?INT,
@@ -451,15 +463,19 @@ decode(kpro_FetchResponsePartition, Bin) ->
     MessageSetSize:32/?INT,
     MessageSetBin:MessageSetSize/binary,
     Rest/binary>> = Bin,
-  PartitionMessages =
-    #kpro_FetchResponsePartition
+
+  PartitionHeader =
+    #kpro_fetch_response_v0_partition_header
       { partition           = Partition
-      , errorCode           = kpro_ErrorCode:decode(ErrorCode)
-      , highWatermarkOffset = HighWmOffset
-      , messageSetSize      = MessageSetSize
-      , message_L           = MessageSetBin
+      , error_code          = kpro_ErrorCode:decode(ErrorCode)
+      , high_watermark      = HighWmOffset
       },
-  {PartitionMessages, Rest};
+  PartitionResponse =
+    #kpro_fetch_response_v0_partition_response
+      { partition_header = PartitionHeader
+      , record_set       = MessageSetBin
+      },
+  {PartitionResponse, Rest};
 decode(StructName, Bin) when is_atom(StructName) ->
   kpro_structs:decode(StructName, Bin).
 
@@ -527,7 +543,7 @@ maybe_translate(_RecordName, _FieldName, RawValue) ->
 maybe_decode_consumer_group_member_metadata(Bin) ->
   try
     {GroupMemberMetadata, <<>>} =
-      decode(kpro_ConsumerGroupProtocolMetadata, Bin),
+      decode(kpro_consumer_group_protocol_metadata, Bin),
     GroupMemberMetadata
   catch error : {badmatch, _} ->
     %% in case not consumer group protocol
@@ -537,7 +553,7 @@ maybe_decode_consumer_group_member_metadata(Bin) ->
 
 maybe_decode_consumer_group_member_assignment(Bin) ->
   try
-    {MemberAssignment, <<>>} = decode(kpro_ConsumerGroupMemberAssignment, Bin),
+    {MemberAssignment, <<>>} = decode(kpro_consumer_group_member_assignment, Bin),
     MemberAssignment
   catch error : {badmatch, _} ->
     %% in case not consumer group protocol
