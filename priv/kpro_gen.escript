@@ -231,6 +231,7 @@ gen_field_type(int64)  -> "kpro:int64()";
 gen_field_type(string) -> "kpro:str()";
 gen_field_type(nullable_string) -> "kpro:str()";
 gen_field_type(bytes)  -> "binary()";
+gen_field_type(records)  -> "kpro:records()";
 gen_field_type({array, Name}) ->
   "[" ++ gen_field_type(Name) ++ "]";
 gen_field_type(Name) when is_atom(Name) ->
