@@ -51,11 +51,105 @@ main(Args) ->
   {ok, _} = compile:file(kpro_parser, [report_errors]),
   {ok, DefGroupsPrelude} = kpro_parser:file("kafka_prelude.bnf"),
   {ok, DefGroups} = kpro_parser:file("kafka.bnf"),
+  ExpandedTypes = [I || I <- lists:map(fun expand/1, DefGroups), is_tuple(I)],
+  GrouppedTypes = group_per_name(ExpandedTypes, []),
+  ok = generate_schema_module(GrouppedTypes),
   Records = to_records(DefGroupsPrelude ++ DefGroups),
   case Args of
     ["records"] -> io:format("~p", [all_requests(Records)]);
     _ -> generate_code(Records)
   end.
+
+-define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
+-module(kpro_schema).
+-export([get/2]).
+").
+
+generate_schema_module(GrouppedTypes) ->
+  Filename = filename:join(["..", "src", "kpro_schema.erl"]),
+  Clauses = lists:flatmap(fun generate_schema_clauses/1, GrouppedTypes),
+  IoData =
+    [?SCHEMA_MODULE_HEADER,
+     "\n",
+     infix(Clauses, ";\n"),
+     ".\n\n"
+    ],
+  file:write_file(Filename, IoData).
+
+generate_schema_clauses({Name, VersionedFields0}) ->
+  VersionedFields = lists:keysort(1, VersionedFields0),
+  generate_schema_clauses(Name, merge_versions(VersionedFields)).
+
+generate_schema_clauses(_Name, []) -> [];
+generate_schema_clauses(Name, [{Versions, Fields} | Rest]) ->
+  Head =
+    case Versions of
+      V when is_integer(V) ->
+        ["get(", Name, ", ", integer_to_list(V), ") ->"];
+      [V | Vs] ->
+        MinV = integer_to_list(V),
+        MaxV = integer_to_list(lists:last(Vs)),
+        ["get(", Name, ", V) when V >= ", MinV, ", V =< ", MaxV, " ->"]
+    end,
+  Body = io_lib:format("  ~p", [Fields]),
+  [ iolist_to_binary([Head, "\n", Body])
+  | generate_schema_clauses(Name, Rest)
+  ].
+
+group_per_name([], Acc) -> Acc;
+group_per_name([ExpandedType | Rest], Acc) ->
+  {Name, Version, Fields} = split_name_version(ExpandedType),
+  AccumulatedVersions1 =
+    case lists:keyfind(Name, 1, Acc) of
+      false ->
+        [];
+      {_, AccumulatedVersions0} ->
+        AccumulatedVersions0
+    end,
+  AccumulatedVersions = [{Version, Fields} | AccumulatedVersions1],
+  NewAcc = lists:keystore(Name, 1, Acc, {Name, AccumulatedVersions}),
+  group_per_name(Rest, NewAcc).
+
+merge_versions([]) -> [];
+merge_versions([_] = L) -> L;
+merge_versions([{V1, Fields1}, {V2, Fields2} | Rest]) ->
+  case Fields1 =:= Fields2 of
+    true ->
+      Versions = lists:flatten([V1, V2]),
+      merge_versions([{Versions, Fields1} | Rest]);
+    false ->
+      [{V1, Fields1} | merge_versions([{V2, Fields2} | Rest])]
+  end.
+
+split_name_version({Tag, Fields}) ->
+  [Vsn, $v, $_ | NameReversed] =
+    lists:reverse(underscorize(atom_to_list(Tag))),
+  Name = lists:reverse(NameReversed),
+  Version = Vsn - $0,
+  {Name, Version, Fields}.
+
+%% Requests and Response have to be hande coded
+%% TODO: there is no need to support 'one_of' if we choose to
+%% pick the prop-list approach
+expand([{'Request', _Fields} | _Refs]) -> ignored;
+expand([{'Response', _Fields} | _Refs]) -> ignored;
+expand([{Tag, Fields} | Refs]) ->
+  {Tag, expand_fields(Fields, Refs)}.
+
+expand_fields([], _Refs) -> [];
+expand_fields([Name | Rest], Refs) when is_atom(Name) ->
+  {Name, Type0} = lists:keyfind(Name, 1, Refs),
+  Type = expand_type(Type0, Refs),
+  [{Name, Type} | expand_fields(Rest, Refs)];
+expand_fields([{array, Name} | Rest], Refs) ->
+  {Name, Type0} = lists:keyfind(Name, 1, Refs),
+  Type = expand_type(Type0, Refs),
+  [{Name, {array, Type}} | expand_fields(Rest, Refs)].
+
+expand_type(Type, _Refs) when ?IS_KAFKA_PRIMITIVE(Type) ->
+  Type;
+expand_type(Fields, Refs) when is_list(Fields) ->
+  expand_fields(Fields, Refs).
 
 this_dir() ->
   ThisScript = escript:script_name(),
