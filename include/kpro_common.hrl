@@ -45,11 +45,14 @@
 -define(KPRO_ATTRIBUTES, ?KPRO_COMPRESS_NONE).
 
 %% correlation IDs are 32 bit signed integers.
-%% we use 27 bits only, and use the highest 5 bits to be redudant with API key
+%% we use 25 bits only, and use the highest 5 bits to be redudant with API key
+%% and next 2 bits with API version
 %% so that the decoder may decode the responses without the need of an extra
 %% correlation ID to API key association.
--define(CORR_ID_BITS, 27).
--define(MAX_CORR_ID, 134217727).
+-define(API_KEY_BITS, 5).
+-define(API_VERSION_BITS, 2).
+-define(CORR_ID_BITS, 25).
+-define(MAX_CORR_ID, 33554431).
 
 
 -define(incomplete_message, incomplete_message).
@@ -60,218 +63,87 @@
          T =:= string orelse T =:= nullable_string orelse
          T =:= bytes orelse T =:= records)).
 
-%% https://cwiki.apache.org/confluence/display/KAFKA/
-%%       A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-ApiKeys
-
--define(API_ProduceRequest,           0).
--define(API_FetchRequest,             1).
--define(API_OffsetsRequest,           2).
--define(API_MetadataRequest,          3).
--define(API_LeaderAndIsrRequest,      4).
--define(API_StopReplicaRequest,       5).
--define(API_UpdateMetadataRequest,    6).
--define(API_ControlledShutdownRequest,7).
--define(API_OffsetCommitRequest,      8).
--define(API_OffsetFetchRequest,       9).
--define(API_GroupCoordinatorRequest, 10).
--define(API_JoinGroupRequest,        11).
--define(API_HeartbeatRequest,        12).
--define(API_LeaveGroupRequest,       13).
--define(API_SyncGroupRequest,        14).
--define(API_DescribeGroupsRequest,   15).
--define(API_ListGroupsRequest,       16).
--define(API_SaslHandshakeRequest,    17).
--define(API_ApiVersionsRequest,      18).
--define(API_CreateTopicsRequest,     19).
--define(API_DeleteTopicsRequest,     20).
-
--define(ALL_API_KEYS,
-        [ ?API_ProduceRequest
-        , ?API_FetchRequest
-        , ?API_OffsetsRequest
-        , ?API_MetadataRequest
-        , ?API_LeaderAndIsrRequest
-        , ?API_StopReplicaRequest
-        , ?API_UpdateMetadataRequest
-        , ?API_ControlledShutdownRequest
-        , ?API_OffsetCommitRequest
-        , ?API_OffsetFetchRequest
-        , ?API_GroupCoordinatorRequest
-        , ?API_JoinGroupRequest
-        , ?API_HeartbeatRequest
-        , ?API_LeaveGroupRequest
-        , ?API_SyncGroupRequest
-        , ?API_DescribeGroupsRequest
-        , ?API_ListGroupsRequest
-        , ?API_SaslHandshakeRequest
-        , ?API_ApiVersionsRequest
-        , ?API_CreateTopicsRequest
-        , ?API_DeleteTopicsRequest
-        ]).
-
--define(REQ_TO_API_KEY(Req),
+%% TODO generate it from java code somehow
+-define(REQ_TO_API_KEY_AND_VERSION(Req),
         case Req of
-          kpro_produce_request_v2 -> ?API_ProduceRequest;
-          kpro_produce_request_v1 -> ?API_ProduceRequest;
-          kpro_produce_request_v0 -> ?API_ProduceRequest;
-          kpro_fetch_request_v3 -> ?API_FetchRequest;
-          kpro_fetch_request_v2 -> ?API_FetchRequest;
-          kpro_fetch_request_v1 -> ?API_FetchRequest;
-          kpro_fetch_request_v0 -> ?API_FetchRequest;
-          kpro_offsets_request_v1 -> ?API_OffsetsRequest;
-          kpro_offsets_request_v0 -> ?API_OffsetsRequest;
-          kpro_metadata_request_v2 -> ?API_MetadataRequest;
-          kpro_metadata_request_v1 -> ?API_MetadataRequest;
-          kpro_metadata_request_v0 -> ?API_MetadataRequest;
-          kpro_leader_and_isr_request_v0 -> ?API_LeaderAndIsrRequest;
-          kpro_stop_replica_request_v0 -> ?API_StopReplicaRequest;
-          kpro_update_metadata_request_v2 -> ?API_UpdateMetadataRequest;
-          kpro_update_metadata_request_v1 -> ?API_UpdateMetadataRequest;
-          kpro_update_metadata_request_v0 -> ?API_UpdateMetadataRequest;
-          kpro_controlled_shutdown_request_v1 -> ?API_ControlledShutdownRequest;
-          kpro_offset_commit_request_v2 -> ?API_OffsetCommitRequest;
-          kpro_offset_commit_request_v1 -> ?API_OffsetCommitRequest;
-          kpro_offset_commit_request_v0 -> ?API_OffsetCommitRequest;
-          kpro_offset_fetch_request_v2 -> ?API_OffsetFetchRequest;
-          kpro_offset_fetch_request_v1 -> ?API_OffsetFetchRequest;
-          kpro_offset_fetch_request_v0 -> ?API_OffsetFetchRequest;
-          kpro_group_coordinator_request_v0 -> ?API_GroupCoordinatorRequest;
-          kpro_join_group_request_v1 -> ?API_JoinGroupRequest;
-          kpro_join_group_request_v0 -> ?API_JoinGroupRequest;
-          kpro_heartbeat_request_v0 -> ?API_HeartbeatRequest;
-          kpro_leave_group_request_v0 -> ?API_LeaveGroupRequest;
-          kpro_sync_group_request_v0 -> ?API_SyncGroupRequest;
-          kpro_describe_groups_request_v0 -> ?API_DescribeGroupsRequest;
-          kpro_list_groups_request_v0 -> ?API_ListGroupsRequest;
-          kpro_sasl_handshake_request_v0 -> ?API_SaslHandshakeRequest;
-          kpro_api_versions_request_v0 -> ?API_ApiVersionsRequest;
-          kpro_create_topics_request_v0 -> ?API_CreateTopicsRequest;
-          kpro_create_topics_request_v1 -> ?API_CreateTopicsRequest;
-          kpro_delete_topics_request_v0 -> ?API_DeleteTopicsRequest
+          kpro_produce_request_v0             -> { 0, 0};
+          kpro_produce_request_v1             -> { 0, 1};
+          kpro_produce_request_v2             -> { 0, 2};
+          kpro_fetch_request_v0               -> { 1, 0};
+          kpro_fetch_request_v1               -> { 1, 1};
+          kpro_fetch_request_v2               -> { 1, 2};
+          kpro_fetch_request_v3               -> { 1, 3};
+          kpro_offsets_request_v0             -> { 2, 0};
+          kpro_offsets_request_v1             -> { 2, 1};
+          kpro_metadata_request_v0            -> { 3, 0};
+          kpro_metadata_request_v1            -> { 3, 1};
+          kpro_metadata_request_v2            -> { 3, 2};
+          kpro_leader_and_isr_request_v0      -> { 4, 0};
+          kpro_stop_replica_request_v0        -> { 5, 0};
+          kpro_update_metadata_request_v0     -> { 6, 0};
+          kpro_update_metadata_request_v1     -> { 6, 1};
+          kpro_update_metadata_request_v2     -> { 6, 2};
+          kpro_controlled_shutdown_request_v1 -> { 7, 1};
+          kpro_offset_commit_request_v0       -> { 8, 0};
+          kpro_offset_commit_request_v1       -> { 8, 1};
+          kpro_offset_commit_request_v2       -> { 8, 2};
+          kpro_offset_fetch_request_v0        -> { 9, 0};
+          kpro_offset_fetch_request_v1        -> { 9, 1};
+          kpro_offset_fetch_request_v2        -> { 9, 2};
+          kpro_group_coordinator_request_v0   -> {10, 0};
+          kpro_join_group_request_v0          -> {11, 0};
+          kpro_join_group_request_v1          -> {11, 1};
+          kpro_heartbeat_request_v0           -> {12, 0};
+          kpro_leave_group_request_v0         -> {13, 0};
+          kpro_sync_group_request_v0          -> {14, 0};
+          kpro_describe_groups_request_v0     -> {15, 0};
+          kpro_list_groups_request_v0         -> {16, 0};
+          kpro_sasl_handshake_request_v0      -> {17, 0};
+          kpro_api_versions_request_v0        -> {18, 0};
+          kpro_create_topics_request_v0       -> {19, 0};
+          kpro_create_topics_request_v1       -> {19, 1};
+          kpro_delete_topics_request_v0       -> {20, 0}
         end).
 
--define(API_KEY_TO_REQ(ApiKey),
-        case ApiKey of
-          ?API_ProduceRequest          -> [ kpro_produce_request_v2
-                                          , kpro_produce_request_v1
-                                          , kpro_produce_request_v0
-                                          ];
-          ?API_FetchRequest            -> [ kpro_fetch_request_v3
-                                          , kpro_fetch_request_v2
-                                          , kpro_fetch_request_v1
-                                          , kpro_fetch_request_v0
-                                          ];
-          ?API_OffsetsRequest          -> [ kpro_offsets_request_v1
-                                          , kpro_offsets_request_v0
-                                          ];
-          ?API_MetadataRequest         -> [ kpro_metadata_request_v2
-                                          , kpro_metadata_request_v1
-                                          , kpro_metadata_request_v0
-                                          ];
-          ?API_LeaderAndIsrRequest     -> [ kpro_leader_and_isr_request_v0
-                                          ];
-          ?API_StopReplicaRequest      -> [ kpro_stop_replica_request_v0
-                                          ];
-          ?API_UpdateMetadataRequest   -> [ kpro_update_metadata_request_v2
-                                          , kpro_update_metadata_request_v1
-                                          , kpro_update_metadata_request_v0
-                                          ];
-          ?API_ControlledShutdownRequest -> [ kpro_controlled_shutdown_request_v1
-                                          ];
-          ?API_OffsetCommitRequest     -> [ kpro_offset_commit_request_v2
-                                          , kpro_offset_commit_request_v1
-                                          , kpro_offset_commit_request_v0
-                                          ];
-          ?API_OffsetFetchRequest      -> [ kpro_offset_fetch_request_v2
-                                          , kpro_offset_fetch_request_v1
-                                          , kpro_offset_fetch_request_v0
-                                          ];
-          ?API_GroupCoordinatorRequest -> [ kpro_group_coordinator_request_v0
-                                          ];
-          ?API_JoinGroupRequest        -> [ kpro_join_group_request_v1
-                                          , kpro_join_group_request_v0
-                                          ];
-          ?API_HeartbeatRequest        -> [ kpro_heartbeat_request_v0
-                                          ];
-          ?API_LeaveGroupRequest       -> [ kpro_leave_group_request_v0
-                                          ];
-          ?API_SyncGroupRequest        -> [ kpro_sync_group_request_v0
-                                          ];
-          ?API_DescribeGroupsRequest   -> [ kpro_describe_groups_request_v0
-                                          ];
-          ?API_ListGroupsRequest       -> [ kpro_list_groups_request_v0
-                                          ];
-          ?API_SaslHandshakeRequest    -> [ kpro_sasl_handshake_request_v0
-                                          ];
-          ?API_ApiVersionsRequest      -> [ kpro_api_versions_request_v0
-                                          ];
-          ?API_CreateTopicsRequest     -> [ kpro_create_topics_request_v0
-                                          , kpro_create_topics_request_v1
-                                          ];
-          ?API_DeleteTopicsRequest     -> [ kpro_delete_topics_request_v0
-                                          ]
-        end).
-
--define(API_KEY_TO_RSP(ApiKey),
-        case ApiKey of
-          ?API_ProduceRequest          -> [ kpro_produce_response_v2
-                                          , kpro_produce_response_v1
-                                          , kpro_produce_response_v0
-                                          ];
-          ?API_FetchRequest            -> [ kpro_fetch_response_v3
-                                          , kpro_fetch_response_v2
-                                          , kpro_fetch_response_v1
-                                          , kpro_fetch_response_v0
-                                          ];
-          ?API_OffsetsRequest          -> [ kpro_offsets_response_v1
-                                          , kpro_offsets_response_v0
-                                          ];
-          ?API_MetadataRequest         -> [ kpro_metadata_response_v2
-                                          , kpro_metadata_response_v1
-                                          , kpro_metadata_response_v0
-                                          ];
-          ?API_LeaderAndIsrRequest     -> [ kpro_leader_and_isr_response_v0
-                                          ];
-          ?API_StopReplicaRequest      -> [ kpro_stop_replica_response_v0
-                                          ];
-          ?API_UpdateMetadataRequest   -> [ kpro_update_metadata_response_v2
-                                          , kpro_update_metadata_response_v1
-                                          , kpro_update_metadata_response_v0
-                                          ];
-          ?API_ControlledShutdownRequest -> [ kpro_controlled_shutdown_response_v1
-                                          ];
-          ?API_OffsetCommitRequest     -> [ kpro_offset_commit_response_v2
-                                          , kpro_offset_commit_response_v1
-                                          , kpro_offset_commit_response_v0
-                                          ];
-          ?API_OffsetFetchRequest      -> [ kpro_offset_fetch_response_v2
-                                          , kpro_offset_fetch_response_v1
-                                          , kpro_offset_fetch_response_v0
-                                          ];
-          ?API_GroupCoordinatorRequest -> [ kpro_group_coordinator_response_v0
-                                          ];
-          ?API_JoinGroupRequest        -> [ kpro_join_group_response_v1
-                                          , kpro_join_group_response_v0
-                                          ];
-          ?API_HeartbeatRequest        -> [ kpro_heartbeat_response_v0
-                                          ];
-          ?API_LeaveGroupRequest       -> [ kpro_leave_group_response_v0
-                                          ];
-          ?API_SyncGroupRequest        -> [ kpro_sync_group_response_v0
-                                          ];
-          ?API_DescribeGroupsRequest   -> [ kpro_describe_groups_response_v0
-                                          ];
-          ?API_ListGroupsRequest       -> [ kpro_list_groups_response_v0
-                                          ];
-          ?API_SaslHandshakeRequest    -> [ kpro_sasl_handshake_response_v0
-                                          ];
-          ?API_ApiVersionsRequest      -> [ kpro_api_versions_response_v0
-                                          ];
-          ?API_CreateTopicsRequest     -> [ kpro_create_topics_response_v0
-                                          , kpro_create_topics_response_v1
-                                          ];
-          ?API_DeleteTopicsRequest     -> [ kpro_delete_topics_response_v0
-                                          ]
+-define(API_KEY_AND_VERSION_TO_RSP(ApiKey, ApiVersion),
+        case {ApiKey, ApiVersion} of
+          { 0, 0} -> kpro_produce_response_v0;
+          { 0, 1} -> kpro_produce_response_v1;
+          { 0, 2} -> kpro_produce_response_v2;
+          { 1, 0} -> kpro_fetch_response_v0;
+          { 1, 1} -> kpro_fetch_response_v1;
+          { 1, 2} -> kpro_fetch_response_v2;
+          { 1, 3} -> kpro_fetch_response_v3;
+          { 2, 0} -> kpro_offsets_response_v0;
+          { 2, 1} -> kpro_offsets_response_v1;
+          { 3, 0} -> kpro_metadata_response_v0;
+          { 3, 1} -> kpro_metadata_response_v1;
+          { 3, 2} -> kpro_metadata_response_v2;
+          { 4, 0} -> kpro_leader_and_isr_response_v0;
+          { 5, 0} -> kpro_stop_replica_response_v0;
+          { 6, 0} -> kpro_update_metadata_response_v0;
+          { 6, 1} -> kpro_update_metadata_response_v1;
+          { 6, 2} -> kpro_update_metadata_response_v2;
+          { 7, 1} -> kpro_controlled_shutdown_response_v1;
+          { 8, 0} -> kpro_offset_commit_response_v0;
+          { 8, 1} -> kpro_offset_commit_response_v1;
+          { 8, 2} -> kpro_offset_commit_response_v2;
+          { 9, 0} -> kpro_offset_fetch_response_v0;
+          { 9, 1} -> kpro_offset_fetch_response_v1;
+          { 9, 2} -> kpro_offset_fetch_response_v2;
+          {10, 0} -> kpro_group_coordinator_response_v0;
+          {11, 0} -> kpro_join_group_response_v0;
+          {11, 1} -> kpro_join_group_response_v1;
+          {12, 0} -> kpro_heartbeat_response_v0;
+          {13, 0} -> kpro_leave_group_response_v0;
+          {14, 0} -> kpro_sync_group_response_v0;
+          {15, 0} -> kpro_describe_groups_response_v0;
+          {16, 0} -> kpro_list_groups_response_v0;
+          {17, 0} -> kpro_sasl_handshake_response_v0;
+          {18, 0} -> kpro_api_versions_response_v0;
+          {19, 0} -> kpro_create_topics_response_v0;
+          {19, 1} -> kpro_create_topics_response_v1;
+          {20, 0} -> kpro_delete_topics_response_v0
         end).
 
 %% Error code macros, from:

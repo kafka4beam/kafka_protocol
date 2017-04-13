@@ -206,13 +206,16 @@ encode_request(ClientId, CorrId, Request) ->
 -spec encode_request(kpro_request()) -> iodata().
 encode_request(#kpro_request{ message = RequestMessage,
                               header = #kpro_request_header{
-                                  api_version     = ApiVersion0,
                                   correlation_id  = CorrId0,
                                   client_id       = ClientId }}) ->
+  {ApiKey, ApiVersion} = ?REQ_TO_API_KEY_AND_VERSION(element(1, RequestMessage)),
   true = (CorrId0 =< ?MAX_CORR_ID), %% assert
-  ApiKey = req_to_api_key(RequestMessage),
-  CorrId = (ApiKey bsl ?CORR_ID_BITS) bor CorrId0,
-  ApiVersion = get_api_version(ApiVersion0, RequestMessage),
+  true = (ApiKey < 1 bsl ?API_KEY_BITS), %% assert
+  true = (ApiVersion < 1 bsl ?API_VERSION_BITS), %% assert
+  CorrId =
+    ApiKey bsl ?API_VERSION_BITS bor
+    ApiVersion bsl ?CORR_ID_BITS bor
+    CorrId0,
   IoData =
     [ encode({int16, ApiKey})
     , encode({int16, ApiVersion})
@@ -288,30 +291,22 @@ do_compress(gzip, IoData) ->
 do_compress(snappy, IoData) ->
   snappy_compress(IoData).
 
--spec get_api_version(int16() | undefined, kpro_request_message()) -> int16().
-get_api_version(V, _Msg) when is_integer(V) -> V;
-get_api_version(undefined, Msg)             -> api_version(Msg).
-
--spec api_version(kpro_request_message()) -> int16().
-api_version(#kpro_offset_commit_request_v1{}) -> 1;
-api_version(#kpro_offset_commit_request_v2{}) -> 2;
-api_version(#kpro_offset_fetch_request_v1{})  -> 1;
-api_version(_Default)                         -> 0.
-
 %% @private Decode responses received from kafka broker.
 %% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
 %% @end
 -spec do_decode_response(binary()) -> {incomplete | #kpro_response{}, binary()}.
 do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
-  <<I:32/integer, Rest0/binary>> = Bin,
-  ApiKey = I bsr ?CORR_ID_BITS,
-  CorrId = I band ?MAX_CORR_ID,
-  Type = ?API_KEY_TO_RSP(ApiKey),
+  << ApiKey:?API_KEY_BITS,
+     ApiVersion:?API_VERSION_BITS,
+     CorrId:?CORR_ID_BITS,
+     Rest0/binary >> = Bin,
+  Type = ?API_KEY_AND_VERSION_TO_RSP(ApiKey, ApiVersion),
   {Message, Rest} =
     try
       decode(Type, Rest0)
     catch error : E ->
       Context = [ {api_key, ApiKey}
+                , {api_version, ApiVersion}
                 , {corr_id, CorrId}
                 , {payload, Rest0}
                 ],
@@ -585,12 +580,6 @@ data_size(B, Size) when is_binary(B) -> Size + size(B);
 data_size([H | T], Size0) ->
   Size1 = data_size(H, Size0),
   data_size(T, Size1).
-
--spec req_to_api_key(atom()) -> integer().
-req_to_api_key(Req) when is_tuple(Req) ->
-  req_to_api_key(element(1, Req));
-req_to_api_key(Req) when is_atom(Req) ->
-  ?REQ_TO_API_KEY(Req).
 
 %% @private snappy-java adds its own header (SnappyCodec)
 %% which is not compatible with the official Snappy

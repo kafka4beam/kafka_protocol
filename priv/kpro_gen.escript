@@ -53,7 +53,7 @@ main(Args) ->
   {ok, DefGroups} = kpro_parser:file("kafka.bnf"),
   Records = to_records(DefGroupsPrelude ++ DefGroups),
   case Args of
-    ["records"] -> io:format("~p", [Records]);
+    ["records"] -> io:format("~p", [all_requests(Records)]);
     _ -> generate_code(Records)
   end.
 
@@ -291,22 +291,21 @@ gen_marshaller(Records) ->
   ok = erl_tidy:file(Filename),
   ok.
 
-all_requests() ->
-  lists:flatten(
-    lists:map(
-      fun(ApiKey) -> ?API_KEY_TO_REQ(ApiKey) end, ?ALL_API_KEYS)).
+all_requests(Records) ->
+  [Name || {Name, _} <- Records,
+           match == re:run(atom_to_list(Name), "_request_v\\d+$", [{capture, none}]) ].
 
-all_responses() ->
-  lists:map(fun(ApiKey) -> ?API_KEY_TO_RSP(ApiKey) end, ?ALL_API_KEYS).
+all_responses(Records) ->
+  [Name || {Name, _} <- Records,
+           match == re:run(atom_to_list(Name), "_response_v\\d+$", [{capture, none}]) ].
 
 gen_clauses(EncDec, Records) ->
   Names = case EncDec of
-            encoder -> all_requests();
-            decoder -> all_responses()
+            encoder -> all_requests(Records);
+            decoder -> all_responses(Records)
           end,
   Clauses0 = gen_clauses(EncDec, Names, Records),
-  Clauses1 = lists:flatten(Clauses0),
-  Clauses  = lists:filter(fun(I) -> I =/= <<>> end, Clauses1),
+  Clauses = lists:flatten(Clauses0),
   [infix(Clauses, ";\n"), "."].
 
 gen_clauses(_EncDec, [], _Records) -> [];
