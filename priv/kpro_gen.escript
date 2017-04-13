@@ -171,8 +171,7 @@ gen_header_file(Records) ->
     , ""
     , "-include(\"kpro_common.hrl\")."
     , ""
-    , gen_records(Records)
-    , gen_types(Records)
+    , gen_records_and_types(Records)
     , ""
     , "-endif.\n"
     ],
@@ -180,7 +179,8 @@ gen_header_file(Records) ->
   Filename = filename:join(["..", "include", "kpro.hrl"]),
   ok = file:write_file(Filename, IoData).
 
-gen_types(Records) -> lists:map(fun gen_type/1, Records).
+gen_records_and_types(Records) ->
+  [[gen_record(R), gen_type(R)] || R <- Records].
 
 gen_type({Name, {one_of, Refs}}) ->
   RecName = atom_to_list(Name),
@@ -188,13 +188,12 @@ gen_type({Name, {one_of, Refs}}) ->
   Sep = "\n" ++ lists:duplicate(length(Header) - 2, $\s) ++ "| ",
   [ Header,
     infix([atom_to_list(Ref) ++ "()" || Ref <- Refs], Sep),
-    ".\n"
+    ".\n\n"
   ];
 gen_type({Name, _Fields}) ->
   RecName = atom_to_list(Name),
-  ["-type ", RecName, "() :: #", RecName, "{}.\n"].
-
-gen_records(Records) -> lists:map(fun gen_record/1, Records).
+  ["-type ", RecName, "() ::\n",
+   "     #", RecName, "{}.\n\n"].
 
 gen_record({_Name, {one_of, _Refs}}) ->
   [];
