@@ -43,7 +43,7 @@
 
 -include("../include/kpro_common.hrl").
 
-main(_) ->
+main(Args) ->
   ok = file:set_cwd(this_dir()),
   {ok, _} = leex:file(kpro_scanner),
   {ok, _} = compile:file(kpro_scanner, [report_errors]),
@@ -52,7 +52,10 @@ main(_) ->
   {ok, DefGroupsPrelude} = kpro_parser:file("kafka_prelude.bnf"),
   {ok, DefGroups} = kpro_parser:file("kafka.bnf"),
   Records = to_records(DefGroupsPrelude ++ DefGroups),
-  generate_code(Records).
+  case Args of
+    ["records"] -> io:format("~p", [Records]);
+    _ -> generate_code(Records)
+  end.
 
 this_dir() ->
   ThisScript = escript:script_name(),
