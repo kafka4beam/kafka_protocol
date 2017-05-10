@@ -168,27 +168,28 @@ subscription(Bytes) -> nullable_bytes(Bytes, fun decode_subscription/1).
 assignment(Bytes) -> nullable_bytes(Bytes, fun decode_assignment/1).
 
 decode_subscription(Bytes) ->
-  {M, <<>>} = kpro:decode(kpro_ConsumerGroupProtocolMetadata, Bytes),
-  #kpro_ConsumerGroupProtocolMetadata{ version = Version
-                                     , topicName_L = Topics
-                                     , userData = UserData
-                                     } = M,
+  {M, <<>>} = kpro:decode(kpro_consumer_group_protocol_metadata, Bytes),
+  #kpro_consumer_group_protocol_metadata{ version = Version
+                                        , topics = Topics
+                                        , user_data = UserData
+                                        } = M,
   [ {version, Version}
   , {topics, Topics}
   , {user_data, UserData}
   ].
 
 decode_assignment(Bytes) ->
-  {Assignment, <<>>} = kpro:decode(kpro_ConsumerGroupMemberAssignment, Bytes),
-  #kpro_ConsumerGroupMemberAssignment{ version = Version
-                                     , consumerGroupPartitionAssignment_L = PL
-                                     , userData = UserData
-                                     } = Assignment,
+  {Assignment, <<>>} = kpro:decode(kpro_consumer_group_member_assignment, Bytes),
+  #kpro_consumer_group_member_assignment{ version = Version
+                                        , partition_assignments = PL
+                                        , user_data = UserData
+                                        } = Assignment,
   TPs =
     [ {Topic, Partitions}
-      || #kpro_ConsumerGroupPartitionAssignment{ topicName = Topic
-                                               , partition_L = Partitions
-                                               } <- PL ],
+      || #kpro_consumer_group_member_assignment_partition_assignment
+           { topic = Topic
+           , partitions = Partitions
+           } <- PL ],
   [ {version, Version}
   , {topic_partitions, TPs}
   , {user_data, UserData}

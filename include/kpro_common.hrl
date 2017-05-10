@@ -19,7 +19,7 @@
 -define(kpro_common_hrl, true).
 
 -ifndef(KAFKA_VERSION).
--define(KAFKA_VERSION, {0,9,0}). %% by default
+-define(KAFKA_VERSION, {0,10,1}). %% by default
 -endif.
 
 -type kpro_compress_option() :: no_compression | gzip | snappy | lz4.
@@ -45,117 +45,106 @@
 -define(KPRO_ATTRIBUTES, ?KPRO_COMPRESS_NONE).
 
 %% correlation IDs are 32 bit signed integers.
-%% we use 27 bits only, and use the highest 5 bits to be redudant with API key
+%% we use 25 bits only, and use the highest 5 bits to be redudant with API key
+%% and next 2 bits with API version
 %% so that the decoder may decode the responses without the need of an extra
 %% correlation ID to API key association.
--define(CORR_ID_BITS, 27).
--define(MAX_CORR_ID, 134217727).
+-define(API_KEY_BITS, 5).
+-define(API_VERSION_BITS, 2).
+-define(CORR_ID_BITS, 25).
+-define(MAX_CORR_ID, 33554431).
 
 
 -define(incomplete_message, incomplete_message).
 
 -define(IS_KAFKA_PRIMITIVE(T),
-        (T =:= int8 orelse T =:= int16 orelse
+        (T =:= boolean orelse T =:= int8 orelse T =:= int16 orelse
          T =:= int32 orelse T =:= int64 orelse
-         T =:= string orelse T =:= bytes)).
+         T =:= string orelse T =:= nullable_string orelse
+         T =:= bytes orelse T =:= records)).
 
-%% https://cwiki.apache.org/confluence/display/KAFKA/
-%%       A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol-ApiKeys
-
--define(API_ProduceRequest,           0).
--define(API_FetchRequest,             1).
--define(API_OffsetRequest,            2).
--define(API_MetadataRequest,          3).
--define(API_OffsetCommitRequest,      8).
--define(API_OffsetFetchRequest,       9).
--define(API_GroupCoordinatorRequest, 10).
--define(API_JoinGroupRequest,        11).
--define(API_HeartbeatRequest,        12).
--define(API_LeaveGroupRequest,       13).
--define(API_SyncGroupRequest,        14).
--define(API_DescribeGroupsRequest,   15).
--define(API_ListGroupsRequest,       16).
--define(API_SaslHandshakeRequest,    17).
-
--define(ALL_API_KEYS,
-        [ ?API_ProduceRequest
-        , ?API_FetchRequest
-        , ?API_OffsetRequest
-        , ?API_MetadataRequest
-        , ?API_OffsetCommitRequest
-        , ?API_OffsetFetchRequest
-        , ?API_GroupCoordinatorRequest
-        , ?API_JoinGroupRequest
-        , ?API_HeartbeatRequest
-        , ?API_LeaveGroupRequest
-        , ?API_SyncGroupRequest
-        , ?API_DescribeGroupsRequest
-        , ?API_ListGroupsRequest
-        , ?API_SaslHandshakeRequest
-        ]).
-
--define(REQ_TO_API_KEY(Req),
+%% TODO generate it from java code somehow
+-define(REQ_TO_API_KEY_AND_VERSION(Req),
         case Req of
-          kpro_ProduceRequest          -> ?API_ProduceRequest;
-          kpro_FetchRequest            -> ?API_FetchRequest;
-          kpro_OffsetRequest           -> ?API_OffsetRequest;
-          kpro_MetadataRequest         -> ?API_MetadataRequest;
-          kpro_OffsetCommitRequestV2   -> ?API_OffsetCommitRequest;
-          kpro_OffsetCommitRequestV1   -> ?API_OffsetCommitRequest;
-          kpro_OffsetCommitRequestV0   -> ?API_OffsetCommitRequest;
-          kpro_OffsetFetchRequest      -> ?API_OffsetFetchRequest;
-          kpro_GroupCoordinatorRequest -> ?API_GroupCoordinatorRequest;
-          kpro_JoinGroupRequest        -> ?API_JoinGroupRequest;
-          kpro_HeartbeatRequest        -> ?API_HeartbeatRequest;
-          kpro_LeaveGroupRequest       -> ?API_LeaveGroupRequest;
-          kpro_SyncGroupRequest        -> ?API_SyncGroupRequest;
-          kpro_DescribeGroupsRequest   -> ?API_DescribeGroupsRequest;
-          kpro_ListGroupsRequest       -> ?API_ListGroupsRequest;
-          kpro_SaslHandshakeRequest    -> ?API_SaslHandshakeRequest
+          kpro_produce_request_v0             -> { 0, 0};
+          kpro_produce_request_v1             -> { 0, 1};
+          kpro_produce_request_v2             -> { 0, 2};
+          kpro_fetch_request_v0               -> { 1, 0};
+          kpro_fetch_request_v1               -> { 1, 1};
+          kpro_fetch_request_v2               -> { 1, 2};
+          kpro_fetch_request_v3               -> { 1, 3};
+          kpro_offsets_request_v0             -> { 2, 0};
+          kpro_offsets_request_v1             -> { 2, 1};
+          kpro_metadata_request_v0            -> { 3, 0};
+          kpro_metadata_request_v1            -> { 3, 1};
+          kpro_metadata_request_v2            -> { 3, 2};
+          kpro_leader_and_isr_request_v0      -> { 4, 0};
+          kpro_stop_replica_request_v0        -> { 5, 0};
+          kpro_update_metadata_request_v0     -> { 6, 0};
+          kpro_update_metadata_request_v1     -> { 6, 1};
+          kpro_update_metadata_request_v2     -> { 6, 2};
+          kpro_controlled_shutdown_request_v1 -> { 7, 1};
+          kpro_offset_commit_request_v0       -> { 8, 0};
+          kpro_offset_commit_request_v1       -> { 8, 1};
+          kpro_offset_commit_request_v2       -> { 8, 2};
+          kpro_offset_fetch_request_v0        -> { 9, 0};
+          kpro_offset_fetch_request_v1        -> { 9, 1};
+          kpro_offset_fetch_request_v2        -> { 9, 2};
+          kpro_group_coordinator_request_v0   -> {10, 0};
+          kpro_join_group_request_v0          -> {11, 0};
+          kpro_join_group_request_v1          -> {11, 1};
+          kpro_heartbeat_request_v0           -> {12, 0};
+          kpro_leave_group_request_v0         -> {13, 0};
+          kpro_sync_group_request_v0          -> {14, 0};
+          kpro_describe_groups_request_v0     -> {15, 0};
+          kpro_list_groups_request_v0         -> {16, 0};
+          kpro_sasl_handshake_request_v0      -> {17, 0};
+          kpro_api_versions_request_v0        -> {18, 0};
+          kpro_create_topics_request_v0       -> {19, 0};
+          kpro_create_topics_request_v1       -> {19, 1};
+          kpro_delete_topics_request_v0       -> {20, 0}
         end).
 
--define(API_KEY_TO_REQ(ApiKey),
-        case ApiKey of
-          ?API_ProduceRequest          -> kpro_ProduceRequest;
-          ?API_FetchRequest            -> kpro_FetchRequest;
-          ?API_OffsetRequest           -> kpro_OffsetRequest;
-          ?API_MetadataRequest         -> kpro_MetadataRequest;
-          ?API_OffsetCommitRequest     -> [ kpro_OffsetCommitRequestV2
-                                          , kpro_OffsetCommitRequestV1
-                                          , kpro_OffsetCommitRequestV0
-                                          ];
-          ?API_OffsetFetchRequest      -> kpro_OffsetFetchRequest;
-          ?API_GroupCoordinatorRequest -> kpro_GroupCoordinatorRequest;
-          ?API_JoinGroupRequest        -> kpro_JoinGroupRequest;
-          ?API_HeartbeatRequest        -> kpro_HeartbeatRequest;
-          ?API_LeaveGroupRequest       -> kpro_LeaveGroupRequest;
-          ?API_SyncGroupRequest        -> kpro_SyncGroupRequest;
-          ?API_DescribeGroupsRequest   -> kpro_DescribeGroupsRequest;
-          ?API_ListGroupsRequest       -> kpro_ListGroupsRequest;
-          ?API_SaslHandshakeRequest    -> kpro_SaslHandshakeRequest
+-define(API_KEY_AND_VERSION_TO_RSP(ApiKey, ApiVersion),
+        case {ApiKey, ApiVersion} of
+          { 0, 0} -> kpro_produce_response_v0;
+          { 0, 1} -> kpro_produce_response_v1;
+          { 0, 2} -> kpro_produce_response_v2;
+          { 1, 0} -> kpro_fetch_response_v0;
+          { 1, 1} -> kpro_fetch_response_v1;
+          { 1, 2} -> kpro_fetch_response_v2;
+          { 1, 3} -> kpro_fetch_response_v3;
+          { 2, 0} -> kpro_offsets_response_v0;
+          { 2, 1} -> kpro_offsets_response_v1;
+          { 3, 0} -> kpro_metadata_response_v0;
+          { 3, 1} -> kpro_metadata_response_v1;
+          { 3, 2} -> kpro_metadata_response_v2;
+          { 4, 0} -> kpro_leader_and_isr_response_v0;
+          { 5, 0} -> kpro_stop_replica_response_v0;
+          { 6, 0} -> kpro_update_metadata_response_v0;
+          { 6, 1} -> kpro_update_metadata_response_v1;
+          { 6, 2} -> kpro_update_metadata_response_v2;
+          { 7, 1} -> kpro_controlled_shutdown_response_v1;
+          { 8, 0} -> kpro_offset_commit_response_v0;
+          { 8, 1} -> kpro_offset_commit_response_v1;
+          { 8, 2} -> kpro_offset_commit_response_v2;
+          { 9, 0} -> kpro_offset_fetch_response_v0;
+          { 9, 1} -> kpro_offset_fetch_response_v1;
+          { 9, 2} -> kpro_offset_fetch_response_v2;
+          {10, 0} -> kpro_group_coordinator_response_v0;
+          {11, 0} -> kpro_join_group_response_v0;
+          {11, 1} -> kpro_join_group_response_v1;
+          {12, 0} -> kpro_heartbeat_response_v0;
+          {13, 0} -> kpro_leave_group_response_v0;
+          {14, 0} -> kpro_sync_group_response_v0;
+          {15, 0} -> kpro_describe_groups_response_v0;
+          {16, 0} -> kpro_list_groups_response_v0;
+          {17, 0} -> kpro_sasl_handshake_response_v0;
+          {18, 0} -> kpro_api_versions_response_v0;
+          {19, 0} -> kpro_create_topics_response_v0;
+          {19, 1} -> kpro_create_topics_response_v1;
+          {20, 0} -> kpro_delete_topics_response_v0
         end).
-
--define(API_KEY_TO_RSP(ApiKey),
-        case ApiKey of
-          ?API_ProduceRequest          -> kpro_ProduceResponse;
-          ?API_FetchRequest            -> kpro_FetchResponse;
-          ?API_OffsetRequest           -> kpro_OffsetResponse;
-          ?API_MetadataRequest         -> kpro_MetadataResponse;
-          ?API_OffsetCommitRequest     -> kpro_OffsetCommitResponse;
-          ?API_OffsetFetchRequest      -> kpro_OffsetFetchResponse;
-          ?API_GroupCoordinatorRequest -> kpro_GroupCoordinatorResponse;
-          ?API_JoinGroupRequest        -> kpro_JoinGroupResponse;
-          ?API_HeartbeatRequest        -> kpro_HeartbeatResponse;
-          ?API_LeaveGroupRequest       -> kpro_LeaveGroupResponse;
-          ?API_SyncGroupRequest        -> kpro_SyncGroupResponse;
-          ?API_DescribeGroupsRequest   -> kpro_DescribeGroupsResponse;
-          ?API_ListGroupsRequest       -> kpro_ListGroupsResponse;
-          ?API_SaslHandshakeRequest    -> kpro_SaslHandshakeResponse
-        end).
-
--define(CONSUMER_GROUP_STRUCTS, [ kpro_ConsumerGroupProtocolMetadata
-                                , kpro_ConsumerGroupMemberAssignment
-                                ]).
 
 %% Error code macros, from:
 %% https://github.com/apache/kafka/blob/0.9.0/clients/src/
@@ -198,6 +187,17 @@
 -define(EC_CLUSTER_AUTHORIZATION_FAILED, 'ClusterAuthorizationFailed').     % 31
 -define(EC_UNSUPPORTED_SASL_MECHANISM,   'UnsupportedSaslMechanism').       % 33
 -define(EC_ILLEGAL_SASL_STATE,           'IllegalSaslState').               % 34
+-define(EC_UNSUPPORTED_VERSION,          'UnsupportedVersion').             % 35
+-define(EC_TOPIC_ALREADY_EXISTS,         'TopicExists').                    % 36
+-define(EC_INVALID_PARTITIONS,           'InvalidPartitions').              % 37
+-define(EC_INVALID_REPLICATION_FACTOR,   'InvalidReplicationFactor').       % 38
+-define(EC_INVALID_REPLICA_ASSIGNMENT,   'InvalidReplicaAssignment').       % 39
+-define(EC_INVALID_CONFIG,               'InvalidConfiguration').           % 40
+-define(EC_NOT_CONTROLLER,               'NotController').                  % 41
+-define(EC_INVALID_REQUEST,              'InvalidRequest').                 % 42
+-define(EC_UNSUPPORTED_FOR_MESSAGE_FORMAT,
+        'UnsupportedForMessageFormat').                                     % 43
+-define(EC_POLICY_VIOLATION,             'PolicyViolation').                % 44
 
 -endif.
 

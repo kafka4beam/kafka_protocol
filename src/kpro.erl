@@ -15,9 +15,9 @@
 
 -module(kpro).
 
-%% help apis to constricut kpro_Xxx structures.
+%% help apis to build some of most common kpro_xxx structures.
 -export([ fetch_request/6
-        , offset_request/4
+        , offsets_request/4
         , produce_request/5
         , produce_request/6
         ]).
@@ -45,6 +45,7 @@
              , int64/0
              , str/0
              , bytes/0
+             , records/0
              , api_key/0
              , error_code/0
              , client_id/0
@@ -67,7 +68,8 @@
 -type int64()      :: -9223372036854775808..9223372036854775807.
 -type str()        :: undefined | string() | binary().
 -type bytes()      :: undefined | binary().
--type api_key()    :: 0..17.
+-type records()    :: undefined | binary().
+-type api_key()    :: 0..20.
 -type error_code() :: int16() | atom().
 
 %% type re-define for readability
@@ -82,52 +84,52 @@
 -type kv_list() :: [{key(), value()}].
 
 -type kafka_key() :: key().
--type kafka_value() :: undefined | iodata() | [kpro_Message()].
+-type kafka_value() :: undefined | iodata() | [kpro_message()].
 
 -type incomplete_message() :: {?incomplete_message, int32()}.
 
 -define(INT, signed-integer).
 
-%% @doc Help function to contruct a #kpro_OffsetRequest{} for requests
+%% @doc Help function to contruct a #kpro_offsets_request_v0{} for requests
 %% against one single topic-partition.
 %% @end
--spec offset_request(topic(), partition(), integer(), non_neg_integer()) ->
-        kpro_OffsetRequest().
-offset_request(Topic, Partition, Time, MaxNoOffsets) ->
+-spec offsets_request(topic(), partition(), integer(), non_neg_integer()) ->
+        kpro_offsets_request_v0().
+offsets_request(Topic, Partition, Time, MaxNoOffsets) ->
   PartitionReq =
-    #kpro_OffsetRequestPartition{ partition          = Partition
-                                , time               = Time
-                                , maxNumberOfOffsets = MaxNoOffsets
-                                },
+    #kpro_offsets_request_v0_partition{ partition       = Partition
+                                      , timestamp       = Time
+                                      , max_num_offsets = MaxNoOffsets
+                                      },
   TopicReq =
-    #kpro_OffsetRequestTopic{ topicName                = Topic
-                            , offsetRequestPartition_L = [PartitionReq]
-                            },
-  #kpro_OffsetRequest{ replicaId            = ?KPRO_REPLICA_ID
-                     , offsetRequestTopic_L = [TopicReq]
-                     }.
+    #kpro_offsets_request_v0_topic{ topic      = Topic
+                                  , partitions = [PartitionReq]
+                                  },
+  #kpro_offsets_request_v0{ replica_id = ?KPRO_REPLICA_ID
+                          , topics     = [TopicReq]
+                          }.
 
-%% @doc Help function to construct a #kpro_FetchRequest{} against one signle
+%% @doc Help function to construct a #kpro_fetch_request_v0{} against one single
 %% topic-partition.
 %% @end
 -spec fetch_request(topic(), partition(), offset(),
                     non_neg_integer(), non_neg_integer(), pos_integer()) ->
-                      kpro_FetchRequest().
+                      kpro_fetch_request_v0().
 fetch_request(Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
   PerPartition =
-    #kpro_FetchRequestPartition{ partition   = Partition
-                               , fetchOffset = Offset
-                               , maxBytes    = MaxBytes
-                               },
+    #kpro_fetch_request_v0_partition{ partition    = Partition
+                                    , fetch_offset = Offset
+                                    , max_bytes    = MaxBytes
+                                    },
   PerTopic =
-    #kpro_FetchRequestTopic{ topicName               = Topic
-                           , fetchRequestPartition_L = [PerPartition]
-                           },
-  #kpro_FetchRequest{ replicaId           = ?KPRO_REPLICA_ID
-                    , maxWaitTime         = MaxWaitTime
-                    , minBytes            = MinBytes
-                    , fetchRequestTopic_L = [PerTopic]
-                    }.
+    #kpro_fetch_request_v0_topic{ topic      = Topic
+                                , partitions = [PerPartition]
+                                },
+  #kpro_fetch_request_v0{ replica_id    = ?KPRO_REPLICA_ID
+                        , max_wait_time = MaxWaitTime
+                        , min_bytes     = MinBytes
+                        , topics        = [PerTopic]
+                        }.
 
 
 %% @equiv produce_request(Topic, Partition, KvList, RequiredAcks,
@@ -135,7 +137,7 @@ fetch_request(Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
 %% @end
 -spec produce_request(topic(), partition(), kv_list(),
                       integer(), non_neg_integer()) ->
-                        kpro_ProduceRequest().
+                        kpro_produce_request_v0().
 produce_request(Topic, Partition, KvList, RequiredAcks, AckTimeout) ->
   produce_request(Topic, Partition, KvList, RequiredAcks, AckTimeout,
                   no_compression).
@@ -145,28 +147,28 @@ produce_request(Topic, Partition, KvList, RequiredAcks, AckTimeout) ->
 %% @end
 -spec produce_request(topic(), partition(), kv_list(),
                       integer(), non_neg_integer(),
-                      kpro_compress_option()) -> kpro_ProduceRequest().
+                      kpro_compress_option()) -> kpro_produce_request_v0().
 produce_request(Topic, Partition, KvList,
                 RequiredAcks, AckTimeout, CompressOption) ->
   Messages = encode_messages(KvList, CompressOption),
   PartitionMsgSet =
-    #kpro_PartitionMessageSet{ partition = Partition
-                             , message_L = Messages
-                             },
+    #kpro_produce_request_v0_data{ partition  = Partition
+                                 , record_set = Messages
+                                 },
   TopicMessageSet =
-    #kpro_TopicMessageSet{ topicName             = Topic
-                         , partitionMessageSet_L = [PartitionMsgSet]
-                         },
+    #kpro_produce_request_v0_topic_data{ topic = Topic
+                                       , data  = [PartitionMsgSet]
+                                       },
   %% Encode message set here right now.
   %% Instead of keeping a possibily very large array
   %% and passing it around processes
   %% e.g. in brod, the message set can be encoded in producer
   %% worker before sending it down to socket process
   MessageSetBin = iolist_to_binary(encode({array, [TopicMessageSet]})),
-  #kpro_ProduceRequest{ requiredAcks      = RequiredAcks
-                      , timeout           = AckTimeout
-                      , topicMessageSet_L = {already_encoded, MessageSetBin}
-                      }.
+  #kpro_produce_request_v0{ acks       = RequiredAcks
+                          , timeout    = AckTimeout
+                          , topic_data = {already_encoded, MessageSetBin}
+                          }.
 
 %% @doc Get the next correlation ID.
 -spec next_corr_id(corr_id()) -> corr_id().
@@ -174,9 +176,9 @@ next_corr_id(?MAX_CORR_ID) -> 0;
 next_corr_id(CorrId)       -> CorrId + 1.
 
 %% @doc Parse binary stream received from kafka broker.
-%%      Return a list of kpro_Response() and the remaining bytes.
+%%      Return a list of kpro_response() and the remaining bytes.
 %% @end
--spec decode_response(binary()) -> {[kpro_Response()], binary()}.
+-spec decode_response(binary()) -> {[kpro_response()], binary()}.
 decode_response(Bin) ->
   decode_response(Bin, []).
 
@@ -188,26 +190,32 @@ decode_response(Bin, Acc) ->
       decode_response(Rest, [Response | Acc])
   end.
 
-%% @doc help function to encode kpro_XxxRequest into kafka wire format.
--spec encode_request(client_id(), corr_id(), kpro_RequestMessage()) -> iodata().
+%% @doc help function to encode kpro_*_request_v* into kafka wire format.
+-spec encode_request(client_id(), corr_id(), kpro_request_message()) -> iodata().
 encode_request(ClientId, CorrId, Request) ->
-  R = #kpro_Request{ correlationId  = CorrId
-                   , clientId       = ClientId
-                   , requestMessage = Request
+  %% FIXME huston, we have a problem
+  H = #kpro_request_header{ correlation_id  = CorrId
+                          , client_id       = ClientId
+                          },
+  R = #kpro_request{ header = H
+                   , message = Request
                    },
   encode_request(R).
 
-%% @doc Encode #kpro_Request{} records into kafka wire format.
--spec encode_request(kpro_Request()) -> iodata().
-encode_request(#kpro_Request{ apiVersion     = ApiVersion0
-                            , correlationId  = CorrId0
-                            , clientId       = ClientId
-                            , requestMessage = RequestMessage
-                            }) ->
+%% @doc Encode #kpro_request{} records into kafka wire format.
+-spec encode_request(kpro_request()) -> iodata().
+encode_request(#kpro_request{ message = RequestMessage,
+                              header = #kpro_request_header{
+                                  correlation_id  = CorrId0,
+                                  client_id       = ClientId }}) ->
+  {ApiKey, ApiVersion} = ?REQ_TO_API_KEY_AND_VERSION(element(1, RequestMessage)),
   true = (CorrId0 =< ?MAX_CORR_ID), %% assert
-  ApiKey = req_to_api_key(RequestMessage),
-  CorrId = (ApiKey bsl ?CORR_ID_BITS) bor CorrId0,
-  ApiVersion = get_api_version(ApiVersion0, RequestMessage),
+  true = (ApiKey < 1 bsl ?API_KEY_BITS), %% assert
+  true = (ApiVersion < 1 bsl ?API_VERSION_BITS), %% assert
+  CorrId =
+    ApiKey bsl ?API_VERSION_BITS bor
+    ApiVersion bsl ?CORR_ID_BITS bor
+    CorrId0,
   IoData =
     [ encode({int16, ApiKey})
     , encode({int16, ApiVersion})
@@ -257,7 +265,7 @@ encode_messages([{_K, [{_NestedK, _NestedV} | _] = NestedKvList} | KvList]) ->
   | encode_messages(KvList)
   ];
 encode_messages([{K, V} | KvList]) ->
-  Msg = #kpro_Message{ attributes = ?KPRO_COMPRESS_NONE
+  Msg = #kpro_message{ attributes = ?KPRO_COMPRESS_NONE
                      , key        = K
                      , value      = V
                      },
@@ -269,7 +277,7 @@ compress(Method, IoData) ->
                  snappy -> ?KPRO_COMPRESS_SNAPPY;
                  lz4    -> ?KPRO_COMPRESS_LZ4
                end,
-  Msg = #kpro_Message{ attributes = Attributes
+  Msg = #kpro_message{ attributes = Attributes
                      , key        = <<>>
                      , value      = do_compress(Method, IoData)
                      },
@@ -283,38 +291,30 @@ do_compress(gzip, IoData) ->
 do_compress(snappy, IoData) ->
   snappy_compress(IoData).
 
--spec get_api_version(int16() | undefined, kpro_RequestMessage()) -> int16().
-get_api_version(V, _Msg) when is_integer(V) -> V;
-get_api_version(undefined, Msg)             -> api_version(Msg).
-
--spec api_version(kpro_RequestMessage()) -> int16().
-api_version(#kpro_OffsetCommitRequestV1{}) -> 1;
-api_version(#kpro_OffsetCommitRequestV2{}) -> 2;
-api_version(#kpro_OffsetFetchRequest{})    -> 1;
-api_version(_Default)                      -> 0.
-
 %% @private Decode responses received from kafka broker.
 %% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
 %% @end
--spec do_decode_response(binary()) -> {incomplete | #kpro_Response{}, binary()}.
+-spec do_decode_response(binary()) -> {incomplete | #kpro_response{}, binary()}.
 do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
-  <<I:32/integer, Rest0/binary>> = Bin,
-  ApiKey = I bsr ?CORR_ID_BITS,
-  CorrId = I band ?MAX_CORR_ID,
-  Type = ?API_KEY_TO_RSP(ApiKey),
+  << ApiKey:?API_KEY_BITS,
+     ApiVersion:?API_VERSION_BITS,
+     CorrId:?CORR_ID_BITS,
+     Rest0/binary >> = Bin,
+  Type = ?API_KEY_AND_VERSION_TO_RSP(ApiKey, ApiVersion),
   {Message, Rest} =
     try
       decode(Type, Rest0)
     catch error : E ->
       Context = [ {api_key, ApiKey}
+                , {api_version, ApiVersion}
                 , {corr_id, CorrId}
                 , {payload, Rest0}
                 ],
       erlang:error({E, Context, erlang:get_stacktrace()})
     end,
   Result =
-    #kpro_Response{ correlationId   = CorrId
-                  , responseMessage = Message
+    #kpro_response{ header = #kpro_response_header{ correlation_id = CorrId }
+                  , message = Message
                   },
   {Result, Rest};
 do_decode_response( Bin) ->
@@ -329,6 +329,8 @@ decode_message_set(MessageSetBin) when is_binary(MessageSetBin) ->
 %% @hidden
 encode({Fun, Data}) when is_function(Fun, 1) -> Fun(Data);
 encode({_, {already_encoded, Data}})  -> Data;
+encode({boolean, true}) -> <<1:8/?INT>>;
+encode({boolean, false}) -> <<0:8/?INT>>;
 encode({int8,  I}) when is_integer(I) -> <<I:8/?INT>>;
 encode({int16, I}) when is_integer(I) -> <<I:16/?INT>>;
 encode({int32, I}) when is_integer(I) -> <<I:32/?INT>>;
@@ -357,27 +359,30 @@ encode({{array, T}, L}) when is_list(L) ->
 encode({array, L}) when is_list(L) ->
   Length = length(L),
   [<<Length:32/?INT>>, [encode(I) || I <- L]];
-encode(#kpro_PartitionMessageSet{} = R) ->
+%% FIXME encoder could be better? also what about  ...v1_data and ...v2_data
+%% probably should be done with encode(records, Bin) for RECORDS type)
+encode(#kpro_produce_request_v0_data{} = R) ->
   %% messages in messageset is a stream, not an array
-  EncodedMessages = R#kpro_PartitionMessageSet.message_L,
+  %% FIXME what is the difference between stream and array here?
+  EncodedMessages = R#kpro_produce_request_v0_data.record_set,
   Size = data_size(EncodedMessages),
-  [encode({int32, R#kpro_PartitionMessageSet.partition}),
+  [encode({int32, R#kpro_produce_request_v0_data.partition}),
    encode({int32, Size}),
    EncodedMessages
   ];
-encode(#kpro_Message{} = R) ->
-  MagicByte = case R#kpro_Message.magicByte of
+encode(#kpro_message{} = R) ->
+  MagicByte = case R#kpro_message.magic_byte of
                 undefined            -> ?KPRO_MAGIC_BYTE;
                 M when is_integer(M) -> M
               end,
-  Attributes = case R#kpro_Message.attributes of
+  Attributes = case R#kpro_message.attributes of
                  undefined            -> ?KPRO_ATTRIBUTES;
                  A when is_integer(A) -> A
                end,
   Body = [ encode({int8, MagicByte})
          , encode({int8, Attributes})
-         , encode({bytes, R#kpro_Message.key})
-         , encode({bytes, R#kpro_Message.value})
+         , encode({bytes, R#kpro_message.key})
+         , encode({bytes, R#kpro_message.value})
          ],
   Crc  = encode({int32, erlang:crc32(Body)}),
   Size = data_size([Crc, Body]),
@@ -385,22 +390,30 @@ encode(#kpro_Message{} = R) ->
    encode({int32, Size}),
    Crc, Body
   ];
-encode(#kpro_GroupAssignment{memberAssignment = MA} = GA) ->
+
+% FIXME isn't it replaceable by custom
+%   kpro:encode({bytes, #kpro_consumer_group_member_assignment{}}) clause?
+% Type spec would be off, but they are off already.
+encode(#kpro_sync_group_request_v0_group_assignment{member_assignment = MA} = GA) ->
   case MA of
-    #kpro_ConsumerGroupMemberAssignment{} ->
+    #kpro_consumer_group_member_assignment{} ->
       %% member assignment is an embeded 'bytes' blob
       Bytes = encode(MA),
-      kpro_structs:encode(GA#kpro_GroupAssignment{memberAssignment = Bytes});
+      kpro_structs:encode(
+        GA#kpro_sync_group_request_v0_group_assignment{
+          member_assignment = Bytes});
     _IoData ->
       %% the higher level user may have it encoded already
       kpro_structs:encode(GA)
   end;
-encode(#kpro_GroupProtocol{protocolMetadata = PM} = GP) ->
+encode(#kpro_join_group_request_v0_group_protocol{protocol_metadata = PM} = GP) ->
   case PM of
-    #kpro_ConsumerGroupProtocolMetadata{} ->
+    #kpro_consumer_group_protocol_metadata{} ->
       %% Group protocol metadata is an embeded 'bytes' blob
       Bytes = encode(PM),
-      kpro_structs:encode(GP#kpro_GroupProtocol{protocolMetadata = Bytes});
+      kpro_structs:encode(
+        GP#kpro_join_group_request_v0_group_protocol{
+          protocol_metadata = Bytes});
     _IoData ->
       %% the higher level user may have it encoded already
       kpro_structs:encode(GP)
@@ -411,6 +424,9 @@ encode(Struct) when is_tuple(Struct) ->
 %% @hidden
 decode(Fun, Bin) when is_function(Fun, 1) ->
   Fun(Bin);
+decode(boolean, Bin) ->
+  <<Value:8/?INT, Rest/binary>> = Bin,
+  {Value =/= 0, Rest};
 decode(int8, Bin) ->
   <<Value:8/?INT, Rest/binary>> = Bin,
   {Value, Rest};
@@ -432,7 +448,9 @@ decode(bytes, Bin) ->
 decode({array, Type}, Bin) ->
   <<Length:32/?INT, Rest/binary>> = Bin,
   decode_array_elements(Length, Type, Rest, _Acc = []);
-decode(kpro_FetchResponsePartition, Bin) ->
+% FIXME think about kpro_fetch_response_v1, v2 and so on
+% should be done with RECORDS decoder?
+decode(kpro_fetch_response_v0_partition_response, Bin) ->
   %% special treat since message sets may get partially delivered
   <<Partition:32/?INT,
     ErrorCode:16/?INT,
@@ -440,25 +458,29 @@ decode(kpro_FetchResponsePartition, Bin) ->
     MessageSetSize:32/?INT,
     MessageSetBin:MessageSetSize/binary,
     Rest/binary>> = Bin,
-  PartitionMessages =
-    #kpro_FetchResponsePartition
+
+  PartitionHeader =
+    #kpro_fetch_response_v0_partition_header
       { partition           = Partition
-      , errorCode           = kpro_ErrorCode:decode(ErrorCode)
-      , highWatermarkOffset = HighWmOffset
-      , messageSetSize      = MessageSetSize
-      , message_L           = MessageSetBin
+      , error_code          = kpro_ErrorCode:decode(ErrorCode)
+      , high_watermark      = HighWmOffset
       },
-  {PartitionMessages, Rest};
+  PartitionResponse =
+    #kpro_fetch_response_v0_partition_response
+      { partition_header = PartitionHeader
+      , record_set       = MessageSetBin
+      },
+  {PartitionResponse, Rest};
 decode(StructName, Bin) when is_atom(StructName) ->
   kpro_structs:decode(StructName, Bin).
 
 %% @private
 -spec decode_message(binary()) ->
-        {kpro_Message() | incomplete_message(), binary()}.
+        {kpro_message() | incomplete_message(), binary()}.
 decode_message(<<_Offset:64/?INT, MsgSize:32/?INT, T/binary>> = Bin) ->
   case size(T) < MsgSize of
     true  -> {{?incomplete_message, MsgSize + 12}, <<>>};
-    false -> decode(kpro_Message, Bin)
+    false -> decode(kpro_message, Bin)
   end;
 decode_message(_) ->
   %% need to fetch at least 12 bytes to know the message size
@@ -468,21 +490,22 @@ decode_message(_) ->
 %% Return messages in reversed order.
 %% @end
 -spec decode_message_stream(binary(), Decoded) -> Decoded
-        when Decoded :: [kpro_Message() | incomplete_message()].
+        when Decoded :: [kpro_message() | incomplete_message()].
 decode_message_stream(<<>>, Acc) ->
   %% Do not reverse here!
   %% as the input is recursive when compressed
   Acc;
+% FIXME cleanup
 decode_message_stream(Bin, Acc) ->
   {Msg, Rest} = decode_message(Bin),
   NewAcc =
     case Msg of
-      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_GZIP_ATTR(Attr) ->
-        decode_message_stream(zlib:gunzip(Msg#kpro_Message.value), Acc);
-      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_SNAPPY_ATTR(Attr) ->
-        decode_message_stream(java_snappy_unpack(Msg#kpro_Message.value), Acc);
-      #kpro_Message{attributes = Attr} = Msg when ?KPRO_IS_LZ4_ATTR(Attr) ->
-        decode_message_stream(lz4_unpack(Msg#kpro_Message.value), Acc);
+      #kpro_message{attributes = Attr} = Msg when ?KPRO_IS_GZIP_ATTR(Attr) ->
+        decode_message_stream(zlib:gunzip(Msg#kpro_message.value), Acc);
+      #kpro_message{attributes = Attr} = Msg when ?KPRO_IS_SNAPPY_ATTR(Attr) ->
+        decode_message_stream(java_snappy_unpack(Msg#kpro_message.value), Acc);
+      #kpro_message{attributes = Attr} = Msg when ?KPRO_IS_LZ4_ATTR(Attr) ->
+        decode_message_stream(lz4_unpack(Msg#kpro_message.value), Acc);
       _Else ->
         [Msg | Acc]
     end,
@@ -515,7 +538,7 @@ maybe_translate(_RecordName, _FieldName, RawValue) ->
 maybe_decode_consumer_group_member_metadata(Bin) ->
   try
     {GroupMemberMetadata, <<>>} =
-      decode(kpro_ConsumerGroupProtocolMetadata, Bin),
+      decode(kpro_consumer_group_protocol_metadata, Bin),
     GroupMemberMetadata
   catch error : {badmatch, _} ->
     %% in case not consumer group protocol
@@ -525,7 +548,7 @@ maybe_decode_consumer_group_member_metadata(Bin) ->
 
 maybe_decode_consumer_group_member_assignment(Bin) ->
   try
-    {MemberAssignment, <<>>} = decode(kpro_ConsumerGroupMemberAssignment, Bin),
+    {MemberAssignment, <<>>} = decode(kpro_consumer_group_member_assignment, Bin),
     MemberAssignment
   catch error : {badmatch, _} ->
     %% in case not consumer group protocol
@@ -557,12 +580,6 @@ data_size(B, Size) when is_binary(B) -> Size + size(B);
 data_size([H | T], Size0) ->
   Size1 = data_size(H, Size0),
   data_size(T, Size1).
-
--spec req_to_api_key(atom()) -> integer().
-req_to_api_key(Req) when is_tuple(Req) ->
-  req_to_api_key(element(1, Req));
-req_to_api_key(Req) when is_atom(Req) ->
-  ?REQ_TO_API_KEY(Req).
 
 %% @private snappy-java adds its own header (SnappyCodec)
 %% which is not compatible with the official Snappy
