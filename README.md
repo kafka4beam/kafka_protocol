@@ -6,10 +6,10 @@ See https://github.com/klarna/brod for kafka client implementation.
 Code generated from org.apache.kafka.common.protocol.Protocol.
 
 ## How to generate kafka.bnf
-Ensure you have java (1.7+) and gradle (2.0+) installed.
+Ensure you have JDK (1.7+) and gradle (2.0+) installed.
 Change kafka version in priv/kafka_protocol_bnf/build.gradle if needed.
 
-  (cd priv/kafka_protocol_bnf && gradle -q run) > priv/kafka.bnf
+    make kafka-bnf
 
 ## Usage
 Set environment variable `KAFKA_PROTOCOL_NO_SNAPPY=1` to compile without 

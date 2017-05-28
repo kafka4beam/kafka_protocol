@@ -11,6 +11,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.StringTokenizer;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 
 public class KafkaProtocolBnf {
     private static String indentString(int size) {
@@ -197,6 +200,17 @@ public class KafkaProtocolBnf {
     }
 
     public static void main(String[] args) {
-        System.out.println(toText());
+        String filename = "";
+        try {
+            filename = args[0];
+        } catch (ArrayIndexOutOfBoundsException e) {
+            System.err.println("Expecting output filename as a single argument.");
+            System.exit(1);
+        }
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(filename))) {
+            bw.write(toText());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }

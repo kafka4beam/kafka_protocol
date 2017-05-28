@@ -1157,4 +1157,3 @@ DeleteTopicsResponseV0 => [topic_error_codes]
 # topic_error_codes: An array of per topic error codes.
 
 
-

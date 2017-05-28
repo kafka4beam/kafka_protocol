@@ -21,7 +21,12 @@ clean:: gen-clean
 
 include erlang.mk
 
-.PHONY: gen-code gen-clean
+.PHONY: gen-code gen-clean kafka-bnf
+
+priv/kafka.bnf: kafka-bnf
+
+kafka-bnf:
+	@cd priv/kafka_protocol_bnf && gradle run
 
 $(GEN_CODE):: $(GEN_INPUT)
 	priv/kpro_gen.escript

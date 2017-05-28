@@ -11,3 +11,7 @@ repositories {
 dependencies {
   compile "org.apache.kafka:kafka-clients:0.10.2.0"
 }
+
+run {
+    args = ["../kafka.bnf"]
+}
