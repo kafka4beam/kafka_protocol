@@ -14,16 +14,14 @@ ERLC_OPTS += -DSNAPPY_DISABLED
 endif
 
 GEN_INPUT = include/kpro_common.hrl priv/kpro_gen.escript priv/kafka.bnf priv/kpro_scanner.xrl priv/kpro_parser.yrl
-GEN_CODE = include/kpro.hrl src/kpro_structs.erl src/kpro_records.erl
+GEN_CODE = src/kpro_schema.erl
 
-app:: gen-code
+app:: kafka-bnf gen-code
 clean:: gen-clean
 
 include erlang.mk
 
 .PHONY: gen-code gen-clean kafka-bnf
-
-priv/kafka.bnf: kafka-bnf
 
 kafka-bnf:
 	@cd priv/kafka_protocol_bnf && gradle run

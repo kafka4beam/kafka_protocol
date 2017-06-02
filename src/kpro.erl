@@ -60,7 +60,7 @@
              , incomplete_message/0
              ]).
 
--include("kpro.hrl").
+-include("kpro_common.hrl").
 
 -type int8()       :: -128..127.
 -type int16()      :: -32768..32767.
@@ -88,13 +88,15 @@
 
 -type incomplete_message() :: {?incomplete_message, int32()}.
 
+-type kpro_schema() :: [proplists:property()].
+
 -define(INT, signed-integer).
 
 %% @doc Help function to contruct a #kpro_offsets_request_v0{} for requests
 %% against one single topic-partition.
 %% @end
 -spec offsets_request(topic(), partition(), integer(), non_neg_integer()) ->
-        kpro_offsets_request_v0().
+        kpro_schema().
 offsets_request(Topic, Partition, Time, MaxNoOffsets) ->
   PartitionReq =
     #kpro_offsets_request_v0_partition{ partition       = Partition
