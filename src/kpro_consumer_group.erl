@@ -1,5 +1,5 @@
 %%%
-%%%   Copyright (c) 2014-2016, Klarna AB
+%%%   Copyright (c) 2014-2017, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -168,32 +168,18 @@ subscription(Bytes) -> nullable_bytes(Bytes, fun decode_subscription/1).
 assignment(Bytes) -> nullable_bytes(Bytes, fun decode_assignment/1).
 
 decode_subscription(Bytes) ->
-  {M, <<>>} = kpro:decode(kpro_consumer_group_protocol_metadata, Bytes),
-  #kpro_consumer_group_protocol_metadata{ version = Version
-                                        , topics = Topics
-                                        , user_data = UserData
-                                        } = M,
-  [ {version, Version}
-  , {topics, Topics}
-  , {user_data, UserData}
-  ].
+  Module = kpro_prelude_schema,
+  Tag = cg_protocol_metadata,
+  Vsn = 0,
+  {R, <<>>} = kpro:decode_struct(Module, Tag, Vsn, Bytes),
+  R.
 
 decode_assignment(Bytes) ->
-  {Assignment, <<>>} = kpro:decode(kpro_consumer_group_member_assignment, Bytes),
-  #kpro_consumer_group_member_assignment{ version = Version
-                                        , partition_assignments = PL
-                                        , user_data = UserData
-                                        } = Assignment,
-  TPs =
-    [ {Topic, Partitions}
-      || #kpro_consumer_group_member_assignment_partition_assignment
-           { topic = Topic
-           , partitions = Partitions
-           } <- PL ],
-  [ {version, Version}
-  , {topic_partitions, TPs}
-  , {user_data, UserData}
-  ].
+  Module = kpro_prelude_schema,
+  Tag = cg_memeber_assignment,
+  Vsn = 0,
+  {Assignment, <<>>} = kpro:decode_struct(Module, Tag, Vsn, Bytes),
+  Assignment.
 
 dec(Schema, Bin) ->
   {Fields, <<>>} = do_dec(Schema, Bin, []),

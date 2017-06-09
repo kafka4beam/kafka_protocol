@@ -2,7 +2,6 @@
 *.plt
 *.d
 /ebin
-src/kpro_schema.erl
 xrefr
 doc/
 logs/

@@ -1,5 +1,5 @@
 %%%
-%%%   Copyright (c) 2014 - 2016 Klarna AB
+%%%   Copyright (c) 2014 - 2017 Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -14,15 +14,7 @@
 %%%   limitations under the License.
 %%%
 
-%%%=============================================================================
-%%% @doc A kafka error code handling.
-%%%      [https://github.com/apache/kafka/blob/0.9.0/clients/src/
-%%%       main/java/org/apache/kafka/common/protocol/Errors.java]
-%%% @copyright 2014 - 2016 Klarna AB
-%%% @end
-%%%=============================================================================
-
--module(kpro_ErrorCode).
+-module(kpro_error_code).
 
 -export([ desc/1
         , decode/1
@@ -30,8 +22,6 @@
         ]).
 
 -include("kpro_common.hrl").
-
--define(KAFKA_VERSION_STR, <<"0.9.0.0">>).
 
 %% @doc Return true if it is not ZERO error code.
 is_error(0)        -> false;
@@ -198,7 +188,7 @@ do_desc(?EC_UNSUPPORTED_FOR_MESSAGE_FORMAT) ->
 do_desc(?EC_POLICY_VIOLATION) ->
   <<"Request parameters do not satisfy the configured policy.">>;
 do_desc(X) when is_integer(X) ->
-  <<"Undefined error code for kafka ", ?KAFKA_VERSION_STR/binary>>.
+  <<"Unknown error code">>.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
