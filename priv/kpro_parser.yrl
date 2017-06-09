@@ -1,6 +1,6 @@
-Nonterminals bnf groups defs def one_of fields field
+Nonterminals bnf groups defs def fields field
   new_line new_line_and_indent some_empty_lines.
-Terminals name prim '[' ']' '|' '=>' one_new_line one_new_line_and_indent.
+Terminals name prim '[' ']' '=>' one_new_line one_new_line_and_indent.
 Rootsymbol bnf.
 
 bnf -> some_empty_lines groups : '$2'.
@@ -14,11 +14,7 @@ defs -> def new_line_and_indent defs : ['$1' | '$3'].
 def -> name '=>' : {v('$1'), []}.
 def -> name '=>' prim : {v('$1'), v('$3')}.
 def -> name '=>' '[' prim ']' : {v('$1'), {array, v('$4')}}.
-def -> name '=>' one_of : {v('$1'), {one_of, '$3'}}.
 def -> name '=>' fields : {v('$1'), '$3'}.
-
-one_of -> name '|' name : [v('$1'), v('$3')].
-one_of -> name '|' one_of : [v('$1') | '$3'].
 
 fields -> field : ['$1'].
 fields -> field fields : ['$1' | '$2'].

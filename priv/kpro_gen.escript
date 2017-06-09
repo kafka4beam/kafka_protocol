@@ -20,24 +20,7 @@
 
 %% This script reads definitions of kafka data structures from priv/kafka.bnf
 %% and generates:
-%%   include/kpro.hrl -- erlang record definitions of and type annotations
-%%   src/kpro_structs.erl -- encoders and decoders to the wire format
-%%   src/kpro_records.erl -- fields() helper to convert records to maps of maps
-%%
-%% Assumptions about priv/kafka.bnf: field names are unique across each top
-%% level definition, so we're able to not nest names for subrecords of
-%% subrecords. Subrecords and subsubrecords are indented, top level records are not.
-%%
-%% Top level record and type names are lowercased, changed from plural to singular,
-%% "underscored", and prefixed with "kpro_":
-%%   ProduceRequestV1 becomes kpro_request_v1().
-%%
-%% Record names for subsubrecords and types additionaly prefixed with top level
-%% record name:
-%%   partition_responses in responses in ProduceResponseV1 becomes
-%%     kpro_produce_response_v1_partition_response().
-%%
-%% Field names are left exactly as they defined in kafka.bnf.
+%%   src/kpro_schema.erl
 
 -mode(compile).
 
@@ -122,11 +105,6 @@ split_name_version({Tag, Fields}) ->
   Version = Vsn - $0,
   {Name, Version, Fields}.
 
-%% Requests and Response have to be hard coded
-%% TODO: there is no need to support 'one_of' if we choose to
-%% pick the prop-list approach
-expand([{'Request', _Fields} | _Refs]) -> ignored;
-expand([{'Response', _Fields} | _Refs]) -> ignored;
 expand([{Tag, Fields} | Refs]) ->
   {Tag, expand_fields(Fields, Refs)}.
 
