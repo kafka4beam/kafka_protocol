@@ -2,6 +2,7 @@
 *.plt
 *.d
 /ebin
+src/kpro_schema.erl
 xrefr
 doc/
 logs/
@@ -13,4 +14,3 @@ erl_crash.dump
 .rebar/
 rebar.lock
 .gradle/
-/src/kpro_schema.erl
