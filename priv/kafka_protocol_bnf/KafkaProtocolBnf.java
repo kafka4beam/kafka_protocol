@@ -103,61 +103,6 @@ public class KafkaProtocolBnf {
     public static String toText() {
         final StringBuilder b = new StringBuilder();
         b.append("# generated code, do not edit!\n\n");
-
-        b.append("Request => header message\n");
-        b.append("  header => ");
-        schemaToBnf(Protocol.REQUEST_HEADER, b, 4);
-        b.append("  message => ");
-        int apiKeysCnt = ApiKeys.values().length;
-        int apiKeyIndex = 0;
-        for (ApiKeys key : ApiKeys.values()) {
-            Schema[] requests = Protocol.REQUESTS[key.id];
-            for (int i = 0; i < requests.length; i++) {
-                Schema schema = requests[i];
-                // Schema
-                if (schema != null) {
-                    b.append(key.name);
-                    b.append("RequestV");
-                    b.append(i);
-                    if (i < (requests.length - 1))
-                        b.append(" | ");
-                }
-            }
-            if (apiKeyIndex < (apiKeysCnt - 1))
-                b.append(" | ");
-            apiKeyIndex++;
-        }
-        b.append("\n\n");
-        schemaToFieldTableText(Protocol.REQUEST_HEADER, b);
-        b.append("\n\n");
-
-        b.append("Response => header message\n");
-        b.append("  header => ");
-        schemaToBnf(Protocol.RESPONSE_HEADER, b, 4);
-        b.append("  message => ");
-        apiKeyIndex = 0;
-        for (ApiKeys key : ApiKeys.values()) {
-            Schema[] responses = Protocol.RESPONSES[key.id];
-            for (int i = 0; i < responses.length; i++) {
-                Schema schema = responses[i];
-                // Schema
-                if (schema != null) {
-                    // Version header
-                    b.append(key.name);
-                    b.append("ResponseV");
-                    b.append(i);
-                    if (i < (responses.length - 1))
-                        b.append(" | ");
-                }
-            }
-            if (apiKeyIndex < (apiKeysCnt - 1))
-                b.append(" | ");
-            apiKeyIndex++;
-        }
-        b.append("\n\n");
-        schemaToFieldTableText(Protocol.RESPONSE_HEADER, b);
-        b.append("\n\n");
-
         for (ApiKeys key : ApiKeys.values()) {
             // Requests
             Schema[] requests = Protocol.REQUESTS[key.id];
