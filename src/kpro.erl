@@ -630,7 +630,6 @@ snappy_decompress(_BinData) ->
 
 -endif.
 
-
 %%%_* Emacs ====================================================================
 %%% Local Variables:
 %%% allout-layout: t

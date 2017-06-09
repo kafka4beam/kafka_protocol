@@ -1,6 +1,6 @@
 PROJECT = kafka_protocol
 PROJECT_DESCRIPTION = Kafka protocol erlang library
-PROJECT_VERSION = 0.9.1
+PROJECT_VERSION = 0.10.0
 
 EUNIT_OPTS = verbose
 ERLC_OPTS = -Werror +warn_unused_vars +warn_shadow_vars +warn_unused_import +warn_obsolete_guard +debug_info
@@ -16,7 +16,7 @@ endif
 GEN_INPUT = include/kpro_common.hrl priv/kpro_gen.escript priv/kafka.bnf priv/kpro_scanner.xrl priv/kpro_parser.yrl
 GEN_CODE = src/kpro_schema.erl
 
-app:: kafka-bnf gen-code
+app:: gen-code
 clean:: gen-clean
 
 include erlang.mk
