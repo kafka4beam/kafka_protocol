@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2014-2016, Klarna AB
+%%%   Copyright (c) 2014-2017, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -13,16 +13,10 @@
 %%%   limitations under the License.
 %%%
 
-%% common header file for code generation and generated code.
+%% Used by code generator and generated code
 
 -ifndef(kpro_common_hrl).
 -define(kpro_common_hrl, true).
-
--ifndef(KAFKA_VERSION).
--define(KAFKA_VERSION, {0,10,1}). %% by default
--endif.
-
--type kpro_compress_option() :: no_compression | gzip | snappy | lz4.
 
 %% Compression attributes
 -define(KPRO_COMPRESS_NONE,   0).
@@ -30,13 +24,17 @@
 -define(KPRO_COMPRESS_SNAPPY, 2).
 -define(KPRO_COMPRESS_LZ4,    3).
 
--define(KPRO_COMPRESSION_MASK, 7).
+-define(KPRO_COMPRESSION_MASK, 2#111).
 -define(KPRO_IS_GZIP_ATTR(ATTR),
         ((?KPRO_COMPRESSION_MASK band ATTR) =:= ?KPRO_COMPRESS_GZIP)).
 -define(KPRO_IS_SNAPPY_ATTR(ATTR),
         ((?KPRO_COMPRESSION_MASK band ATTR) =:= ?KPRO_COMPRESS_SNAPPY)).
 -define(KPRO_IS_LZ4_ATTR(ATTR),
         ((?KPRO_COMPRESSION_MASK band ATTR) =:= ?KPRO_COMPRESS_LZ4)).
+
+-define(KPRO_TS_TYPE_MASK, 2#1000).
+-define(KPRO_IS_CREATE_TS(ATTR), ((?KPRO_TS_TYPE_MASK band ATTR) =:= 0)).
+-define(KPRO_IS_APPEND_TS(ATTR), ((?KPRO_TS_TYPE_MASK band ATTR) =/= 0)).
 
 %% some pre-defined default values
 -define(KPRO_REPLICA_ID, -1).
@@ -45,15 +43,14 @@
 -define(KPRO_ATTRIBUTES, ?KPRO_COMPRESS_NONE).
 
 %% correlation IDs are 32 bit signed integers.
-%% we use 25 bits only, and use the highest 5 bits to be redudant with API key
-%% and next 2 bits with API version
+%% we use 24 bits only, and use the highest 5 bits to be redudant with API key
+%% and next 3 bits with API version
 %% so that the decoder may decode the responses without the need of an extra
 %% correlation ID to API key association.
 -define(API_KEY_BITS, 5).
--define(API_VERSION_BITS, 2).
--define(CORR_ID_BITS, 25).
--define(MAX_CORR_ID, 33554431).
-
+-define(API_VERSION_BITS, 3).
+-define(CORR_ID_BITS, (32 - (?API_KEY_BITS + ?API_VERSION_BITS))).
+-define(MAX_CORR_ID, ((1 bsl ?CORR_ID_BITS) - 1)).
 
 -define(incomplete_message, incomplete_message).
 
@@ -63,87 +60,52 @@
          T =:= string orelse T =:= nullable_string orelse
          T =:= bytes orelse T =:= records)).
 
-%% TODO generate it from java code somehow
--define(REQ_TO_API_KEY_AND_VERSION(Req),
+-define(REQ_TO_API_KEY(Req),
         case Req of
-          kpro_produce_request_v0             -> { 0, 0};
-          kpro_produce_request_v1             -> { 0, 1};
-          kpro_produce_request_v2             -> { 0, 2};
-          kpro_fetch_request_v0               -> { 1, 0};
-          kpro_fetch_request_v1               -> { 1, 1};
-          kpro_fetch_request_v2               -> { 1, 2};
-          kpro_fetch_request_v3               -> { 1, 3};
-          kpro_offsets_request_v0             -> { 2, 0};
-          kpro_offsets_request_v1             -> { 2, 1};
-          kpro_metadata_request_v0            -> { 3, 0};
-          kpro_metadata_request_v1            -> { 3, 1};
-          kpro_metadata_request_v2            -> { 3, 2};
-          kpro_leader_and_isr_request_v0      -> { 4, 0};
-          kpro_stop_replica_request_v0        -> { 5, 0};
-          kpro_update_metadata_request_v0     -> { 6, 0};
-          kpro_update_metadata_request_v1     -> { 6, 1};
-          kpro_update_metadata_request_v2     -> { 6, 2};
-          kpro_controlled_shutdown_request_v1 -> { 7, 1};
-          kpro_offset_commit_request_v0       -> { 8, 0};
-          kpro_offset_commit_request_v1       -> { 8, 1};
-          kpro_offset_commit_request_v2       -> { 8, 2};
-          kpro_offset_fetch_request_v0        -> { 9, 0};
-          kpro_offset_fetch_request_v1        -> { 9, 1};
-          kpro_offset_fetch_request_v2        -> { 9, 2};
-          kpro_group_coordinator_request_v0   -> {10, 0};
-          kpro_join_group_request_v0          -> {11, 0};
-          kpro_join_group_request_v1          -> {11, 1};
-          kpro_heartbeat_request_v0           -> {12, 0};
-          kpro_leave_group_request_v0         -> {13, 0};
-          kpro_sync_group_request_v0          -> {14, 0};
-          kpro_describe_groups_request_v0     -> {15, 0};
-          kpro_list_groups_request_v0         -> {16, 0};
-          kpro_sasl_handshake_request_v0      -> {17, 0};
-          kpro_api_versions_request_v0        -> {18, 0};
-          kpro_create_topics_request_v0       -> {19, 0};
-          kpro_create_topics_request_v1       -> {19, 1};
-          kpro_delete_topics_request_v0       -> {20, 0}
+          produce_request             ->  0;
+          fetch_request               ->  1;
+          offsets_request             ->  2;
+          metadata_request            ->  3;
+          leader_and_isr_request      ->  4;
+          stop_replica_request        ->  5;
+          update_metadata_request     ->  6;
+          offset_commit_request       ->  8;
+          offset_fetch_request        ->  9;
+          group_coordinator_request   -> 10;
+          join_group_request          -> 11;
+          heartbeat_request           -> 12;
+          leave_group_request         -> 13;
+          sync_group_request          -> 14;
+          describe_groups_request     -> 15;
+          list_groups_request         -> 16;
+          sasl_handshake_request      -> 17;
+          api_versions_request        -> 18;
+          create_topics_request       -> 19;
+          delete_topics_request       -> 20
         end).
 
--define(API_KEY_AND_VERSION_TO_RSP(ApiKey, ApiVersion),
-        case {ApiKey, ApiVersion} of
-          { 0, 0} -> kpro_produce_response_v0;
-          { 0, 1} -> kpro_produce_response_v1;
-          { 0, 2} -> kpro_produce_response_v2;
-          { 1, 0} -> kpro_fetch_response_v0;
-          { 1, 1} -> kpro_fetch_response_v1;
-          { 1, 2} -> kpro_fetch_response_v2;
-          { 1, 3} -> kpro_fetch_response_v3;
-          { 2, 0} -> kpro_offsets_response_v0;
-          { 2, 1} -> kpro_offsets_response_v1;
-          { 3, 0} -> kpro_metadata_response_v0;
-          { 3, 1} -> kpro_metadata_response_v1;
-          { 3, 2} -> kpro_metadata_response_v2;
-          { 4, 0} -> kpro_leader_and_isr_response_v0;
-          { 5, 0} -> kpro_stop_replica_response_v0;
-          { 6, 0} -> kpro_update_metadata_response_v0;
-          { 6, 1} -> kpro_update_metadata_response_v1;
-          { 6, 2} -> kpro_update_metadata_response_v2;
-          { 7, 1} -> kpro_controlled_shutdown_response_v1;
-          { 8, 0} -> kpro_offset_commit_response_v0;
-          { 8, 1} -> kpro_offset_commit_response_v1;
-          { 8, 2} -> kpro_offset_commit_response_v2;
-          { 9, 0} -> kpro_offset_fetch_response_v0;
-          { 9, 1} -> kpro_offset_fetch_response_v1;
-          { 9, 2} -> kpro_offset_fetch_response_v2;
-          {10, 0} -> kpro_group_coordinator_response_v0;
-          {11, 0} -> kpro_join_group_response_v0;
-          {11, 1} -> kpro_join_group_response_v1;
-          {12, 0} -> kpro_heartbeat_response_v0;
-          {13, 0} -> kpro_leave_group_response_v0;
-          {14, 0} -> kpro_sync_group_response_v0;
-          {15, 0} -> kpro_describe_groups_response_v0;
-          {16, 0} -> kpro_list_groups_response_v0;
-          {17, 0} -> kpro_sasl_handshake_response_v0;
-          {18, 0} -> kpro_api_versions_response_v0;
-          {19, 0} -> kpro_create_topics_response_v0;
-          {19, 1} -> kpro_create_topics_response_v1;
-          {20, 0} -> kpro_delete_topics_response_v0
+-define(API_KEY_TO_RSP(ApiKey),
+        case ApiKey of
+           0 -> produce_response;
+           1 -> fetch_response;
+           2 -> offsets_response;
+           3 -> metadata_response;
+           4 -> leader_and_isr_response;
+           5 -> stop_replica_response;
+           6 -> update_metadata_response;
+           8 -> offset_commit_response;
+           9 -> offset_fetch_response;
+          10 -> group_coordinator_response;
+          11 -> join_group_response;
+          12 -> heartbeat_response;
+          13 -> leave_group_response;
+          14 -> sync_group_response;
+          15 -> describe_groups_response;
+          16 -> list_groups_response;
+          17 -> sasl_handshake_response;
+          18 -> api_versions_response;
+          19 -> create_topics_response;
+          20 -> delete_topics_response
         end).
 
 %% Error code macros, from:
@@ -201,3 +163,8 @@
 
 -endif.
 
+%%%_* Emacs ====================================================================
+%%% Local Variables:
+%%% allout-layout: t
+%%% erlang-indent-level: 2
+%%% End:
