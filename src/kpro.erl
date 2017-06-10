@@ -270,7 +270,7 @@ encode(int8,  I) when is_integer(I) -> <<I:8/?INT>>;
 encode(int16, I) when is_integer(I) -> <<I:16/?INT>>;
 encode(int32, I) when is_integer(I) -> <<I:32/?INT>>;
 encode(int64, I) when is_integer(I) -> <<I:64/?INT>>;
-encode(string, undefined) -> <<-1:16/?INT>>;
+encode(nullable_string, undefined) -> <<-1:16/?INT>>;
 encode(string, <<>>) -> <<0:16/?INT>>;
 encode(string, L) when is_list(L) ->
   encode(string, iolist_to_binary(L));
@@ -307,7 +307,9 @@ decode(string, Bin) ->
   copy_bytes(Size, Rest);
 decode(bytes, Bin) ->
   <<Size:32/?INT, Rest/binary>> = Bin,
-  copy_bytes(Size, Rest).
+  copy_bytes(Size, Rest);
+decode(nullable_string, Bin) ->
+  decode(string, Bin).
 
 %% @hidden Encode struct.
 -spec enc_struct(schema(), struct(), stack()) -> iodata().
