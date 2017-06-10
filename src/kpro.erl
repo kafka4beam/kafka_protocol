@@ -124,7 +124,8 @@
                         | int64
                         | string
                         | nullable_string
-                        | bytes.
+                        | bytes
+                        | records.
 -type struct_schema() :: [{field_name(), schema()}].
 -type schema() :: primitive_type()
                 | struct_schema()
@@ -283,7 +284,9 @@ encode(bytes, B) when is_binary(B) orelse is_list(B) ->
   case Size =:= 0 of
     true  -> <<-1:32/?INT>>;
     false -> [<<Size:32/?INT>>, B]
-  end.
+  end;
+encode(records, B) ->
+  encode(bytes, B).
 
 %% @hidden Decode prmitives.
 -spec decode(primitive_type(), binary()) -> {primitive(), binary()}.
@@ -309,7 +312,9 @@ decode(bytes, Bin) ->
   <<Size:32/?INT, Rest/binary>> = Bin,
   copy_bytes(Size, Rest);
 decode(nullable_string, Bin) ->
-  decode(string, Bin).
+  decode(string, Bin);
+decode(records, Bin) ->
+  decode(bytes, Bin).
 
 %% @hidden Encode struct.
 -spec enc_struct(schema(), struct(), stack()) -> iodata().
