@@ -25,7 +25,7 @@
 %% APIs for the socket process
 -export([ decode_response/1
         , decode_message_set/1
-        , encode_request/3
+        , encode_request/2
         , next_corr_id/1
         ]).
 
@@ -212,7 +212,8 @@ produce_request(Vsn, Topic, Partition, KvList,
                             ]]}
                    ]]}
     ],
-  req(produce_request, Vsn, Fields).
+  Req = req(produce_request, Vsn, Fields),
+  Req#kpro_req{no_ack = RequiredAcks =:= 0}.
 
 %% @doc Help function to make a request body.
 -spec req(req_tag(), vsn(), struct()) -> req().
@@ -228,8 +229,12 @@ next_corr_id(?MAX_CORR_ID) -> 0;
 next_corr_id(CorrId)       -> CorrId + 1.
 
 %% @doc Encode a request to bytes that can be sent on wire.
--spec encode_request(client_id(), corr_id(), req()) -> iodata().
-encode_request(ClientId, CorrId0, #kpro_req{tag = Tag, vsn = Vsn, msg = Msg}) ->
+-spec encode_request(client_id(), req()) -> iodata().
+encode_request(ClientId, #kpro_req{ tag = Tag
+                                  , vsn = Vsn
+                                  , msg = Msg
+                                  , corr_id = CorrId0
+                                  }) ->
   ApiKey = ?REQ_TO_API_KEY(Tag),
   true = (CorrId0 =< ?MAX_CORR_ID), %% assert
   true = (ApiKey < 1 bsl ?API_KEY_BITS), %% assert

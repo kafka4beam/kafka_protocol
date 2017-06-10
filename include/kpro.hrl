@@ -18,14 +18,16 @@
 -record(kpro_req,
         { tag :: kpro:req_tag()
         , vsn :: kpro:vsn()
+        , no_ack = false :: boolean() %% set to true for fire-n-forget requests
+        , corr_id :: kpro:corr_id()
         , msg :: binary() | kpro:struct()
         }).
 
 -record(kpro_rsp,
-        { tag     :: kpro:rsp_tag()
-        , vsn     :: kpro:vsn()
+        { tag :: kpro:rsp_tag()
+        , vsn :: kpro:vsn()
         , corr_id :: kpro:corr_id()
-        , msg     :: binary() | kpro:struct()
+        , msg :: binary() | kpro:struct()
         }).
 
 -endif.
