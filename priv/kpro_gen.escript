@@ -1,6 +1,5 @@
 #!/usr/bin/env escript
 %% -*- erlang -*-
-%%! -smp enable -sname kpro_gen
 
 %%%
 %%%   Copyright (c) 2014-2016, Klarna AB
