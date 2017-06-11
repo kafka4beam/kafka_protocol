@@ -328,7 +328,7 @@ enc_struct([{Name, FieldSc} | Schema], Values, Stack) when is_list(Values) ->
   NewStack = [Name | Stack],
   case lists:keytake(Name, 1, Values) of
     {value, {_, Value0}, ValuesLeft} ->
-      Value = enc_embeded(NewStack, Value0),
+      Value = enc_embedded(NewStack, Value0),
       [ enc_struct_field(FieldSc, Value, NewStack)
       | enc_struct(Schema, Stack, ValuesLeft)
       ];
@@ -634,8 +634,8 @@ enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
   end.
 
 %% @private Encode embedded bytes.
--spec enc_embeded(stack(), field_value()) -> field_value().
-enc_embeded(_Stack, Value) -> Value.
+-spec enc_embedded(stack(), field_value()) -> field_value().
+enc_embedded(_Stack, Value) -> Value.
 
 %% @private
 -spec dec_struct_field(schema(), stack(), binary()) ->
