@@ -363,7 +363,7 @@ encode_struct(_Module, _Tag, _Vsn, Bin) when is_binary(Bin) -> Bin;
 encode_struct(Module, Tag, Vsn, Fields) ->
   Schema = get_schema(Module, Tag, Vsn),
   try
-    enc_struct(Schema, Fields, [{Tag, Vsn}])
+    iolist_to_binary(enc_struct(Schema, Fields, [{Tag, Vsn}]))
   catch
     throw : {Reason, Stack} ->
       Trace = erlang:get_stacktrace(),
@@ -420,6 +420,7 @@ encode_messages(KvList, Compression) ->
   end.
 
 %% @private
+-spec encode_messages(kv_list()) -> iodata().
 encode_messages([]) -> [];
 encode_messages([{_K, [{_NestedK, _NestedV} | _] = NestedKvList} | KvList]) ->
   [ encode_messages(NestedKvList)
