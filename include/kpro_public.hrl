@@ -11,32 +11,22 @@
 %%%   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %%%   See the License for the specific language governing permissions and
 %%%   limitations under the License.
-%%%
--ifndef(KPRO_HRL_).
--define(KPRO_HRL_, true).
 
-%% Header file for kafka client (brod).
+-ifndef(KPRO_PUBLIC_HRL_).
+-define(KPRO_PUBLIC_HRL_, true).
 
--include("kpro_public.hrl").
--include("kpro_error_code.hrl").
+%% For applications on top of kafka client (brod).
 
--record(kpro_req,
-        { tag :: kpro:req_tag()
-        , vsn :: kpro:vsn()
-        , no_ack = false :: boolean() %% set to true for fire-n-forget requests
-        , msg :: binary() | kpro:struct()
+-record(kafka_message,
+        { offset :: kpro:offset()
+        , magic_byte :: kpro:int8()
+        , attributes :: kpro:int8()
+        , key :: kpro:bytes()
+        , value :: kpro:bytes()
+        , crc :: non_neg_integer() %% not kpro:int32() because it's unsigned
+        , ts_type :: kpro:timestamp_type()
+        , ts :: kpro:int64()
         }).
-
--record(kpro_rsp,
-        { tag :: kpro:rsp_tag()
-        , vsn :: kpro:vsn()
-        , corr_id :: kpro:corr_id()
-        , msg :: binary() | kpro:struct()
-        }).
-
-
--define(incomplete_message(ExpectedSize), {incomplete_message, ExpectedSize}).
--define(kpro_cg_no_assignment, no_assignment).
 
 -endif.
 

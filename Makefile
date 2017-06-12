@@ -8,12 +8,12 @@ CT_OPTS = -ct_use_short_names true
 
 ifeq ($(KAFKA_PROTOCOL_NO_SNAPPY),)
 DEPS = snappyer
-dep_snappyer_commit = 1.2.0
+dep_snappyer_commit = 1.2.1
 else
 ERLC_OPTS += -DSNAPPY_DISABLED
 endif
 
-GEN_INPUT = include/kpro_common.hrl priv/kpro_gen.escript priv/kafka.bnf priv/kpro_scanner.xrl priv/kpro_parser.yrl
+GEN_INPUT = include/*.hrl priv/kpro_gen.escript priv/kafka.bnf priv/kpro_scanner.xrl priv/kpro_parser.yrl
 GEN_CODE = src/kpro_schema.erl
 
 include erlang.mk

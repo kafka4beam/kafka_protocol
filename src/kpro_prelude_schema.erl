@@ -22,6 +22,8 @@
 %   version => INT16
 %   topics => STRING
 %   user_data => BYTES
+get(cg_member_metadata, 0) ->
+  get(cg_protocol_metadata, 0);
 get(cg_protocol_metadata, 0) ->
   [{version, int16},
    {topics, {array, string}},

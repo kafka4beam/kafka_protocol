@@ -23,7 +23,7 @@
 
 -mode(compile).
 
--include("../include/kpro_common.hrl").
+-include("../include/kpro_private.hrl").
 
 main(_Args) ->
   ok = file:set_cwd(this_dir()),

@@ -21,7 +21,7 @@
         , is_error/1
         ]).
 
--include("kpro_common.hrl").
+-include("kpro_private.hrl").
 
 %% @doc Return true if it is not ZERO error code.
 is_error(0)        -> false;
