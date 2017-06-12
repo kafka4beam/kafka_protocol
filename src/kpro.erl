@@ -15,17 +15,21 @@
 
 -module(kpro).
 
-%% APIs to build some of the most common structs.
+%% APIs to build requests.
 -export([ fetch_request/7
         , offsets_request/4
         , produce_request/6
         , produce_request/7
+        , find/2
+        , find/3
+        , req/3
+        , max_corr_id/0
         ]).
 
 %% APIs for the socket process
 -export([ decode_response/1
         , decode_message_set/1
-        , encode_request/2
+        , encode_request/3
         , next_corr_id/1
         ]).
 
@@ -68,13 +72,13 @@
              , vsn/0
              , req_tag/0
              , rsp_tag/0
+             , tag/0
              , timestamp_type/0
              , primitive_type/0
              , schema/0
              ]).
 
--include("kpro.hrl").
--include("kpro_common.hrl").
+-include("kpro_private.hrl").
 
 -type int8()       :: -128..127.
 -type int16()      :: -32768..32767.
@@ -100,7 +104,9 @@
 -type kafka_key() :: key().
 -type kafka_value() :: undefined | iodata() | [struct()].
 
--type incomplete_message() :: {?incomplete_message, int32()}.
+-type incomplete_message() :: ?incomplete_message(int32()).
+-type message() :: #kafka_message{}.
+-type decoded_message() :: incomplete_message() | message().
 
 -type vsn() :: non_neg_integer().
 -type count() :: non_neg_integer().
@@ -112,11 +118,11 @@
 -type struct() :: [{field_name(), field_value()}].
 -type req_tag() :: atom().
 -type rsp_tag() :: atom().
+-type tag() :: req_tag() | rsp_tag().
 -type req() :: #kpro_req{}.
 -type rsp() :: #kpro_rsp{}.
 -type compress_option() :: no_compression | gzip | snappy | lz4.
 -type timestamp_type() :: undefined | create | append.
--type decoded_message() :: incomplete_message() | struct().
 -type primitive_type() :: boolean
                         | int8
                         | int16
@@ -130,12 +136,18 @@
 -type schema() :: primitive_type()
                 | struct_schema()
                 | {array, struct_schema()}.
--type stack() :: [term()]. %% encode / decode stack
+-type stack() :: [{tag(), vsn()} | field_name()]. %% encode / decode stack
+-type decode_fun() :: fun((binary()) -> {field_value(), binary()}).
 
 -define(INT, signed-integer).
 -define(SCHEMA_MODULE, kpro_schema).
+-define(PRELUDE, kpro_prelude_schema).
 
 %%%_* APIs =====================================================================
+
+%% @doc Return the allowed maximum correlation ID.
+-spec max_corr_id() -> corr_id().
+max_corr_id() -> ?MAX_CORR_ID.
 
 %% @doc Help function to contruct a OffsetsRequest
 %% against one single topic-partition.
@@ -229,23 +241,20 @@ next_corr_id(?MAX_CORR_ID) -> 0;
 next_corr_id(CorrId)       -> CorrId + 1.
 
 %% @doc Encode a request to bytes that can be sent on wire.
--spec encode_request(client_id(), req()) -> iodata().
-encode_request(ClientId, #kpro_req{ tag = Tag
-                                  , vsn = Vsn
-                                  , msg = Msg
-                                  , corr_id = CorrId0
-                                  }) ->
+-spec encode_request(client_id(), corr_id(), req()) -> iodata().
+encode_request(ClientId, CorrId0, Req) ->
+  #kpro_req{tag = Tag, vsn = Vsn, msg = Msg} = Req,
   ApiKey = ?REQ_TO_API_KEY(Tag),
   true = (CorrId0 =< ?MAX_CORR_ID), %% assert
   true = (ApiKey < 1 bsl ?API_KEY_BITS), %% assert
   true = (Vsn < 1 bsl ?API_VERSION_BITS), %% assert
-  CorrId = (ApiKey bsl ?API_VERSION_BITS) bor
-           (Vsn bsl ?CORR_ID_BITS) bor
-           CorrId0,
+  CorrId = <<ApiKey:?API_KEY_BITS,
+             Vsn:?API_VERSION_BITS,
+             CorrId0:?CORR_ID_BITS>>,
   IoData =
     [ encode(int16, ApiKey)
     , encode(int16, Vsn)
-    , encode(int32, CorrId)
+    , CorrId
     , encode(string, ClientId)
     , encode_struct(Tag, Vsn, Msg)
     ],
@@ -261,10 +270,23 @@ decode_response(Bin) ->
 
 %% @doc The messageset is not decoded upon receiving (in socket process).
 %% Pass the message set as binary to the consumer process and decode there
+%% Return {incomplete_message, ExpectedSize} if the fetch size is not big
+%% enough for even one single message. Otherwise return a list of decoded
+%% messages.
 %% @end
--spec decode_message_set(binary()) -> [decoded_message()].
+-spec decode_message_set(binary()) -> incomplete_message() | [message()].
 decode_message_set(MessageSetBin) when is_binary(MessageSetBin) ->
-  lists:reverse(decode_message_stream(MessageSetBin, [])).
+  case decode_message_stream(MessageSetBin, []) of
+    [?incomplete_message(_) = Incomplete] ->
+      %% The only message is incomplete
+      %% return the special tuple
+      Incomplete;
+    [?incomplete_message(_) | Messages] ->
+      %% Discard the last incomplete message
+      lists:reverse(Messages);
+    Messages ->
+      lists:reverse(Messages)
+  end.
 
 %%%_* Hidden APIs ==============================================================
 
@@ -277,9 +299,12 @@ encode(int16, I) when is_integer(I) -> <<I:16/?INT>>;
 encode(int32, I) when is_integer(I) -> <<I:32/?INT>>;
 encode(int64, I) when is_integer(I) -> <<I:64/?INT>>;
 encode(nullable_string, undefined) -> <<-1:16/?INT>>;
+encode(nullable_string, Str) -> encode(string, Str);
+encode(string, Atom) when is_atom(Atom) ->
+  encode(string, atom_to_binary(Atom, utf8));
 encode(string, <<>>) -> <<0:16/?INT>>;
 encode(string, L) when is_list(L) ->
-  encode(string, iolist_to_binary(L));
+  encode(string, bin(L));
 encode(string, B) when is_binary(B) ->
   Length = size(B),
   <<Length:16/?INT, B/binary>>;
@@ -293,8 +318,11 @@ encode(bytes, B) when is_binary(B) orelse is_list(B) ->
 encode(records, B) ->
   encode(bytes, B).
 
-%% @hidden Decode prmitives.
--spec decode(primitive_type(), binary()) -> {primitive(), binary()}.
+%% @hidden Decode prmitives or evaluate caller provided decoder.
+-spec decode(decode_fun() | primitive_type(), binary()) ->
+        {primitive(), binary()}.
+decode(F, Bin) when is_function(F) ->
+  F(Bin);
 decode(boolean, Bin) ->
   <<Value:8/?INT, Rest/binary>> = Bin,
   {Value =/= 0, Rest};
@@ -330,7 +358,7 @@ enc_struct([{Name, FieldSc} | Schema], Values, Stack) when is_list(Values) ->
     {value, {_, Value0}, ValuesLeft} ->
       Value = enc_embedded(NewStack, Value0),
       [ enc_struct_field(FieldSc, Value, NewStack)
-      | enc_struct(Schema, Stack, ValuesLeft)
+      | enc_struct(Schema, ValuesLeft, Stack)
       ];
     false ->
       erlang:throw({field_missing, [Name | Stack]})
@@ -363,11 +391,11 @@ encode_struct(_Module, _Tag, _Vsn, Bin) when is_binary(Bin) -> Bin;
 encode_struct(Module, Tag, Vsn, Fields) ->
   Schema = get_schema(Module, Tag, Vsn),
   try
-    iolist_to_binary(enc_struct(Schema, Fields, [{Tag, Vsn}]))
+    bin(enc_struct(Schema, Fields, [{Tag, Vsn}]))
   catch
     throw : {Reason, Stack} ->
       Trace = erlang:get_stacktrace(),
-      erlang:raise(error, {Reason, lists:reverse(Stack), Fields}, Trace)
+      erlang:raise(error, {Reason, Stack, Fields}, Trace)
   end.
 
 %% @hidden Decode struct having schema predefined in kpro_schema.
@@ -386,12 +414,12 @@ decode_struct(Module, Tag, Vsn, Bin) ->
   dec_struct(Schema, _Fields = [], _Stack = [{Tag, Vsn}], Bin).
 
 %% @hidden Get predefined schema from kpro_schema:get/2.
--spec get_schema(req_tag() | rsp_tag(), vsn()) -> struct_schema().
+-spec get_schema(tag(), vsn()) -> struct_schema().
 get_schema(Tag, Vsn) ->
   get_schema(?SCHEMA_MODULE, Tag, Vsn).
 
 %% @hidden Get predefined schema from Module:get/2 API.
--spec get_schema(module(), req_tag() | rsp_tag(), vsn()) -> struct_schema().
+-spec get_schema(module(), tag(), vsn()) -> struct_schema().
 get_schema(Module, Tag, Vsn) ->
   try
     Module:get(Tag, Vsn)
@@ -406,6 +434,24 @@ get_schema(Module, Tag, Vsn) ->
           erlang:error({unknown_tag, Tag})
       end,
       erlang:error({unsupported_version, Tag, Vsn})
+  end.
+
+%% @doc Find field value in a struct, raise an exception if not found.
+-spec find(field_name(), struct()) -> field_value() | no_return().
+find(Field, Struct) ->
+  case lists:keyfind(Field, 1, Struct) of
+    {_, Value} -> Value;
+    false -> erlang:throw({no_such_field, Field})
+  end.
+
+%% @doc Find field value in a struct, reutrn default if not found.
+-spec find(field_name(), struct(), field_value()) -> field_value().
+find(Field, Struct, Default) ->
+  try
+    find(Field, Struct)
+  catch
+    throw : {no_such_field, _} ->
+      Default
   end.
 
 %%%_* Internal functions =======================================================
@@ -449,8 +495,8 @@ encode_message(Attributes, Key, Value) ->
 %% @private Decode byte stream of kafka messages.
 %% Messages are returned in reversed order
 %% @end
--spec decode_message_stream(binary(), decoded_message()) ->
-        decoded_message().
+-spec decode_message_stream(binary(), [decoded_message()]) ->
+        [decoded_message()].
 decode_message_stream(<<>>, Acc) ->
   %% NOTE: called recursively, do NOT reverse Acc here
   Acc;
@@ -460,18 +506,19 @@ decode_message_stream(Bin, Acc) ->
 
 %% @private
 -spec decode_message(binary(), [decoded_message()]) ->
-        {decoded_message(), binary()}.
+        {[decoded_message()], binary()}.
+decode_message(<<>>, Acc) -> {Acc, <<>>};
 decode_message(<<Offset:64/?INT, MsgSize:32/?INT, T/binary>>, Acc) ->
   case size(T) < MsgSize of
     true ->
-      {[{?incomplete_message, MsgSize + 12} | Acc], <<>>};
+      {[?incomplete_message(MsgSize + 12) | Acc], <<>>};
     false ->
-      <<Body:MsgSize/binary, Rest>> = T,
+      <<Body:MsgSize/binary, Rest/binary>> = T,
       {do_decode_message(Offset, Body, Acc), Rest}
   end;
 decode_message(_, Acc) ->
   %% need to fetch at least 12 bytes to know the message size
-  {[{?incomplete_message, 12} | Acc], <<>>}.
+  {[?incomplete_message(12) | Acc], <<>>}.
 
 %% @private Comment is copied from core/src/main/scala/kafka/message/Message.scala
 %% A message. The format of an N byte message is the following:
@@ -494,8 +541,7 @@ decode_message(_, Acc) ->
 %% 7. 4 byte payload length, containing length V
 %% 8. V byte payload
 %% @end
--spec do_decode_message(offset(), binary(), [decoded_message()]) ->
-        [decoded_message()].
+-spec do_decode_message(offset(), binary(), [message()]) -> [message()].
 do_decode_message(Offset, <<Crc:32/unsigned-integer, Body/binary>>, Acc) ->
   case Crc =:= erlang:crc32(Body) of
     true  -> ok;
@@ -514,16 +560,16 @@ do_decode_message(Offset, <<Crc:32/unsigned-integer, Body/binary>>, Acc) ->
   {Value, <<>>} = decode(bytes, Rest),
   case Compression =:= no_compression of
     true ->
-      Struct =
-        %% NOTE: struct field order optimized
-        [{value, Value},
-         {key, Key},
-         {ts, Ts},
-         {ts_type, TsType},
-         {crc, Crc},
-         {magic_byte, MagicByte}
-        ],
-      [Struct | Acc];
+      Msg = #kafka_message{ offset = Offset
+                          , value = Value
+                          , key = Key
+                          , ts = Ts
+                          , ts_type = TsType
+                          , crc = Crc
+                          , magic_byte = MagicByte
+                          , attributes = Attributes
+                          },
+      [Msg | Acc];
     false ->
       Bin = decompress(Compression, Value),
       decode_message_stream(Bin, Acc)
@@ -588,9 +634,10 @@ do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
       Context = [ {tag, Tag}
                 , {vsn, Vsn}
                 , {corr_id, CorrId}
-                , {payload, Rest0}
+                , {payload, Bin}
                 ],
-      erlang:error({E, Context, erlang:get_stacktrace()})
+      Trace = erlang:get_stacktrace(),
+      erlang:raise(error, {E, Context}, Trace)
     end,
   Result =
     #kpro_rsp{ tag = Tag
@@ -603,15 +650,13 @@ do_decode_response(Bin) ->
   {incomplete, Bin}.
 
 %% @private
--spec decompress(compress_option(), struct()) -> binary().
-decompress(Method, Struct) ->
-  {_, Value} = lists:keyfind(value, 1, Struct),
+-spec decompress(compress_option(), binary()) -> binary().
+decompress(Method, Value) ->
   case Method of
     gzip -> zlib:gunzip(Value);
     snappy -> java_snappy_unpack(Value);
     lz4 -> lz4_unpack(Value)
   end.
-
 
 %% @private
 -spec enc_struct_field(schema(), struct(), stack()) -> iodata().
@@ -636,6 +681,12 @@ enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
 
 %% @private Encode embedded bytes.
 -spec enc_embedded(stack(), field_value()) -> field_value().
+enc_embedded([protocol_metadata | _] = Stack, Value) ->
+  Schema = get_schema(?PRELUDE, cg_protocol_metadata, 0),
+  bin(enc_struct(Schema, Value, Stack));
+enc_embedded([member_assignment | _] = Stack, Value) ->
+  Schema = get_schema(?PRELUDE, cg_memeber_assignment, 0),
+  bin(enc_struct(Schema, Value, Stack));
 enc_embedded(_Stack, Value) -> Value.
 
 %% @private
@@ -645,23 +696,48 @@ dec_struct_field({array, Schema}, Stack, Bin0) ->
   {Count, Bin} = decode(int32, Bin0),
   dec_array_elements(Count, Schema, Stack, Bin, []);
 dec_struct_field(Schema, Stack, Bin) when is_list(Schema) ->
-  dec_struct(Schema, Stack, Stack, Bin);
-dec_struct_field(Primitive, _Stack, Bin) when is_atom(Primitive) ->
-  decode(Primitive, Bin).
+  dec_struct(Schema, [], Stack, Bin);
+dec_struct_field(Primitive, Stack, Bin) when is_atom(Primitive) ->
+  try
+    decode(Primitive, Bin)
+  catch
+    error : _Reason ->
+      erlang:error({Stack, Primitive, Bin})
+  end.
 
 %% @private
--spec dec_array_elements(count(), schema(), stack(), binary(), Acc) -> Acc
-        when Acc :: [field_value()].
+-spec dec_array_elements(count(), schema(), stack(), binary(), Acc) ->
+        {Acc, binary()} when Acc :: [field_value()].
 dec_array_elements(0, _Schema, _Stack, Bin, Acc) ->
   {lists:reverse(Acc), Bin};
 dec_array_elements(N, Schema, Stack, Bin, Acc) ->
   {Element, Rest} = dec_struct_field(Schema, Stack, Bin),
   dec_array_elements(N-1, Schema, Stack, Rest, [Element | Acc]).
 
-%% @private Dig up embedded bytes.
+%% @private Translate error codes; Dig up embedded bytes.
 -spec dec_embedded(stack(), field_value()) -> field_value().
 dec_embedded([error_code | _], ErrorCode) ->
-  kpro_error_code:decode(ErrorCode).
+  kpro_error_code:decode(ErrorCode);
+dec_embedded([topic_error_code | _], ErrorCode) ->
+  kpro_error_code:decode(ErrorCode);
+dec_embedded([partition_error_code | _], ErrorCode) ->
+  kpro_error_code:decode(ErrorCode);
+dec_embedded([member_metadata | _] = Stack, Bin) ->
+  Schema = get_schema(?PRELUDE, cg_member_metadata, 0),
+  dec_struct_clean(Schema, [{cg_member_metadata, 0} | Stack], Bin);
+dec_embedded([member_assignment | _], <<>>) ->
+  ?kpro_cg_no_assignment; %% no assignment for this member
+dec_embedded([member_assignment | _] = Stack, Bin) ->
+  Schema = get_schema(?PRELUDE, cg_memeber_assignment, 0),
+  dec_struct_clean(Schema, [{cg_memeber_assignment, 0} | Stack], Bin);
+dec_embedded(_Stack, Value) ->
+  Value.
+
+%% @private Decode struct, assume no tail bytes.
+-spec dec_struct_clean(schema(), stack(), binary()) -> struct().
+dec_struct_clean(Schema, Stack, Bin) ->
+  {Fields, <<>>} = dec_struct(Schema, [], Stack, Bin),
+  Fields.
 
 %% @private
 -spec copy_bytes(-1 | count(), binary()) -> {undefined | binary(), binary()}.
@@ -701,7 +777,7 @@ java_snappy_unpack(Bin) ->
   java_snappy_unpack_chunks(Chunks, []).
 
 java_snappy_unpack_chunks(<<>>, Acc) ->
-  iolist_to_binary(Acc);
+  bin(Acc);
 java_snappy_unpack_chunks(Chunks, Acc) ->
   <<Len:32/unsigned-integer, Rest/binary>> = Chunks,
   case Len =:= 0 of
@@ -715,6 +791,7 @@ java_snappy_unpack_chunks(Chunks, Acc) ->
   end.
 
 %% @private
+-spec lz4_unpack(_) -> no_return().
 lz4_unpack(_) -> erlang:error({no_impl, lz4}).
 
 -ifndef(SNAPPY_DISABLED).
@@ -740,6 +817,10 @@ snappy_decompress(_BinData) ->
   erlang:error(kafka_protocol_no_snappy).
 
 -endif.
+
+%% @private
+-spec bin(iodata()) -> binary().
+bin(X) -> iolist_to_binary(X).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
