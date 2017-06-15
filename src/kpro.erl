@@ -794,8 +794,6 @@ java_snappy_unpack_chunks(Chunks, Acc) ->
 -spec lz4_unpack(_) -> no_return().
 lz4_unpack(_) -> erlang:error({no_impl, lz4}).
 
--ifndef(SNAPPY_DISABLED).
-
 %% @private
 snappy_compress(IoData) ->
   {ok, Compressed} = snappyer:compress(IoData),
@@ -805,18 +803,6 @@ snappy_compress(IoData) ->
 snappy_decompress(BinData) ->
   {ok, Decompressed} = snappyer:decompress(BinData),
   Decompressed.
-
--else.
-
-%% @private
-snappy_compress(_IoData) ->
-  erlang:error(kafka_protocol_no_snappy).
-
-%% @private
-snappy_decompress(_BinData) ->
-  erlang:error(kafka_protocol_no_snappy).
-
--endif.
 
 %% @private
 -spec bin(iodata()) -> binary().
