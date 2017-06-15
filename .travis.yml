@@ -31,6 +31,7 @@ script:
   - make distclean
   - export KAFKA_PROTOCOL_NO_SNAPPY=1
   - make vsn-check
+  - make
   - make xref
   - make distclean
   - rebar get-deps
