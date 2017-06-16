@@ -132,12 +132,13 @@
                         | nullable_string
                         | bytes
                         | records.
+-type decode_fun() :: fun((binary()) -> {field_value(), binary()}).
 -type struct_schema() :: [{field_name(), schema()}].
 -type schema() :: primitive_type()
                 | struct_schema()
-                | {array, struct_schema()}.
+                | {array, schema()}
+                | decode_fun(). %% caller defined decoder
 -type stack() :: [{tag(), vsn()} | field_name()]. %% encode / decode stack
--type decode_fun() :: fun((binary()) -> {field_value(), binary()}).
 
 -define(INT, signed-integer).
 -define(SCHEMA_MODULE, kpro_schema).
@@ -318,11 +319,8 @@ encode(bytes, B) when is_binary(B) orelse is_list(B) ->
 encode(records, B) ->
   encode(bytes, B).
 
-%% @hidden Decode prmitives or evaluate caller provided decoder.
--spec decode(decode_fun() | primitive_type(), binary()) ->
-        {primitive(), binary()}.
-decode(F, Bin) when is_function(F) ->
-  F(Bin);
+%% @hidden Decode prmitives.
+-spec decode(primitive_type(), binary()) -> {primitive(), binary()}.
 decode(boolean, Bin) ->
   <<Value:8/?INT, Rest/binary>> = Bin,
   {Value =/= 0, Rest};
@@ -689,7 +687,12 @@ enc_embedded([member_assignment | _] = Stack, Value) ->
   bin(enc_struct(Schema, Value, Stack));
 enc_embedded(_Stack, Value) -> Value.
 
-%% @private
+%% @private A struct field should have one of below types:
+%% 1. An array of any
+%% 2. Another struct
+%% 3. A user define decoder
+%% 4. A primitive
+%% @end
 -spec dec_struct_field(schema(), stack(), binary()) ->
         {field_value(), binary()}.
 dec_struct_field({array, Schema}, Stack, Bin0) ->
@@ -697,6 +700,9 @@ dec_struct_field({array, Schema}, Stack, Bin0) ->
   dec_array_elements(Count, Schema, Stack, Bin, []);
 dec_struct_field(Schema, Stack, Bin) when is_list(Schema) ->
   dec_struct(Schema, [], Stack, Bin);
+dec_struct_field(F, _Stack, Bin) when is_function(F) ->
+  %% Caller provided decoder
+  F(Bin);
 dec_struct_field(Primitive, Stack, Bin) when is_atom(Primitive) ->
   try
     decode(Primitive, Bin)
