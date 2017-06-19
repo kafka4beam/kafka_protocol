@@ -1,258 +1,1137 @@
-## Reference: https://cwiki.apache.org/confluence/display/KAFKA/A+Guide+To+The+Kafka+Protocol#AGuideToTheKafkaProtocol
-## This is the source for code generation.
+# generated code, do not edit!
 
-Packet => Size Payload
-  Size => int32
-  Payload => Request | Response
+ProduceRequestV0 => acks timeout [topic_data]
+  acks => INT16
+  timeout => INT32
+  topic_data => topic [data]
+    topic => STRING
+    data => partition record_set
+      partition => INT32
+      record_set => RECORDS
 
-Request => ApiKey ApiVersion CorrelationId ClientId RequestMessage
-  ApiKey => int16
-  ApiVersion => int16
-  CorrelationId => int32
-  ClientId => string
-  RequestMessage => ProduceRequest | FetchRequest | OffsetRequest | MetadataRequest | OffsetCommitRequestV0 | OffsetCommitRequestV1 | OffsetCommitRequestV2 | OffsetFetchRequest | GroupCoordinatorRequest | JoinGroupRequest | HeartbeatRequest | LeaveGroupRequest | SyncGroupRequest | DescribeGroupsRequest | ListGroupsRequest | SaslHandshakeRequest
+# acks: The number of acknowledgments the producer requires the leader to have received before considering a request complete. Allowed values: 0 for no acknowledgments, 1 for only the leader and -1 for the full ISR.
+# timeout: The time to await a response in ms.
 
-Response => CorrelationId ResponseMessage
-  CorrelationId => int32
-  ResponseMessage => ProduceResponse | FetchResponse | OffsetResponse | MetadataResponse | OffsetCommitResponse | OffsetFetchResponse | GroupCoordinatorResponse | JoinGroupResponse | HeartbeatResponse | LeaveGroupResponse | SyncGroupResponse | DescribeGroupsResponse | ListGroupsResponse | SaslHandshakeResponse
 
-Message => Offset MessageSize Crc MagicByte Attributes Key Value
-  Offset => int64
-  MessageSize => int32
-  Crc => int32
-  MagicByte => int8
-  Attributes => int8
-  Key => bytes
-  Value => bytes
+ProduceRequestV1 => acks timeout [topic_data]
+  acks => INT16
+  timeout => INT32
+  topic_data => topic [data]
+    topic => STRING
+    data => partition record_set
+      partition => INT32
+      record_set => RECORDS
 
-MetadataRequest => [TopicName]
-  TopicName => string
+# acks: The number of acknowledgments the producer requires the leader to have received before considering a request complete. Allowed values: 0 for no acknowledgments, 1 for only the leader and -1 for the full ISR.
+# timeout: The time to await a response in ms.
 
-MetadataResponse => [Broker] [TopicMetadata]
-  Broker => NodeId Host Port
-  NodeId => int32
-  Host => string
-  Port => int32
-  TopicMetadata => ErrorCode TopicName [PartitionMetadata]
-  PartitionMetadata => ErrorCode Partition Leader Replicas Isr
-  Partition => int32
-  Leader => int32
-  Replicas => [int32]
-  Isr => [int32]
-  ErrorCode => int16
-  TopicName => string
 
-ProduceRequest => RequiredAcks Timeout [TopicMessageSet]
-  TopicMessageSet => TopicName [PartitionMessageSet]
-  PartitionMessageSet => Partition MessageSetSize [Message]
-  RequiredAcks => int16
-  Timeout => int32
-  Partition => int32
-  MessageSetSize => int32
-  TopicName => string
+ProduceRequestV2 => acks timeout [topic_data]
+  acks => INT16
+  timeout => INT32
+  topic_data => topic [data]
+    topic => STRING
+    data => partition record_set
+      partition => INT32
+      record_set => RECORDS
 
-ProduceResponse => [ProduceResponseTopic]
-  ProduceResponseTopic => TopicName [ProduceResponsePartition]
-  ProduceResponsePartition => Partition ErrorCode Offset
-  TopicName => string
-  Partition => int32
-  ErrorCode => int16
-  Offset => int64
+# acks: The number of acknowledgments the producer requires the leader to have received before considering a request complete. Allowed values: 0 for no acknowledgments, 1 for only the leader and -1 for the full ISR.
+# timeout: The time to await a response in ms.
 
-FetchRequest => ReplicaId MaxWaitTime MinBytes [FetchRequestTopic]
-  FetchRequestTopic => TopicName [FetchRequestPartition]
-  FetchRequestPartition => Partition FetchOffset MaxBytes
-  ReplicaId => int32
-  MaxWaitTime => int32
-  MinBytes => int32
-  TopicName => string
-  Partition => int32
-  FetchOffset => int64
-  MaxBytes => int32
 
-FetchResponse => [FetchResponseTopic]
-  FetchResponseTopic => TopicName [FetchResponsePartition]
-  FetchResponsePartition => Partition ErrorCode HighWatermarkOffset MessageSetSize [Message]
-  TopicName => string
-  Partition => int32
-  ErrorCode => int16
-  HighWatermarkOffset => int64
-  MessageSetSize => int32
+ProduceResponseV0 => [responses]
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition error_code base_offset
+      partition => INT32
+      error_code => INT16
+      base_offset => INT64
 
-OffsetRequest => ReplicaId [OffsetRequestTopic]
-  OffsetRequestTopic => TopicName [OffsetRequestPartition]
-  OffsetRequestPartition => Partition Time MaxNumberOfOffsets
-  ReplicaId => int32
-  TopicName => string
-  Partition => int32
-  Time => int64
-  MaxNumberOfOffsets => int32
 
-OffsetResponse => [TopicOffsets]
-  TopicOffsets => TopicName [PartitionOffsets]
-  PartitionOffsets => Partition ErrorCode [Offset]
-  TopicName => string
-  Partition => int32
-  ErrorCode => int16
-  Offset => int64
 
-GroupCoordinatorRequest => GroupId
-  GroupId => string
+ProduceResponseV1 => [responses] throttle_time_ms
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition error_code base_offset
+      partition => INT32
+      error_code => INT16
+      base_offset => INT64
+  throttle_time_ms => INT32
 
-GroupCoordinatorResponse => ErrorCode CoordinatorId CoordinatorHost CoordinatorPort
-  ErrorCode => int16
-  CoordinatorId => int32
-  CoordinatorHost => string
-  CoordinatorPort => int32
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation. (Zero if the request did not violate any quota.)
 
-OffsetCommitRequestV0 => ConsumerGroupId [OCReqV0Topic]
-  OCReqV0Topic => TopicName [OCReqV0Partition]
-  OCReqV0Partition => Partition Offset Metadata
-  ConsumerGroupId => string
-  TopicName => string
-  Partition => int32
-  Offset => int64
-  Metadata => string
 
-OffsetCommitRequestV1 => ConsumerGroupId ConsumerGroupGenerationId ConsumerId [OCReqV1Topic]
-  OCReqV1Topic => TopicName [OCReqV1Partition]
-  OCReqV1Partition => Partition Offset TimeStamp Metadata
-  ConsumerGroupId => string
-  ConsumerGroupGenerationId => int32
-  ConsumerId => string
-  TopicName => string
-  Partition => int32
-  Offset => int64
-  TimeStamp => int64
-  Metadata => string
+ProduceResponseV2 => [responses] throttle_time_ms
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition error_code base_offset log_append_time
+      partition => INT32
+      error_code => INT16
+      base_offset => INT64
+      log_append_time => INT64
+  throttle_time_ms => INT32
 
-OffsetCommitRequestV2 => ConsumerGroupId ConsumerGroupGenerationId ConsumerId RetentionTime [OCReqV2Topic]
-  OCReqV2Topic => TopicName [OCReqV2Partition]
-  OCReqV2Partition => Partition Offset Metadata
-  ConsumerGroupId => string
-  ConsumerGroupGenerationId => int32
-  ConsumerId => string
-  RetentionTime => int64
-  TopicName => string
-  Partition => int32
-  Offset => int64
-  Metadata => string
+# log_append_time: The timestamp returned by broker after appending the messages. If CreateTime is used for the topic, the timestamp will be -1. If LogAppendTime is used for the topic, the timestamp will be the broker local time when the messages are appended.
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation. (Zero if the request did not violate any quota.)
 
-OffsetCommitResponse => [OCRspTopic]
-  OCRspTopic => TopicName [OCRspPartition]
-  OCRspPartition => Partition ErrorCode
-  TopicName => string
-  Partition => int32
-  ErrorCode => int16
 
-OffsetFetchRequest => ConsumerGroup [OFReqTopic]
-  OFReqTopic => TopicName [Partition]
-  ConsumerGroup => string
-  TopicName => string
-  Partition => int32
+FetchRequestV0 => replica_id max_wait_time min_bytes [topics]
+  replica_id => INT32
+  max_wait_time => INT32
+  min_bytes => INT32
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition fetch_offset max_bytes
+      partition => INT32
+      fetch_offset => INT64
+      max_bytes => INT32
 
-OffsetFetchResponse => [TopicOffset]
-  TopicOffset => TopicName [PartitionOffset]
-  PartitionOffset => Partition Offset Metadata ErrorCode
-  TopicName => string
-  Partition => int32
-  Offset => int64
-  Metadata => string
-  ErrorCode => int16
+# replica_id: Broker id of the follower. For normal consumers, use -1.
+# max_wait_time: Maximum time in ms to wait for the response.
+# min_bytes: Minimum bytes to accumulate in the response.
+# topics: Topics to fetch.
+# topic: Topic to fetch.
+# partitions: Partitions to fetch.
+# partition: Topic partition id.
+# fetch_offset: Message offset.
+# max_bytes: Maximum bytes to fetch.
 
-JoinGroupRequest => GroupId SessionTimeout MemberId ProtocolType [GroupProtocol]
-  GroupId => string
-  SessionTimeout => int32
-  MemberId => string
-  ProtocolType => string
-  GroupProtocol => ProtocolName ProtocolMetadata
-    ProtocolName => string
-    ProtocolMetadata => bytes
 
-JoinGroupResponse => ErrorCode GenerationId ProtocolName LeaderId MemberId [GroupMemberMetadata]
-  ErrorCode => int16
-  GenerationId => int32
-  ProtocolName => string
-  LeaderId => string
-  MemberId => string
+FetchRequestV1 => replica_id max_wait_time min_bytes [topics]
+  replica_id => INT32
+  max_wait_time => INT32
+  min_bytes => INT32
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition fetch_offset max_bytes
+      partition => INT32
+      fetch_offset => INT64
+      max_bytes => INT32
 
-GroupMemberMetadata => MemberId ProtocolMetadata
-  MemberId => string
-  ProtocolMetadata => bytes
+# replica_id: Broker id of the follower. For normal consumers, use -1.
+# max_wait_time: Maximum time in ms to wait for the response.
+# min_bytes: Minimum bytes to accumulate in the response.
+# topics: Topics to fetch.
+# topic: Topic to fetch.
+# partitions: Partitions to fetch.
+# partition: Topic partition id.
+# fetch_offset: Message offset.
+# max_bytes: Maximum bytes to fetch.
 
-# embeded in 'bytes' content of
-# JoinGroupRequest.GroupProtocol.ProtocolMetadata
-# JoinGroupResponse.Members.ProtocolMetadata
-ConsumerGroupProtocolMetadata => Version [TopicName] UserData
-  Version => int16
-  TopicName => string
-  UserData => bytes
 
-SyncGroupRequest => GroupId GenerationId MemberId [GroupAssignment]
-  GroupId => string
-  GenerationId => int32
-  MemberId => string
+FetchRequestV2 => replica_id max_wait_time min_bytes [topics]
+  replica_id => INT32
+  max_wait_time => INT32
+  min_bytes => INT32
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition fetch_offset max_bytes
+      partition => INT32
+      fetch_offset => INT64
+      max_bytes => INT32
 
-GroupAssignment => MemberId MemberAssignment
-  MemberId => string
-  MemberAssignment => bytes
+# replica_id: Broker id of the follower. For normal consumers, use -1.
+# max_wait_time: Maximum time in ms to wait for the response.
+# min_bytes: Minimum bytes to accumulate in the response.
+# topics: Topics to fetch.
+# topic: Topic to fetch.
+# partitions: Partitions to fetch.
+# partition: Topic partition id.
+# fetch_offset: Message offset.
+# max_bytes: Maximum bytes to fetch.
 
-## embeded in 'bytes' content of
-## SyncGroupRequest.GroupAssignment.MemberAssignment
-ConsumerGroupMemberAssignment => Version [ConsumerGroupPartitionAssignment] UserData
-  Version => int16
-  ConsumerGroupPartitionAssignment => TopicName [Partition]
-    TopicName => string
-    Partition => int32
-  UserData => bytes
 
-SyncGroupResponse => ErrorCode MemberAssignment
-  ErrorCode => int16
-  MemberAssignment => bytes
+FetchRequestV3 => replica_id max_wait_time min_bytes max_bytes [topics]
+  replica_id => INT32
+  max_wait_time => INT32
+  min_bytes => INT32
+  max_bytes => INT32
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition fetch_offset max_bytes
+      partition => INT32
+      fetch_offset => INT64
+      max_bytes => INT32
 
-HeartbeatRequest => GroupId GenerationId MemberId
-  GroupId => string
-  GenerationId => int32
-  MemberId => string
+# replica_id: Broker id of the follower. For normal consumers, use -1.
+# max_wait_time: Maximum time in ms to wait for the response.
+# min_bytes: Minimum bytes to accumulate in the response.
+# max_bytes: Maximum bytes to accumulate in the response. Note that this is not an absolute maximum, if the first message in the first non-empty partition of the fetch is larger than this value, the message will still be returned to ensure that progress can be made.
+# topics: Topics to fetch in the order provided.
+# topic: Topic to fetch.
+# partitions: Partitions to fetch.
+# partition: Topic partition id.
+# fetch_offset: Message offset.
+# max_bytes: Maximum bytes to fetch.
 
-HeartbeatResponse => ErrorCode
-  ErrorCode => int16
 
-LeaveGroupRequest => GroupId MemberId
-  GroupId => string
-  MemberId => string
+FetchResponseV0 => [responses]
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition_header record_set
+      partition_header => partition error_code high_watermark
+        partition => INT32
+        error_code => INT16
+        high_watermark => INT64
+      record_set => RECORDS
 
-LeaveGroupResponse => ErrorCode
-  ErrorCode => int16
+# partition: Topic partition id.
+# high_watermark: Last committed offset.
 
-ListGroupsRequest =>
 
-ListGroupsResponse => ErrorCode [GroupInfo]
-  ErrorCode => int16
-  GroupInfo => GroupId ProtocolType
-    GroupId => string
-    ProtocolType => string
+FetchResponseV1 => throttle_time_ms [responses]
+  throttle_time_ms => INT32
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition_header record_set
+      partition_header => partition error_code high_watermark
+        partition => INT32
+        error_code => INT16
+        high_watermark => INT64
+      record_set => RECORDS
 
-DescribeGroupsRequest => [GroupId]
-  GroupId => string
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation. (Zero if the request did not violate any quota.)
+# partition: Topic partition id.
+# high_watermark: Last committed offset.
 
-DescribeGroupsResponse => [GroupDescription]
-  GroupDescription => ErrorCode GroupId State ProtocolType Protocol [GroupMemberDescription]
-  ErrorCode => int16
-  GroupId => string
-  State => string
-  ProtocolType => string
-  Protocol => string
-  GroupMemberDescription => MemberId ClientId ClientHost MemberMetadata MemberAssignment
-    MemberId => string
-    ClientId => string
-    ClientHost => string
-    MemberMetadata => bytes
-    MemberAssignment => bytes
 
-SaslHandshakeRequest => Mechanism
-  Mechanism => string
+FetchResponseV2 => throttle_time_ms [responses]
+  throttle_time_ms => INT32
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition_header record_set
+      partition_header => partition error_code high_watermark
+        partition => INT32
+        error_code => INT16
+        high_watermark => INT64
+      record_set => RECORDS
 
-SaslHandshakeResponse => ErrorCode [EnabledMechanisms]
-  ErrorCode => int16
-  EnabledMechanisms => string
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation. (Zero if the request did not violate any quota.)
+# partition: Topic partition id.
+# high_watermark: Last committed offset.
+
+
+FetchResponseV3 => throttle_time_ms [responses]
+  throttle_time_ms => INT32
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition_header record_set
+      partition_header => partition error_code high_watermark
+        partition => INT32
+        error_code => INT16
+        high_watermark => INT64
+      record_set => RECORDS
+
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation. (Zero if the request did not violate any quota.)
+# partition: Topic partition id.
+# high_watermark: Last committed offset.
+
+
+OffsetsRequestV0 => replica_id [topics]
+  replica_id => INT32
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition timestamp max_num_offsets
+      partition => INT32
+      timestamp => INT64
+      max_num_offsets => INT32
+
+# replica_id: Broker id of the follower. For normal consumers, use -1.
+# topics: Topics to list offsets.
+# topic: Topic to list offset.
+# partitions: Partitions to list offset.
+# partition: Topic partition id.
+# timestamp: Timestamp.
+# max_num_offsets: Maximum offsets to return.
+
+
+OffsetsRequestV1 => replica_id [topics]
+  replica_id => INT32
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition timestamp
+      partition => INT32
+      timestamp => INT64
+
+# replica_id: Broker id of the follower. For normal consumers, use -1.
+# topics: Topics to list offsets.
+# topic: Topic to list offset.
+# partitions: Partitions to list offset.
+# partition: Topic partition id.
+# timestamp: The target timestamp for the partition.
+
+
+OffsetsResponseV0 => [responses]
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition error_code [offsets]
+      partition => INT32
+      error_code => INT16
+      offsets => INT64
+
+# partition: Topic partition id.
+# offsets: A list of offsets.
+
+
+OffsetsResponseV1 => [responses]
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition error_code timestamp offset
+      partition => INT32
+      error_code => INT16
+      timestamp => INT64
+      offset => INT64
+
+# partition: Topic partition id.
+# timestamp: The timestamp associated with the returned offset
+# offset: offset found
+
+
+MetadataRequestV0 => [topics]
+  topics => STRING
+
+# topics: An array of topics to fetch metadata for. If no topics are specified fetch metadata for all topics.
+
+
+MetadataRequestV1 => [topics]
+  topics => STRING
+
+# topics: An array of topics to fetch metadata for. If the topics array is null fetch metadata for all topics.
+
+
+MetadataRequestV2 => [topics]
+  topics => STRING
+
+# topics: An array of topics to fetch metadata for. If the topics array is null fetch metadata for all topics.
+
+
+MetadataResponseV0 => [brokers] [topic_metadata]
+  brokers => node_id host port
+    node_id => INT32
+    host => STRING
+    port => INT32
+  topic_metadata => topic_error_code topic [partition_metadata]
+    topic_error_code => INT16
+    topic => STRING
+    partition_metadata => partition_error_code partition_id leader [replicas] [isr]
+      partition_error_code => INT16
+      partition_id => INT32
+      leader => INT32
+      replicas => INT32
+      isr => INT32
+
+# brokers: Host and port information for all brokers.
+# node_id: The broker id.
+# host: The hostname of the broker.
+# port: The port on which the broker accepts requests.
+# topic_error_code: The error code for the given topic.
+# topic: The name of the topic
+# partition_metadata: Metadata for each partition of the topic.
+# partition_error_code: The error code for the partition, if any.
+# partition_id: The id of the partition.
+# leader: The id of the broker acting as leader for this partition.
+# replicas: The set of all nodes that host this partition.
+# isr: The set of nodes that are in sync with the leader for this partition.
+
+
+MetadataResponseV1 => [brokers] controller_id [topic_metadata]
+  brokers => node_id host port rack
+    node_id => INT32
+    host => STRING
+    port => INT32
+    rack => NULLABLE_STRING
+  controller_id => INT32
+  topic_metadata => topic_error_code topic is_internal [partition_metadata]
+    topic_error_code => INT16
+    topic => STRING
+    is_internal => BOOLEAN
+    partition_metadata => partition_error_code partition_id leader [replicas] [isr]
+      partition_error_code => INT16
+      partition_id => INT32
+      leader => INT32
+      replicas => INT32
+      isr => INT32
+
+# brokers: Host and port information for all brokers.
+# node_id: The broker id.
+# host: The hostname of the broker.
+# port: The port on which the broker accepts requests.
+# rack: The rack of the broker.
+# controller_id: The broker id of the controller broker.
+# topic_error_code: The error code for the given topic.
+# topic: The name of the topic
+# is_internal: Indicates if the topic is considered a Kafka internal topic
+# partition_metadata: Metadata for each partition of the topic.
+# partition_error_code: The error code for the partition, if any.
+# partition_id: The id of the partition.
+# leader: The id of the broker acting as leader for this partition.
+# replicas: The set of all nodes that host this partition.
+# isr: The set of nodes that are in sync with the leader for this partition.
+
+
+MetadataResponseV2 => [brokers] cluster_id controller_id [topic_metadata]
+  brokers => node_id host port rack
+    node_id => INT32
+    host => STRING
+    port => INT32
+    rack => NULLABLE_STRING
+  cluster_id => NULLABLE_STRING
+  controller_id => INT32
+  topic_metadata => topic_error_code topic is_internal [partition_metadata]
+    topic_error_code => INT16
+    topic => STRING
+    is_internal => BOOLEAN
+    partition_metadata => partition_error_code partition_id leader [replicas] [isr]
+      partition_error_code => INT16
+      partition_id => INT32
+      leader => INT32
+      replicas => INT32
+      isr => INT32
+
+# brokers: Host and port information for all brokers.
+# node_id: The broker id.
+# host: The hostname of the broker.
+# port: The port on which the broker accepts requests.
+# rack: The rack of the broker.
+# cluster_id: The cluster id that this broker belongs to.
+# controller_id: The broker id of the controller broker.
+# topic_error_code: The error code for the given topic.
+# topic: The name of the topic
+# is_internal: Indicates if the topic is considered a Kafka internal topic
+# partition_metadata: Metadata for each partition of the topic.
+# partition_error_code: The error code for the partition, if any.
+# partition_id: The id of the partition.
+# leader: The id of the broker acting as leader for this partition.
+# replicas: The set of all nodes that host this partition.
+# isr: The set of nodes that are in sync with the leader for this partition.
+
+
+LeaderAndIsrRequestV0 => controller_id controller_epoch [partition_states] [live_leaders]
+  controller_id => INT32
+  controller_epoch => INT32
+  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas]
+    topic => STRING
+    partition => INT32
+    controller_epoch => INT32
+    leader => INT32
+    leader_epoch => INT32
+    isr => INT32
+    zk_version => INT32
+    replicas => INT32
+  live_leaders => id host port
+    id => INT32
+    host => STRING
+    port => INT32
+
+# controller_id: The controller id.
+# controller_epoch: The controller epoch.
+# topic: Topic name.
+# partition: Topic partition id.
+# controller_epoch: The controller epoch.
+# leader: The broker id for the leader.
+# leader_epoch: The leader epoch.
+# isr: The in sync replica ids.
+# zk_version: The ZK version.
+# replicas: The replica ids.
+# id: The broker id.
+# host: The hostname of the broker.
+# port: The port on which the broker accepts requests.
+
+
+LeaderAndIsrResponseV0 => error_code [partitions]
+  error_code => INT16
+  partitions => topic partition error_code
+    topic => STRING
+    partition => INT32
+    error_code => INT16
+
+# error_code: Error code.
+# topic: Topic name.
+# partition: Topic partition id.
+# error_code: Error code.
+
+
+StopReplicaRequestV0 => controller_id controller_epoch delete_partitions [partitions]
+  controller_id => INT32
+  controller_epoch => INT32
+  delete_partitions => BOOLEAN
+  partitions => topic partition
+    topic => STRING
+    partition => INT32
+
+# controller_id: The controller id.
+# controller_epoch: The controller epoch.
+# delete_partitions: Boolean which indicates if replica's partitions must be deleted.
+# topic: Topic name.
+# partition: Topic partition id.
+
+
+StopReplicaResponseV0 => error_code [partitions]
+  error_code => INT16
+  partitions => topic partition error_code
+    topic => STRING
+    partition => INT32
+    error_code => INT16
+
+# error_code: Error code.
+# topic: Topic name.
+# partition: Topic partition id.
+# error_code: Error code.
+
+
+UpdateMetadataRequestV0 => controller_id controller_epoch [partition_states] [live_brokers]
+  controller_id => INT32
+  controller_epoch => INT32
+  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas]
+    topic => STRING
+    partition => INT32
+    controller_epoch => INT32
+    leader => INT32
+    leader_epoch => INT32
+    isr => INT32
+    zk_version => INT32
+    replicas => INT32
+  live_brokers => id host port
+    id => INT32
+    host => STRING
+    port => INT32
+
+# controller_id: The controller id.
+# controller_epoch: The controller epoch.
+# topic: Topic name.
+# partition: Topic partition id.
+# controller_epoch: The controller epoch.
+# leader: The broker id for the leader.
+# leader_epoch: The leader epoch.
+# isr: The in sync replica ids.
+# zk_version: The ZK version.
+# replicas: The replica ids.
+# id: The broker id.
+# host: The hostname of the broker.
+# port: The port on which the broker accepts requests.
+
+
+UpdateMetadataRequestV1 => controller_id controller_epoch [partition_states] [live_brokers]
+  controller_id => INT32
+  controller_epoch => INT32
+  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas]
+    topic => STRING
+    partition => INT32
+    controller_epoch => INT32
+    leader => INT32
+    leader_epoch => INT32
+    isr => INT32
+    zk_version => INT32
+    replicas => INT32
+  live_brokers => id [end_points]
+    id => INT32
+    end_points => port host security_protocol_type
+      port => INT32
+      host => STRING
+      security_protocol_type => INT16
+
+# controller_id: The controller id.
+# controller_epoch: The controller epoch.
+# topic: Topic name.
+# partition: Topic partition id.
+# controller_epoch: The controller epoch.
+# leader: The broker id for the leader.
+# leader_epoch: The leader epoch.
+# isr: The in sync replica ids.
+# zk_version: The ZK version.
+# replicas: The replica ids.
+# id: The broker id.
+# port: The port on which the broker accepts requests.
+# host: The hostname of the broker.
+# security_protocol_type: The security protocol type.
+
+
+UpdateMetadataRequestV2 => controller_id controller_epoch [partition_states] [live_brokers]
+  controller_id => INT32
+  controller_epoch => INT32
+  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas]
+    topic => STRING
+    partition => INT32
+    controller_epoch => INT32
+    leader => INT32
+    leader_epoch => INT32
+    isr => INT32
+    zk_version => INT32
+    replicas => INT32
+  live_brokers => id [end_points] rack
+    id => INT32
+    end_points => port host security_protocol_type
+      port => INT32
+      host => STRING
+      security_protocol_type => INT16
+    rack => NULLABLE_STRING
+
+# controller_id: The controller id.
+# controller_epoch: The controller epoch.
+# topic: Topic name.
+# partition: Topic partition id.
+# controller_epoch: The controller epoch.
+# leader: The broker id for the leader.
+# leader_epoch: The leader epoch.
+# isr: The in sync replica ids.
+# zk_version: The ZK version.
+# replicas: The replica ids.
+# id: The broker id.
+# port: The port on which the broker accepts requests.
+# host: The hostname of the broker.
+# security_protocol_type: The security protocol type.
+# rack: The rack
+
+
+UpdateMetadataRequestV3 => controller_id controller_epoch [partition_states] [live_brokers]
+  controller_id => INT32
+  controller_epoch => INT32
+  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas]
+    topic => STRING
+    partition => INT32
+    controller_epoch => INT32
+    leader => INT32
+    leader_epoch => INT32
+    isr => INT32
+    zk_version => INT32
+    replicas => INT32
+  live_brokers => id [end_points] rack
+    id => INT32
+    end_points => port host listener_name security_protocol_type
+      port => INT32
+      host => STRING
+      listener_name => STRING
+      security_protocol_type => INT16
+    rack => NULLABLE_STRING
+
+# controller_id: The controller id.
+# controller_epoch: The controller epoch.
+# topic: Topic name.
+# partition: Topic partition id.
+# controller_epoch: The controller epoch.
+# leader: The broker id for the leader.
+# leader_epoch: The leader epoch.
+# isr: The in sync replica ids.
+# zk_version: The ZK version.
+# replicas: The replica ids.
+# id: The broker id.
+# port: The port on which the broker accepts requests.
+# host: The hostname of the broker.
+# listener_name: The listener name.
+# security_protocol_type: The security protocol type.
+# rack: The rack
+
+
+UpdateMetadataResponseV0 => error_code
+  error_code => INT16
+
+# error_code: Error code.
+
+
+UpdateMetadataResponseV1 => error_code
+  error_code => INT16
+
+# error_code: Error code.
+
+
+UpdateMetadataResponseV2 => error_code
+  error_code => INT16
+
+# error_code: Error code.
+
+
+UpdateMetadataResponseV3 => error_code
+  error_code => INT16
+
+# error_code: Error code.
+
+
+
+
+ControlledShutdownRequestV1 => broker_id
+  broker_id => INT32
+
+# broker_id: The id of the broker for which controlled shutdown has been requested.
+
+
+
+
+ControlledShutdownResponseV1 => error_code [partitions_remaining]
+  error_code => INT16
+  partitions_remaining => topic partition
+    topic => STRING
+    partition => INT32
+
+# partitions_remaining: The partitions that the broker still leads.
+# partition: Topic partition id.
+
+
+OffsetCommitRequestV0 => group_id [topics]
+  group_id => STRING
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition offset metadata
+      partition => INT32
+      offset => INT64
+      metadata => NULLABLE_STRING
+
+# group_id: The group id.
+# topics: Topics to commit offsets.
+# topic: Topic to commit.
+# partitions: Partitions to commit offsets.
+# partition: Topic partition id.
+# offset: Message offset to be committed.
+# metadata: Any associated metadata the client wants to keep.
+
+
+OffsetCommitRequestV1 => group_id group_generation_id member_id [topics]
+  group_id => STRING
+  group_generation_id => INT32
+  member_id => STRING
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition offset timestamp metadata
+      partition => INT32
+      offset => INT64
+      timestamp => INT64
+      metadata => NULLABLE_STRING
+
+# group_id: The group id.
+# group_generation_id: The generation of the group.
+# member_id: The member id assigned by the group coordinator.
+# topics: Topics to commit offsets.
+# topic: Topic to commit.
+# partitions: Partitions to commit offsets.
+# partition: Topic partition id.
+# offset: Message offset to be committed.
+# timestamp: Timestamp of the commit
+# metadata: Any associated metadata the client wants to keep.
+
+
+OffsetCommitRequestV2 => group_id group_generation_id member_id retention_time [topics]
+  group_id => STRING
+  group_generation_id => INT32
+  member_id => STRING
+  retention_time => INT64
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition offset metadata
+      partition => INT32
+      offset => INT64
+      metadata => NULLABLE_STRING
+
+# group_id: The group id.
+# group_generation_id: The generation of the consumer group.
+# member_id: The consumer id assigned by the group coordinator.
+# retention_time: Time period in ms to retain the offset.
+# topics: Topics to commit offsets.
+# topic: Topic to commit.
+# partitions: Partitions to commit offsets.
+# partition: Topic partition id.
+# offset: Message offset to be committed.
+# metadata: Any associated metadata the client wants to keep.
+
+
+OffsetCommitResponseV0 => [responses]
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition error_code
+      partition => INT32
+      error_code => INT16
+
+# partition: Topic partition id.
+
+
+OffsetCommitResponseV1 => [responses]
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition error_code
+      partition => INT32
+      error_code => INT16
+
+# partition: Topic partition id.
+
+
+OffsetCommitResponseV2 => [responses]
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition error_code
+      partition => INT32
+      error_code => INT16
+
+# partition: Topic partition id.
+
+
+OffsetFetchRequestV0 => group_id [topics]
+  group_id => STRING
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition
+      partition => INT32
+
+# group_id: The consumer group id.
+# topics: Topics to fetch offsets.
+# topic: Topic to fetch offset.
+# partitions: Partitions to fetch offsets.
+# partition: Topic partition id.
+
+
+OffsetFetchRequestV1 => group_id [topics]
+  group_id => STRING
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition
+      partition => INT32
+
+# group_id: The consumer group id.
+# topics: Topics to fetch offsets.
+# topic: Topic to fetch offset.
+# partitions: Partitions to fetch offsets.
+# partition: Topic partition id.
+
+
+OffsetFetchRequestV2 => group_id [topics]
+  group_id => STRING
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition
+      partition => INT32
+
+# group_id: The consumer group id.
+# topics: Topics to fetch offsets. If the topic array is null fetch offsets for all topics.
+# topic: Topic to fetch offset.
+# partitions: Partitions to fetch offsets.
+# partition: Topic partition id.
+
+
+OffsetFetchResponseV0 => [responses]
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition offset metadata error_code
+      partition => INT32
+      offset => INT64
+      metadata => NULLABLE_STRING
+      error_code => INT16
+
+# partition: Topic partition id.
+# offset: Last committed message offset.
+# metadata: Any associated metadata the client wants to keep.
+
+
+OffsetFetchResponseV1 => [responses]
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition offset metadata error_code
+      partition => INT32
+      offset => INT64
+      metadata => NULLABLE_STRING
+      error_code => INT16
+
+# partition: Topic partition id.
+# offset: Last committed message offset.
+# metadata: Any associated metadata the client wants to keep.
+
+
+OffsetFetchResponseV2 => [responses] error_code
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition offset metadata error_code
+      partition => INT32
+      offset => INT64
+      metadata => NULLABLE_STRING
+      error_code => INT16
+  error_code => INT16
+
+# partition: Topic partition id.
+# offset: Last committed message offset.
+# metadata: Any associated metadata the client wants to keep.
+
+
+GroupCoordinatorRequestV0 => group_id
+  group_id => STRING
+
+# group_id: The unique group id.
+
+
+GroupCoordinatorResponseV0 => error_code coordinator
+  error_code => INT16
+  coordinator => node_id host port
+    node_id => INT32
+    host => STRING
+    port => INT32
+
+# coordinator: Host and port information for the coordinator for a consumer group.
+# node_id: The broker id.
+# host: The hostname of the broker.
+# port: The port on which the broker accepts requests.
+
+
+JoinGroupRequestV0 => group_id session_timeout member_id protocol_type [group_protocols]
+  group_id => STRING
+  session_timeout => INT32
+  member_id => STRING
+  protocol_type => STRING
+  group_protocols => protocol_name protocol_metadata
+    protocol_name => STRING
+    protocol_metadata => BYTES
+
+# group_id: The group id.
+# session_timeout: The coordinator considers the consumer dead if it receives no heartbeat after this timeout in ms.
+# member_id: The assigned consumer id or an empty string for a new consumer.
+# protocol_type: Unique name for class of protocols implemented by group
+# group_protocols: List of protocols that the member supports
+
+
+JoinGroupRequestV1 => group_id session_timeout rebalance_timeout member_id protocol_type [group_protocols]
+  group_id => STRING
+  session_timeout => INT32
+  rebalance_timeout => INT32
+  member_id => STRING
+  protocol_type => STRING
+  group_protocols => protocol_name protocol_metadata
+    protocol_name => STRING
+    protocol_metadata => BYTES
+
+# group_id: The group id.
+# session_timeout: The coordinator considers the consumer dead if it receives no heartbeat after this timeout in ms.
+# rebalance_timeout: The maximum time that the coordinator will wait for each member to rejoin when rebalancing the group
+# member_id: The assigned consumer id or an empty string for a new consumer.
+# protocol_type: Unique name for class of protocols implemented by group
+# group_protocols: List of protocols that the member supports
+
+
+JoinGroupResponseV0 => error_code generation_id group_protocol leader_id member_id [members]
+  error_code => INT16
+  generation_id => INT32
+  group_protocol => STRING
+  leader_id => STRING
+  member_id => STRING
+  members => member_id member_metadata
+    member_id => STRING
+    member_metadata => BYTES
+
+# generation_id: The generation of the consumer group.
+# group_protocol: The group protocol selected by the coordinator
+# leader_id: The leader of the group
+# member_id: The consumer id assigned by the group coordinator.
+
+
+JoinGroupResponseV1 => error_code generation_id group_protocol leader_id member_id [members]
+  error_code => INT16
+  generation_id => INT32
+  group_protocol => STRING
+  leader_id => STRING
+  member_id => STRING
+  members => member_id member_metadata
+    member_id => STRING
+    member_metadata => BYTES
+
+# generation_id: The generation of the consumer group.
+# group_protocol: The group protocol selected by the coordinator
+# leader_id: The leader of the group
+# member_id: The consumer id assigned by the group coordinator.
+
+
+HeartbeatRequestV0 => group_id group_generation_id member_id
+  group_id => STRING
+  group_generation_id => INT32
+  member_id => STRING
+
+# group_id: The group id.
+# group_generation_id: The generation of the group.
+# member_id: The member id assigned by the group coordinator.
+
+
+HeartbeatResponseV0 => error_code
+  error_code => INT16
+
+
+
+LeaveGroupRequestV0 => group_id member_id
+  group_id => STRING
+  member_id => STRING
+
+# group_id: The group id.
+# member_id: The member id assigned by the group coordinator.
+
+
+LeaveGroupResponseV0 => error_code
+  error_code => INT16
+
+
+
+SyncGroupRequestV0 => group_id generation_id member_id [group_assignment]
+  group_id => STRING
+  generation_id => INT32
+  member_id => STRING
+  group_assignment => member_id member_assignment
+    member_id => STRING
+    member_assignment => BYTES
+
+
+
+SyncGroupResponseV0 => error_code member_assignment
+  error_code => INT16
+  member_assignment => BYTES
+
+
+
+DescribeGroupsRequestV0 => [group_ids]
+  group_ids => STRING
+
+# group_ids: List of groupIds to request metadata for (an empty groupId array will return empty group metadata).
+
+
+DescribeGroupsResponseV0 => [groups]
+  groups => error_code group_id state protocol_type protocol [members]
+    error_code => INT16
+    group_id => STRING
+    state => STRING
+    protocol_type => STRING
+    protocol => STRING
+    members => member_id client_id client_host member_metadata member_assignment
+      member_id => STRING
+      client_id => STRING
+      client_host => STRING
+      member_metadata => BYTES
+      member_assignment => BYTES
+
+# state: The current state of the group (one of: Dead, Stable, AwaitingSync, or PreparingRebalance, or empty if there is no active group)
+# protocol_type: The current group protocol type (will be empty if there is no active group)
+# protocol: The current group protocol (only provided if the group is Stable)
+# members: Current group members (only provided if the group is not Dead)
+# member_id: The memberId assigned by the coordinator
+# client_id: The client id used in the member's latest join group request
+# client_host: The client host used in the request session corresponding to the member's join group.
+# member_metadata: The metadata corresponding to the current group protocol in use (will only be present if the group is stable).
+# member_assignment: The current assignment provided by the group leader (will only be present if the group is stable).
+
+
+ListGroupsRequestV0 => 
+
+
+
+ListGroupsResponseV0 => error_code [groups]
+  error_code => INT16
+  groups => group_id protocol_type
+    group_id => STRING
+    protocol_type => STRING
+
+
+
+SaslHandshakeRequestV0 => mechanism
+  mechanism => STRING
+
+# mechanism: SASL Mechanism chosen by the client.
+
+
+SaslHandshakeResponseV0 => error_code [enabled_mechanisms]
+  error_code => INT16
+  enabled_mechanisms => STRING
+
+# enabled_mechanisms: Array of mechanisms enabled in the server.
+
+
+ApiVersionsRequestV0 => 
+
+
+
+ApiVersionsResponseV0 => error_code [api_versions]
+  error_code => INT16
+  api_versions => api_key min_version max_version
+    api_key => INT16
+    min_version => INT16
+    max_version => INT16
+
+# error_code: Error code.
+# api_versions: API versions supported by the broker.
+# api_key: API key.
+# min_version: Minimum supported version.
+# max_version: Maximum supported version.
+
+
+CreateTopicsRequestV0 => [create_topic_requests] timeout
+  create_topic_requests => topic num_partitions replication_factor [replica_assignment] [configs]
+    topic => STRING
+    num_partitions => INT32
+    replication_factor => INT16
+    replica_assignment => partition_id [replicas]
+      partition_id => INT32
+      replicas => INT32
+    configs => config_key config_value
+      config_key => STRING
+      config_value => STRING
+  timeout => INT32
+
+# create_topic_requests: An array of single topic creation requests. Can not have multiple entries for the same topic.
+# topic: Name for newly created topic.
+# num_partitions: Number of partitions to be created. -1 indicates unset.
+# replication_factor: Replication factor for the topic. -1 indicates unset.
+# replica_assignment: Replica assignment among kafka brokers for this topic partitions. If this is set num_partitions and replication_factor must be unset.
+# replicas: The set of all nodes that should host this partition. The first replica in the list is the preferred leader.
+# configs: Topic level configuration for topic to be set.
+# config_key: Configuration key name
+# config_value: Configuration value
+# timeout: The time in ms to wait for a topic to be completely created on the controller node. Values <= 0 will trigger topic creation and return immediately
+
+
+CreateTopicsRequestV1 => [create_topic_requests] timeout validate_only
+  create_topic_requests => topic num_partitions replication_factor [replica_assignment] [configs]
+    topic => STRING
+    num_partitions => INT32
+    replication_factor => INT16
+    replica_assignment => partition_id [replicas]
+      partition_id => INT32
+      replicas => INT32
+    configs => config_key config_value
+      config_key => STRING
+      config_value => STRING
+  timeout => INT32
+  validate_only => BOOLEAN
+
+# create_topic_requests: An array of single topic creation requests. Can not have multiple entries for the same topic.
+# topic: Name for newly created topic.
+# num_partitions: Number of partitions to be created. -1 indicates unset.
+# replication_factor: Replication factor for the topic. -1 indicates unset.
+# replica_assignment: Replica assignment among kafka brokers for this topic partitions. If this is set num_partitions and replication_factor must be unset.
+# replicas: The set of all nodes that should host this partition. The first replica in the list is the preferred leader.
+# configs: Topic level configuration for topic to be set.
+# config_key: Configuration key name
+# config_value: Configuration value
+# timeout: The time in ms to wait for a topic to be completely created on the controller node. Values <= 0 will trigger topic creation and return immediately
+# validate_only: If this is true, the request will be validated, but the topic won't be created.
+
+
+CreateTopicsResponseV0 => [topic_errors]
+  topic_errors => topic error_code
+    topic => STRING
+    error_code => INT16
+
+# topic_errors: An array of per topic error codes.
+
+
+CreateTopicsResponseV1 => [topic_errors]
+  topic_errors => topic error_code error_message
+    topic => STRING
+    error_code => INT16
+    error_message => NULLABLE_STRING
+
+# topic_errors: An array of per topic errors.
+
+
+DeleteTopicsRequestV0 => [topics] timeout
+  topics => STRING
+  timeout => INT32
+
+# topics: An array of topics to be deleted.
+# timeout: The time in ms to wait for a topic to be completely deleted on the controller node. Values <= 0 will trigger topic deletion and return immediately
+
+
+DeleteTopicsResponseV0 => [topic_error_codes]
+  topic_error_codes => topic error_code
+    topic => STRING
+    error_code => INT16
+
+# topic_error_codes: An array of per topic error codes.
+
+

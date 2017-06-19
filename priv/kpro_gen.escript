@@ -17,341 +17,131 @@
 %%%   limitations under the License.
 %%%
 
+%% This script reads definitions of kafka data structures from priv/kafka.bnf
+%% and generates:
+%%   src/kpro_schema.erl
+
 -mode(compile).
 
--include("../include/kpro_common.hrl").
+-include("../include/kpro_private.hrl").
 
-main(_) ->
+main(_Args) ->
   ok = file:set_cwd(this_dir()),
   {ok, _} = leex:file(kpro_scanner),
-  {ok, _} = compile:file("kpro_scanner.erl", [debug_info]),
+  {ok, _} = compile:file(kpro_scanner, [report_errors]),
   {ok, _} = yecc:file(kpro_parser),
-  {ok, _} = compile:file("kpro_parser.erl", [debug_info]),
-  Tokens = kpro_scanner:file("kafka.bnf"),
-  Records = to_records(parse(Tokens, [])),
-  generate_code(Records).
+  {ok, _} = compile:file(kpro_parser, [report_errors]),
+  {ok, DefGroups} = kpro_parser:file("kafka.bnf"),
+  ExpandedTypes = [I || I <- lists:map(fun expand/1, DefGroups), is_tuple(I)],
+  GrouppedTypes = group_per_name(ExpandedTypes, []),
+  ok = generate_schema_module(GrouppedTypes).
 
-parse([], Acc) ->
-  lists:reverse(Acc);
-parse([Def | Defs], Acc) ->
-  ParsedDef = parse(Def),
-  parse(Defs, [ParsedDef | Acc]).
+-define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
+-module(kpro_schema).
+-export([get/2]).
+").
 
-parse(TokensList) ->
-  lists:map(
-    fun(Tokens) ->
-      {ok, {Tag, Def}} = kpro_parser:parse(Tokens),
-      {Tag, Def}
-    end, TokensList).
-
-to_records(Defs) ->
-  lists:flatten(lists:map(fun records/1, Defs)).
-
-global_name_atom(Name) when is_atom(Name) ->
-  global_name_atom(atom_to_list(Name));
-global_name_atom(NameStr) when is_list(NameStr) ->
-  list_to_atom("kpro_" ++ string:strip(NameStr, both, $')).
-
-records(Def) -> records(Def, Def).
-
-records([], _Def) -> [];
-records([{Name, Fields} | Rest], Def) when is_list(Fields) ->
-  Rec = {global_name_atom(Name), fields(Fields, Def)},
-  [Rec | records(Rest, Def)];
-records([_ | Rest], Def) ->
-  records(Rest, Def).
-
-fields(Fields, Def) ->
-  lists:map(fun(Field) ->
-              {field_name(Field), field_type(Field, Def)}
-            end, Fields).
-
-field_name(Name) when is_atom(Name) ->
-  lowercase_leading(Name);
-field_name({array, Name}) ->
-  %% for array fields, append a _L suffix to the name
-  list_to_atom(atom_to_list(field_name(Name)) ++ "_L").
-
-field_type(Name, Def) when is_atom(Name) ->
-  case lists:keyfind(Name, 1, Def) of
-    false ->
-      %% They claim the bnf to be context free, however there are still
-      %% few cases where external reference is used, such as message set
-      %% definition.
-      global_name_atom(Name);
-    {_, Fields} when is_list(Fields) ->
-      %% internal reference
-      global_name_atom(Name);
-    {_, Type} when is_atom(Type) ->
-      %% this is a primitive type field, such as int8, string, bytes etc.
-      Type;
-    {_, {array, Type}} ->
-      %% only primitive types possible here
-      true = ?IS_KAFKA_PRIMITIVE(Type),
-      {array, Type};
-    {_, {one_of, Refs}} ->
-      {one_of, [global_name_atom(R) || R <- Refs]}
-  end;
-field_type({array, Name}, Def) ->
-  {array, field_type(Name, Def)}.
-
-generate_code(Records) ->
-  ok = gen_header_file(Records),
-  ok = gen_records_module(Records),
-  ok = gen_marshaller(Records).
-
-gen_header_file(Records) ->
-  Blocks =
-    [ "%% generated code, do not edit!"
-    , ""
-    , "-ifndef(kpro_hrl)."
-    , "-define(kpro_hrl, true)."
-    , ""
-    , "-include(\"kpro_common.hrl\")."
-    , ""
-    , [gen_records(Records), gen_types(Records)]
-    , ""
-    , "-endif.\n"
+generate_schema_module(GrouppedTypes) ->
+  Filename = filename:join(["..", "src", "kpro_schema.erl"]),
+  Clauses = lists:flatmap(fun generate_schema_clauses/1, GrouppedTypes),
+  IoData =
+    [?SCHEMA_MODULE_HEADER,
+     "\n",
+     infix(Clauses, ";\n"),
+     ".\n\n"
     ],
-  IoData = infix(Blocks, "\n"),
-  Filename = filename:join(["..", "include", "kpro.hrl"]),
-  ok = file:write_file(Filename, IoData).
+  file:write_file(Filename, IoData).
 
-gen_types([]) -> [];
-gen_types([{kpro_Message, _Fields} | Rest]) ->
-  %% a special clause for incomplete message
-  ["\n-type kpro_Message() :: incomplete_message | #kpro_Message{}.",
-   gen_types(Rest)];
-gen_types([{Name, _Fields} | Rest]) ->
-  RecName = atom_to_list(Name),
-  [ bin(["\n-type ", RecName, "() :: #", RecName, "{}."])
-  | gen_types(Rest)
-  ].
+generate_schema_clauses({Name, VersionedFields0}) ->
+  VersionedFields = lists:keysort(1, VersionedFields0),
+  generate_schema_clauses(Name, merge_versions(VersionedFields)).
 
-gen_records([]) -> [];
-gen_records([Rec | Rest]) ->
-  [gen_record(Rec), gen_records(Rest)].
-
-gen_record({Name, Fields}) ->
-  {FieldLines, TypeRefs} = gen_record_fields(Fields, [], []),
-  ["-record(", atom_to_list(Name), ",\n",
-   "        { ",
-              infix(FieldLines, "        , "),
-   "        }).\n\n",
-   TypeRefs
-  ].
-
-gen_records_module(Records) ->
-  Blocks =
-    [ "%% generated code, do not edit!"
-    , ""
-    , "-module(kpro_records)."
-    , "-export([fields/1])."
-    , "-include(\"kpro.hrl\")."
-    , ""
-    , [ [gen_record_fields_clause(Record) || Record <- Records]
-      , "fields(_Unknown) -> false."
-      ]
-    ],
-  IoData = infix(Blocks, "\n"),
-  Filename = filename:join(["..", "src", "kpro_records.erl"]),
-  ok = file:write_file(Filename, IoData).
-
-%% fields(#kpro_Xyz{} = R) ->
-%%  record_info(fields, kpro_Xyz);
-gen_record_fields_clause({RecordName, _Fields}) ->
-  Name = atom_to_list(RecordName),
-  [ "fields(", Name, ") ->\n"
-  , "  record_info(fields, ", Name, ");\n"
-  ].
-
-%% change the first char to lower case
-lowercase_leading(Name) ->
-  [H | T] = atom_to_list(Name),
-  list_to_atom([H + ($a - $A) | T]).
-
-uppercase_leading(Name) ->
-  [H | T] = atom_to_list(Name),
-  [H - ($a - $A) | T].
-
-gen_record_fields([], FieldLines, TypeRefs) ->
-  {lists:reverse(FieldLines), TypeRefs};
-gen_record_fields([{Name, Type} | Fields], FieldLines, TypeRefs0) ->
-  FieldName = atom_to_list(Name),
-  {FieldType, TypeRefs} =
-    case Type of
-      {one_of, Refs} ->
-        gen_union_type(Name, Refs, TypeRefs0);
-      _ ->
-        {gen_field_type(list_to_atom(FieldName), Type), TypeRefs0}
+generate_schema_clauses(_Name, []) -> [];
+generate_schema_clauses(Name, [{Versions, Fields} | Rest]) ->
+  Head =
+    case Versions of
+      V when is_integer(V) ->
+        ["get(", Name, ", ", integer_to_list(V), ") ->"];
+      [V | Vs] ->
+        MinV = integer_to_list(V),
+        MaxV = integer_to_list(lists:last(Vs)),
+        ["get(", Name, ", V) when V >= ", MinV, ", V =< ", MaxV, " ->"]
     end,
-  FieldLine = iolist_to_binary([ FieldName, " :: ", FieldType, "\n" ]),
-  gen_record_fields(Fields, [FieldLine | FieldLines], TypeRefs).
+  Body = io_lib:format("  ~p", [Fields]),
+  [ iolist_to_binary([Head, "\n", Body])
+  | generate_schema_clauses(Name, Rest)
+  ].
 
-gen_union_type(FieldName, TypeRefs, IoDataAcc) ->
-  GNameAtom = global_name_atom(uppercase_leading(FieldName)),
-  RefTypeNameStr = atom_to_list(GNameAtom),
-  Width = length(RefTypeNameStr) + length("-type  :: "),
-  Sep = "\n" ++ lists:duplicate(Width, $\s) ++ "| ",
-  { RefTypeNameStr ++ "()"
-  , [ IoDataAcc
-    , "-type ", RefTypeNameStr, "() :: "
-    , infix(lists:map(fun(Name) ->
-                        atom_to_list(Name) ++ "()"
-                      end, TypeRefs), Sep)
-    , ".\n\n"
-    ]}.
+group_per_name([], Acc) -> Acc;
+group_per_name([ExpandedType | Rest], Acc) ->
+  {Name, Version, Fields} = split_name_version(ExpandedType),
+  AccumulatedVersions1 =
+    case lists:keyfind(Name, 1, Acc) of
+      false ->
+        [];
+      {_, AccumulatedVersions0} ->
+        AccumulatedVersions0
+    end,
+  AccumulatedVersions = [{Version, Fields} | AccumulatedVersions1],
+  NewAcc = lists:keystore(Name, 1, Acc, {Name, AccumulatedVersions}),
+  group_per_name(Rest, NewAcc).
 
-%% generate special pre-defined types.
-%% all 'errorCode' fields should have error_code() spec
-%% use 'any()' spec for all embeded 'bytes' fields
-gen_field_type(errorCode, _)     -> "kpro:error_code()";
-gen_field_type(protocolMetadata, bytes) -> "any()";
-gen_field_type(memberAssignment, bytes) -> "any()";
-gen_field_type(key, bytes) -> "kpro:kafka_key()";
-gen_field_type(value, bytes) -> "kpro:kafka_value()";
-gen_field_type(_FieldName, Type) -> gen_field_type(Type).
+merge_versions([]) -> [];
+merge_versions([_] = L) -> L;
+merge_versions([{V1, Fields1}, {V2, Fields2} | Rest]) ->
+  case Fields1 =:= Fields2 of
+    true ->
+      Versions = lists:flatten([V1, V2]),
+      merge_versions([{Versions, Fields1} | Rest]);
+    false ->
+      [{V1, Fields1} | merge_versions([{V2, Fields2} | Rest])]
+  end.
 
-gen_field_type(int8)   -> "kpro:int8()";
-gen_field_type(int16)  -> "kpro:int16()";
-gen_field_type(int32)  -> "kpro:int32()";
-gen_field_type(int64)  -> "kpro:int64()";
-gen_field_type(string) -> "kpro:str()";
-gen_field_type(bytes)  -> "binary()";
-gen_field_type({array, Name}) ->
-  "[" ++ gen_field_type(Name) ++ "]";
-gen_field_type(Name) when is_atom(Name) ->
-  atom_to_list(Name) ++ "()".
+split_name_version({Tag, Fields}) ->
+  [Vsn, $v, $_ | NameReversed] =
+    lists:reverse(underscorize(atom_to_list(Tag))),
+  Name = lists:reverse(NameReversed),
+  Version = Vsn - $0,
+  {Name, Version, Fields}.
 
-infix([], _Sep) -> [];
-infix([Str], _Sep) -> [Str];
-infix([H | T], Sep) -> [H, Sep | infix(T, Sep)].
+expand([{Tag, Fields} | Refs]) ->
+  {Tag, expand_fields(Fields, Refs)}.
 
-record_pattern(Name) ->
-  "#" ++ atom_to_list(Name) ++ "{}".
+expand_fields([], _Refs) -> [];
+expand_fields([Name | Rest], Refs) when is_atom(Name) ->
+  {Name, Type0} = lists:keyfind(Name, 1, Refs),
+  Type = expand_type(Type0, Refs),
+  [{Name, Type} | expand_fields(Rest, Refs)];
+expand_fields([{array, Name} | Rest], Refs) ->
+  {Name, Type0} = lists:keyfind(Name, 1, Refs),
+  Type = expand_type(Type0, Refs),
+  [{Name, {array, Type}} | expand_fields(Rest, Refs)].
+
+expand_type(Type, _Refs) when ?IS_KAFKA_PRIMITIVE(Type) ->
+  Type;
+expand_type(Fields, Refs) when is_list(Fields) ->
+  expand_fields(Fields, Refs).
 
 this_dir() ->
   ThisScript = escript:script_name(),
   filename:dirname(ThisScript).
 
-gen_marshaller(Records) ->
-  Filename = filename:join(["..", "src", "kpro_structs.erl"]),
-  Header0 =
-    [ "%% generated code, do not edit!"
-    , "-module(kpro_structs)."
-    , "-export([encode/1])."
-    , "-export([decode/2])."
-    , "-include(\"kpro.hrl\")."
-    ],
-  IoData =
-    [ infix(Header0, "\n")
-    , "\n"
-    , gen_clauses(encoder, Records)
-    , "\n"
-    , gen_clauses(decoder, Records)
-    , "\n"
-    , "enc(X) -> kpro:encode(X).\n"
-    , "\n"
-    ],
-  ok = file:write_file(Filename, IoData),
-  ok = erl_tidy:file(Filename),
-  ok.
+%% "FooBarV1" -> "foo_bar_v1"
+underscorize([H | T]) ->
+    [ string:to_lower(H) |
+      lists:flatmap(
+        fun(C) ->
+            case $A =< C andalso C =< $Z  of
+               true -> [$_, string:to_lower(C)];
+               false -> [C]
+            end
+        end, T)].
 
-all_requests() ->
-  lists:flatten(
-    lists:map(
-      fun(ApiKey) -> ?API_KEY_TO_REQ(ApiKey) end, ?ALL_API_KEYS)) ++
-  ?CONSUMER_GROUP_STRUCTS.
+infix([], _Sep) -> [];
+infix([Str], _Sep) -> [Str];
+infix([H | T], Sep) -> [H, Sep | infix(T, Sep)].
 
-all_responses() ->
-  lists:map(fun(ApiKey) -> ?API_KEY_TO_RSP(ApiKey) end, ?ALL_API_KEYS) ++
-  ?CONSUMER_GROUP_STRUCTS.
-
-gen_clauses(EncDec, Records) ->
-  Names = case EncDec of
-            encoder -> all_requests();
-            decoder -> all_responses()
-          end,
-  Clauses0 = gen_clauses(EncDec, Names, Records),
-  Clauses1 = lists:flatten(Clauses0),
-  Clauses  = lists:filter(fun(I) -> I =/= <<>> end, Clauses1),
-  [infix(Clauses, ";\n"), "."].
-
-gen_clauses(_EncDec, [], _Records) -> [];
-gen_clauses(EncDec, [Name | Rest], Records) ->
-  Clauses = gen_clauses(EncDec, Name, Records),
-  [Clauses | gen_clauses(EncDec, Rest, Records)];
-gen_clauses(EncDec, Name, Records) when is_atom(Name) ->
-  case get({EncDec, Name}) of
-    undefined ->
-      put({EncDec, Name}, generated),
-      {_, Fields} = lists:keyfind(Name, 1, Records),
-      IoData = gen_clause(EncDec, Name, Fields),
-      RefNames = get_ref_names(Fields),
-      [ iolist_to_binary(IoData)
-      , lists:map(fun(N) -> gen_clauses(EncDec, N, Records) end, RefNames)];
-    generated ->
-      []
-  end.
-
-get_ref_names([]) -> [];
-get_ref_names([{_N, {array, T}} | Rest]) when not ?IS_KAFKA_PRIMITIVE(T) ->
-  [T | get_ref_names(Rest)];
-get_ref_names([{_N, T} | Rest]) when is_atom(T), not ?IS_KAFKA_PRIMITIVE(T) ->
-  [T | get_ref_names(Rest)];
-get_ref_names([_ | Rest]) ->
-  get_ref_names(Rest).
-
-%% generate a encode/decode function clause for one structure.
-%%
-%% encoder example:
-%%
-%% encode(Record) ->
-%%  [ enc(Field1Type, Record#recordMame.field1Name),
-%%    enc(Field1Type, Record#recordMame.field1Name),
-%%    ...]
-%%
-%% decoder example:
-%%
-%% decode(RecordName, Bin) ->
-%%    kpro:decode_fields(RecordName, Fields, Bin).
-%%
-gen_clause(encoder, Name, Fields) ->
-  VariableName = case Fields of
-                   [] -> "";
-                   _  -> " = R"
-                 end,
-  RecName = atom_to_list(Name),
-  FieldPrefix = "R#" ++ RecName ++ ".",
-  [ "encode(" ++ record_pattern(Name) ++ VariableName ++ ")->\n"
-  , "  ["
-  ,      infix(gen_field_encoders(FieldPrefix, Fields), ",\n   ")
-  , "\n"
-  , "  ]"
-  ];
-gen_clause(decoder, Name, Fields) ->
-  [ "decode(", atom_to_list(Name) ,", Bin) ->\n"
-  , "Fields = ", gen_field_types(Fields), ","
-  , "kpro:decode_fields(", atom_to_list(Name), ", Fields, Bin)"
-  ].
-
-gen_field_encoders(_Prefix, []) -> [];
-gen_field_encoders(Prefix, [{FieldName, FieldType} | Fields]) ->
-  FieldV_code = Prefix ++ atom_to_list(FieldName),
-  [ bin(["enc(", encode_arg_code(FieldType, FieldV_code), ")"])
-  | gen_field_encoders(Prefix, Fields)].
-
-encode_arg_code(T, V) when ?IS_KAFKA_PRIMITIVE(T) ->
-  ["{", atom_to_list(T), ", ", V, "}"];
-encode_arg_code({array, T}, V) when ?IS_KAFKA_PRIMITIVE(T) ->
-  ["{{array,", atom_to_list(T), "}, ", V, "}"];
-encode_arg_code({array, _T}, V) ->
-  ["{array, ", V, "}"];
-encode_arg_code(_T, V) ->
-  V.
-
-bin(IoList) -> iolist_to_binary(IoList).
-
-gen_field_types(Fields) ->
-  io_lib:format("~p", [Fields]).
-
+%%% Local Variables:
+%%% allout-layout: t
+%%% erlang-indent-level: 2
+%%% End:

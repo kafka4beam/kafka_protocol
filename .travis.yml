@@ -18,23 +18,12 @@ otp_release:
   - 17.5
 
 script:
-  - make vsn-check
   - make
   - make xref
   - make edoc
+  - make dialyze
+# test rebar
   - make distclean
   - rebar get-deps
   - rebar compile
-  - make distclean
-  - rebar3 compile
-# test with snappy disabled
-  - make distclean
-  - export KAFKA_PROTOCOL_NO_SNAPPY=1
-  - make vsn-check
-  - make xref
-  - make distclean
-  - rebar get-deps
-  - rebar compile
-  - make distclean
-  - rebar3 compile
 

@@ -2,9 +2,6 @@
 *.plt
 *.d
 /ebin
-include/kpro.hrl
-src/kpro_structs.erl
-src/kpro_records.erl
 xrefr
 doc/
 logs/
@@ -15,3 +12,4 @@ erl_crash.dump
 *.crashdump
 .rebar/
 rebar.lock
+.gradle/

@@ -1,5 +1,5 @@
 %%%
-%%%   Copyright (c) 2014-2016, Klarna AB
+%%%   Copyright (c) 2014-2017, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -28,8 +28,7 @@
 -include("kpro.hrl").
 
 -type tag() :: offset | group.
--type decoded_kv() :: [{atom(), term()}].
--type decoded() :: {tag(), Key::decoded_kv(), Value::decoded_kv()}.
+-type decoded() :: {tag(), Key::kpro:struct(), Value::kpro:struct()}.
 
 %%%_* APIs =====================================================================
 
@@ -78,14 +77,15 @@
 %%           topic_partitions :: [{Topic::binary(), [Partition::integer()]}]
 %%           user_data        :: undefined | binary()
 %% @end
--spec decode(binary(), undefined | binary()) -> decoded().
+-spec decode(binary(), ?kpro_null | binary()) -> decoded().
 decode(KeyBin, ValueBin) ->
   {Tag, Key} = key(KeyBin),
   value(Tag, Key, ValueBin).
 
 %%%_* Internal functions =======================================================
 
--spec key(binary()) -> {tag(), decoded_kv()}.
+%% @private
+-spec key(binary()) -> {tag(), kpro:struct()}.
 key(<<V:16/integer, _/binary>> = Bin) when V =:= 0 orelse V =:=1 ->
   Schema = [ {version, int16}
            , {group_id, string}
@@ -99,9 +99,9 @@ key(<<2:16/integer, _/binary>> = Bin) ->
            ],
   {group, dec(Schema, Bin)}.
 
-
--spec value(tag(), decoded_kv(), binary()) -> decoded().
-value(Tag, Key, V) when V =:= <<>> orelse V =:= undefined ->
+%% @private
+-spec value(tag(), kpro:struct(), binary()) -> decoded().
+value(Tag, Key, V) when V =:= <<>> orelse V =:= ?kpro_null ->
   {Tag, Key, []};
 value(offset, Key, <<0:16/integer, _/binary>> = Bin) ->
   Schema = [ {version, int16}
@@ -119,24 +119,24 @@ value(offset, Key, <<1:16/integer, _/binary>> = Bin) ->
            ],
   {offset, Key, dec(Schema, Bin)};
 value(group, Key, ValueBin) ->
-  {version, KeyVersion} = lists:keyfind(version, 1, Key),
+  KeyVersion = kpro:find(version, Key),
   {group, Key, group(KeyVersion, ValueBin)}.
 
+%% @private
+-spec group(kpro:vsn(), binary()) -> kpro:struct() | no_return().
 group(_KeyVersion = 2, <<ValueVersion:16/integer, _/binary>> = Bin) ->
-  MemberMetadataDecodeFun =
-    fun(MetadataBin) ->
-      MetadataSchema = group_member_metadata_schema(ValueVersion),
-      do_dec(MetadataSchema, MetadataBin, [])
-    end,
+  MemberMetaSchema = group_member_metadata_schema(ValueVersion),
   Schema = [ {version, int16}
            , {protocol_type, string}
            , {generation_id, int32}
            , {protocol, string}
            , {leader, string}
-           , {members, {array, MemberMetadataDecodeFun}}
+           , {members, {array, MemberMetaSchema}}
            ],
   dec(Schema, Bin).
 
+%% @private
+-spec group_member_metadata_schema(kpro:vsn()) -> kpro:schema().
 group_member_metadata_schema(_Version = 0)->
   [ {member_id, string}
   , {client_id, string}
@@ -155,53 +155,41 @@ group_member_metadata_schema(_Version = 1) ->
   , {assignment, fun assignment/1}
   ].
 
+%% @private
 nullable_bytes(Bin, BytesDecoder) ->
   case kpro:decode(bytes, Bin) of
     {<<>>, Rest} ->
-      {undefined, Rest};
+      {?kpro_null, Rest};
     {Bytes, Rest} ->
       {BytesDecoder(Bytes), Rest}
   end.
 
+%% @private
 subscription(Bytes) -> nullable_bytes(Bytes, fun decode_subscription/1).
 
+%% @private
 assignment(Bytes) -> nullable_bytes(Bytes, fun decode_assignment/1).
 
+%% @private
 decode_subscription(Bytes) ->
-  {M, <<>>} = kpro:decode(kpro_ConsumerGroupProtocolMetadata, Bytes),
-  #kpro_ConsumerGroupProtocolMetadata{ version = Version
-                                     , topicName_L = Topics
-                                     , userData = UserData
-                                     } = M,
-  [ {version, Version}
-  , {topics, Topics}
-  , {user_data, UserData}
-  ].
+  Module = kpro_prelude_schema,
+  Tag = cg_protocol_metadata,
+  Vsn = 0,
+  {R, <<>>} = kpro:decode_struct(Module, Tag, Vsn, Bytes),
+  R.
 
+%% @private
 decode_assignment(Bytes) ->
-  {Assignment, <<>>} = kpro:decode(kpro_ConsumerGroupMemberAssignment, Bytes),
-  #kpro_ConsumerGroupMemberAssignment{ version = Version
-                                     , consumerGroupPartitionAssignment_L = PL
-                                     , userData = UserData
-                                     } = Assignment,
-  TPs =
-    [ {Topic, Partitions}
-      || #kpro_ConsumerGroupPartitionAssignment{ topicName = Topic
-                                               , partition_L = Partitions
-                                               } <- PL ],
-  [ {version, Version}
-  , {topic_partitions, TPs}
-  , {user_data, UserData}
-  ].
+  Module = kpro_prelude_schema,
+  Tag = cg_memeber_assignment,
+  Vsn = 0,
+  {Assignment, <<>>} = kpro:decode_struct(Module, Tag, Vsn, Bytes),
+  Assignment.
 
+%% @private
 dec(Schema, Bin) ->
-  {Fields, <<>>} = do_dec(Schema, Bin, []),
-  Fields.
-
-do_dec([], Rest, Fields) -> {lists:reverse(Fields), Rest};
-do_dec([{FieldName, Type} | Schema], Bin, Fields) when is_binary(Bin) ->
-  {Value, Rest} = kpro:decode(Type, Bin),
-  do_dec(Schema, Rest, [{FieldName, Value} | Fields]).
+  {R, <<>>} = kpro:dec_struct(Schema, [], [], Bin),
+  R.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

@@ -1,5 +1,5 @@
 %%%
-%%%   Copyright (c) 2014 - 2016 Klarna AB
+%%%   Copyright (c) 2014 - 2017 Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -14,24 +14,14 @@
 %%%   limitations under the License.
 %%%
 
-%%%=============================================================================
-%%% @doc A kafka error code handling.
-%%%      [https://github.com/apache/kafka/blob/0.9.0/clients/src/
-%%%       main/java/org/apache/kafka/common/protocol/Errors.java]
-%%% @copyright 2014 - 2016 Klarna AB
-%%% @end
-%%%=============================================================================
-
--module(kpro_ErrorCode).
+-module(kpro_error_code).
 
 -export([ desc/1
         , decode/1
         , is_error/1
         ]).
 
--include("kpro_common.hrl").
-
--define(KAFKA_VERSION_STR, <<"0.9.0.0">>).
+-include("kpro_private.hrl").
 
 %% @doc Return true if it is not ZERO error code.
 is_error(0)        -> false;
@@ -77,6 +67,16 @@ decode(30) -> ?EC_GROUP_AUTHORIZATION_FAILED;
 decode(31) -> ?EC_CLUSTER_AUTHORIZATION_FAILED;
 decode(33) -> ?EC_UNSUPPORTED_SASL_MECHANISM;
 decode(34) -> ?EC_ILLEGAL_SASL_STATE;
+decode(35) -> ?EC_UNSUPPORTED_VERSION;
+decode(36) -> ?EC_TOPIC_ALREADY_EXISTS;
+decode(37) -> ?EC_INVALID_PARTITIONS;
+decode(38) -> ?EC_INVALID_REPLICATION_FACTOR;
+decode(39) -> ?EC_INVALID_REPLICA_ASSIGNMENT;
+decode(40) -> ?EC_INVALID_CONFIG;
+decode(41) -> ?EC_NOT_CONTROLLER;
+decode(42) -> ?EC_INVALID_REQUEST;
+decode(43) -> ?EC_UNSUPPORTED_FOR_MESSAGE_FORMAT;
+decode(44) -> ?EC_POLICY_VIOLATION;
 decode(X)  -> (true = is_integer(X)) andalso X.
 
 %% @doc Get description string of error codes.
@@ -165,8 +165,30 @@ do_desc(?EC_UNSUPPORTED_SASL_MECHANISM) ->
   <<"The broker does not support the requested SASL mechanism.">>;
 do_desc(?EC_ILLEGAL_SASL_STATE) ->
   <<"Request is not valid given the current SASL state.">>;
+do_desc(?EC_UNSUPPORTED_VERSION) ->
+  <<"The version of API is not supported.">>;
+do_desc(?EC_TOPIC_ALREADY_EXISTS) ->
+  <<"Topic with this name already exists.">>;
+do_desc(?EC_INVALID_PARTITIONS) ->
+  <<"Number of partitions is invalid.">>;
+do_desc(?EC_INVALID_REPLICATION_FACTOR) ->
+  <<"Replication-factor is invalid.">>;
+do_desc(?EC_INVALID_REPLICA_ASSIGNMENT) ->
+  <<"Replica assignment is invalid.">>;
+do_desc(?EC_INVALID_CONFIG) ->
+  <<"Configuration is invalid.">>;
+do_desc(?EC_NOT_CONTROLLER) ->
+  <<"This is not the correct controller for this cluster.">>;
+do_desc(?EC_INVALID_REQUEST) ->
+  <<"This most likely occurs because of a request being malformed "
+    "by the client library or the message was sent to an incompatible "
+    "broker. See the broker logs for more details.">>;
+do_desc(?EC_UNSUPPORTED_FOR_MESSAGE_FORMAT) ->
+  <<"The message format version on the broker does not support the request.">>;
+do_desc(?EC_POLICY_VIOLATION) ->
+  <<"Request parameters do not satisfy the configured policy.">>;
 do_desc(X) when is_integer(X) ->
-  <<"Undefined error code for kafka ", ?KAFKA_VERSION_STR/binary>>.
+  <<"Unknown error code">>.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
