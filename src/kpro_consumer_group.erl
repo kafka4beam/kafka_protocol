@@ -77,7 +77,7 @@
 %%           topic_partitions :: [{Topic::binary(), [Partition::integer()]}]
 %%           user_data        :: undefined | binary()
 %% @end
--spec decode(binary(), undefined | binary()) -> decoded().
+-spec decode(binary(), ?kpro_null | binary()) -> decoded().
 decode(KeyBin, ValueBin) ->
   {Tag, Key} = key(KeyBin),
   value(Tag, Key, ValueBin).
@@ -101,7 +101,7 @@ key(<<2:16/integer, _/binary>> = Bin) ->
 
 %% @private
 -spec value(tag(), kpro:struct(), binary()) -> decoded().
-value(Tag, Key, V) when V =:= <<>> orelse V =:= undefined ->
+value(Tag, Key, V) when V =:= <<>> orelse V =:= ?kpro_null ->
   {Tag, Key, []};
 value(offset, Key, <<0:16/integer, _/binary>> = Bin) ->
   Schema = [ {version, int16}
@@ -159,7 +159,7 @@ group_member_metadata_schema(_Version = 1) ->
 nullable_bytes(Bin, BytesDecoder) ->
   case kpro:decode(bytes, Bin) of
     {<<>>, Rest} ->
-      {undefined, Rest};
+      {?kpro_null, Rest};
     {Bytes, Rest} ->
       {BytesDecoder(Bytes), Rest}
   end.

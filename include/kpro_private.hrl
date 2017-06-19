@@ -108,6 +108,8 @@
           20 -> delete_topics_response
         end).
 
+-define(null, ?kpro_null).
+
 -endif.
 
 %%%_* Emacs ====================================================================

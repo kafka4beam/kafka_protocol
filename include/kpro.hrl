@@ -36,7 +36,9 @@
 
 
 -define(incomplete_message(ExpectedSize), {incomplete_message, ExpectedSize}).
--define(kpro_cg_no_assignment, no_assignment).
+-define(kpro_null, undefined).
+-define(kpro_cg_no_assignment, ?kpro_null).
+-define(kpro_cg_no_member_metadata, ?kpro_null).
 
 -endif.
 

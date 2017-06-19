@@ -84,9 +84,9 @@
 -type int16()      :: -32768..32767.
 -type int32()      :: -2147483648..2147483647.
 -type int64()      :: -9223372036854775808..9223372036854775807.
--type str()        :: undefined | string() | binary().
--type bytes()      :: undefined | binary().
--type records()    :: undefined | binary().
+-type str()        :: ?null | string() | binary().
+-type bytes()      :: ?null | binary().
+-type records()    :: ?null | binary().
 -type api_key()    :: 0..20.
 -type error_code() :: int16() | atom().
 
@@ -97,12 +97,12 @@
 -type partition() :: int32().
 -type offset()    :: int64().
 
--type key() :: undefined | iodata().
--type value() :: undefined | iodata() | [{key(), kv_list()}].
+-type key() :: ?null | iodata().
+-type value() :: ?null | iodata() | [{key(), kv_list()}].
 -type kv_list() :: [{key(), value()}].
 
 -type kafka_key() :: key().
--type kafka_value() :: undefined | iodata() | [struct()].
+-type kafka_value() :: ?null | iodata() | [struct()].
 
 -type incomplete_message() :: ?incomplete_message(int32()).
 -type message() :: #kafka_message{}.
@@ -299,7 +299,7 @@ encode(int8,  I) when is_integer(I) -> <<I:8/?INT>>;
 encode(int16, I) when is_integer(I) -> <<I:16/?INT>>;
 encode(int32, I) when is_integer(I) -> <<I:32/?INT>>;
 encode(int64, I) when is_integer(I) -> <<I:64/?INT>>;
-encode(nullable_string, undefined) -> <<-1:16/?INT>>;
+encode(nullable_string, ?null) -> <<-1:16/?INT>>;
 encode(nullable_string, Str) -> encode(string, Str);
 encode(string, Atom) when is_atom(Atom) ->
   encode(string, atom_to_binary(Atom, utf8));
@@ -309,7 +309,7 @@ encode(string, L) when is_list(L) ->
 encode(string, B) when is_binary(B) ->
   Length = size(B),
   <<Length:16/?INT, B/binary>>;
-encode(bytes, undefined) -> <<-1:32/?INT>>;
+encode(bytes, ?null) -> <<-1:32/?INT>>;
 encode(bytes, B) when is_binary(B) orelse is_list(B) ->
   Size = data_size(B),
   case Size =:= 0 of
@@ -658,6 +658,8 @@ decompress(Method, Value) ->
 
 %% @private
 -spec enc_struct_field(schema(), struct(), stack()) -> iodata().
+enc_struct_field({array, _Schema}, ?null, _Stack) ->
+  encode(int32, -1); %% NULL
 enc_struct_field({array, Schema}, Values, Stack) ->
   case is_list(Values) of
     true ->
@@ -697,7 +699,10 @@ enc_embedded(_Stack, Value) -> Value.
         {field_value(), binary()}.
 dec_struct_field({array, Schema}, Stack, Bin0) ->
   {Count, Bin} = decode(int32, Bin0),
-  dec_array_elements(Count, Schema, Stack, Bin, []);
+  case Count =:= -1 of
+    true -> {?null, Bin};
+    false -> dec_array_elements(Count, Schema, Stack, Bin, [])
+  end;
 dec_struct_field(Schema, Stack, Bin) when is_list(Schema) ->
   dec_struct(Schema, [], Stack, Bin);
 dec_struct_field(F, _Stack, Bin) when is_function(F) ->
@@ -730,7 +735,10 @@ dec_embedded([partition_error_code | _], ErrorCode) ->
   kpro_error_code:decode(ErrorCode);
 dec_embedded([member_metadata | _] = Stack, Bin) ->
   Schema = get_schema(?PRELUDE, cg_member_metadata, 0),
-  dec_struct_clean(Schema, [{cg_member_metadata, 0} | Stack], Bin);
+  case Bin =:= <<>> of
+    true  -> ?kpro_cg_no_member_metadata;
+    false -> dec_struct_clean(Schema, [{cg_member_metadata, 0} | Stack], Bin)
+  end;
 dec_embedded([member_assignment | _], <<>>) ->
   ?kpro_cg_no_assignment; %% no assignment for this member
 dec_embedded([member_assignment | _] = Stack, Bin) ->
