@@ -518,8 +518,10 @@ decode_message(_, Acc) ->
   %% need to fetch at least 12 bytes to know the message size
   {[?incomplete_message(12) | Acc], <<>>}.
 
-%% @private Comment is copied from core/src/main/scala/kafka/message/Message.scala
-%% A message. The format of an N byte message is the following:
+%% @private Comment is copied from:
+%% core/src/main/scala/kafka/message/Message.scala
+%%
+%% The format of an N byte message is the following:
 %% 1. 4 byte CRC32 of the message
 %% 2. 1 byte "magic" identifier to allow format changes, value is 0 or 1
 %% 3. 1 byte "attributes" identifier to allow annotations on the message
