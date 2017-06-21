@@ -5,3 +5,5 @@
   - `kpro:fetch_request`, `kpro:offsets_request` APIs have args list changed
   - Maximum correlation ID changed to (1 bsl 24 - 1)
 
+* 1.0.1 Added more type exports
+
