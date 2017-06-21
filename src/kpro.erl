@@ -46,36 +46,38 @@
         , get_schema/3
         ]).
 
--export_type([ int8/0
+-export_type([ bytes/0
+             , client_id/0
+             , compress_option/0
+             , corr_id/0
+             , count/0
+             , error_code/0
+             , field_name/0
+             , field_value/0
+             , incomplete_message/0
+             , int8/0
              , int16/0
              , int32/0
              , int64/0
-             , str/0
-             , bytes/0
-             , records/0
-             , api_key/0
-             , error_code/0
-             , client_id/0
-             , topic/0
-             , partition/0
-             , offset/0
              , key/0
-             , value/0
-             , kafka_key/0
-             , kafka_value/0
-             , corr_id/0
-             , incomplete_message/0
-             , compress_option/0
+             , kv_list/0
+             , message/0
+             , offset/0
+             , partition/0
+             , primitive_type/0
              , req/0
-             , rsp/0
-             , struct/0
-             , vsn/0
              , req_tag/0
+             , rsp/0
              , rsp_tag/0
+             , schema/0
+             , str/0
+             , struct/0
              , tag/0
              , timestamp_type/0
-             , primitive_type/0
-             , schema/0
+             , topic/0
+             , value/0
+             , vsn/0
+             , wait/0
              ]).
 
 -include("kpro_private.hrl").
@@ -86,8 +88,6 @@
 -type int64()      :: -9223372036854775808..9223372036854775807.
 -type str()        :: ?null | string() | binary().
 -type bytes()      :: ?null | binary().
--type records()    :: ?null | binary().
--type api_key()    :: 0..20.
 -type error_code() :: int16() | atom().
 
 %% type re-define for readability
@@ -100,9 +100,6 @@
 -type key() :: ?null | iodata().
 -type value() :: ?null | iodata() | [{key(), kv_list()}].
 -type kv_list() :: [{key(), value()}].
-
--type kafka_key() :: key().
--type kafka_value() :: ?null | iodata() | [struct()].
 
 -type incomplete_message() :: ?incomplete_message(int32()).
 -type message() :: #kafka_message{}.
