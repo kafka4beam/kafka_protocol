@@ -65,6 +65,7 @@ decode(28) -> ?EC_INVALID_COMMIT_OFFSET_SIZE;
 decode(29) -> ?EC_TOPIC_AUTHORIZATION_FAILED;
 decode(30) -> ?EC_GROUP_AUTHORIZATION_FAILED;
 decode(31) -> ?EC_CLUSTER_AUTHORIZATION_FAILED;
+decode(32) -> ?EC_INVALID_TIMESTAMP;
 decode(33) -> ?EC_UNSUPPORTED_SASL_MECHANISM;
 decode(34) -> ?EC_ILLEGAL_SASL_STATE;
 decode(35) -> ?EC_UNSUPPORTED_VERSION;
@@ -161,6 +162,8 @@ do_desc(?EC_GROUP_AUTHORIZATION_FAILED) ->
   <<"Group authorization failed.">>;
 do_desc(?EC_CLUSTER_AUTHORIZATION_FAILED) ->
   <<"Cluster authorization failed.">>;
+do_desc(?EC_INVALID_TIMESTAMP) ->
+  <<"The timestamp of the message is out of acceptable range.">>;
 do_desc(?EC_UNSUPPORTED_SASL_MECHANISM) ->
   <<"The broker does not support the requested SASL mechanism.">>;
 do_desc(?EC_ILLEGAL_SASL_STATE) ->

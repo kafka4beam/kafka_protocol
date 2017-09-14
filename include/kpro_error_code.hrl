@@ -54,6 +54,7 @@
 -define(EC_TOPIC_AUTHORIZATION_FAILED,   'TopicAuthorizationFailed').       % 29
 -define(EC_GROUP_AUTHORIZATION_FAILED,   'GroupAuthorizationFailed').       % 30
 -define(EC_CLUSTER_AUTHORIZATION_FAILED, 'ClusterAuthorizationFailed').     % 31
+-define(EC_INVALID_TIMESTAMP,            'InvalidTimestamp').               % 32
 -define(EC_UNSUPPORTED_SASL_MECHANISM,   'UnsupportedSaslMechanism').       % 33
 -define(EC_ILLEGAL_SASL_STATE,           'IllegalSaslState').               % 34
 -define(EC_UNSUPPORTED_VERSION,          'UnsupportedVersion').             % 35
