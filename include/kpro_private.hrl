@@ -60,6 +60,32 @@
          T =:= string orelse T =:= nullable_string orelse
          T =:= bytes orelse T =:= records)).
 
+-define(API_KEY_TO_REQ(ApiKey),
+        case ApiKey of
+           0 -> produce_request;
+           1 -> fetch_request;
+           2 -> offsets_request;
+           3 -> metadata_request;
+           4 -> leader_and_isr_request;
+           5 -> stop_replica_request;
+           6 -> update_metadata_request;
+           7 -> controlled_shutdown_request;
+           8 -> offset_commit_request;
+           9 -> offset_fetch_request;
+          10 -> group_coordinator_request;
+          11 -> join_group_request;
+          12 -> heartbeat_request;
+          13 -> leave_group_request;
+          14 -> sync_group_request;
+          15 -> describe_groups_request;
+          16 -> list_groups_request;
+          17 -> sasl_handshake_request;
+          18 -> api_versions_request;
+          19 -> create_topics_request;
+          20 -> delete_topics_request;
+          N  -> N %% unknown api key
+        end).
+
 -define(REQ_TO_API_KEY(Req),
         case Req of
           produce_request             ->  0;
@@ -69,6 +95,7 @@
           leader_and_isr_request      ->  4;
           stop_replica_request        ->  5;
           update_metadata_request     ->  6;
+          controlled_shutdown_request ->  7;
           offset_commit_request       ->  8;
           offset_fetch_request        ->  9;
           group_coordinator_request   -> 10;
@@ -93,6 +120,7 @@
            4 -> leader_and_isr_response;
            5 -> stop_replica_response;
            6 -> update_metadata_response;
+           7 -> controlled_shutdown_response;
            8 -> offset_commit_response;
            9 -> offset_fetch_response;
           10 -> group_coordinator_response;

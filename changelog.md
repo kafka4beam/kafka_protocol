@@ -6,4 +6,4 @@
   - Maximum correlation ID changed to (1 bsl 24 - 1)
 
 * 1.0.1 Added more type exports
-
+* 1.0.2 Adding missing error code and add api-key interpretation

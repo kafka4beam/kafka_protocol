@@ -743,6 +743,8 @@ dec_embedded([member_assignment | _], <<>>) ->
 dec_embedded([member_assignment | _] = Stack, Bin) ->
   Schema = get_schema(?PRELUDE, cg_memeber_assignment, 0),
   dec_struct_clean(Schema, [{cg_memeber_assignment, 0} | Stack], Bin);
+dec_embedded([api_key | _], ApiKey) ->
+  ?API_KEY_TO_REQ(ApiKey);
 dec_embedded(_Stack, Value) ->
   Value.
 
