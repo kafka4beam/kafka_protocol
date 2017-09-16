@@ -168,7 +168,7 @@ offsets_request(Vsn, Topic, Partition, Time) ->
                  {partitions, [ PartitionFields ]}]
               ]}
     ],
-  req(offsets_request, 0, Fields).
+  req(offsets_request, Vsn, Fields).
 
 %% @doc Help function to construct a FetchRequest
 %% against one single topic-partition.
