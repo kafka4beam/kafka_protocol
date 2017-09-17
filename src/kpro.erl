@@ -62,6 +62,7 @@
              , key/0
              , kv_list/0
              , message/0
+             , msg_ts/0
              , offset/0
              , partition/0
              , primitive_type/0
@@ -89,6 +90,7 @@
 -type str()        :: ?null | string() | binary().
 -type bytes()      :: ?null | binary().
 -type error_code() :: int16() | atom().
+-type msg_ts() :: integer().
 
 %% type re-define for readability
 -type client_id() :: str().
@@ -99,7 +101,7 @@
 
 -type key() :: ?null | iodata().
 -type value() :: ?null | iodata() | [{key(), kv_list()}].
--type kv_list() :: [{key(), value()}].
+-type kv_list() :: [{key(), value()} | {msg_ts(), key(), value()}].
 
 -type incomplete_message() :: ?incomplete_message(int32()).
 -type message() :: #kafka_message{}.
@@ -140,6 +142,7 @@
 -define(INT, signed-integer).
 -define(SCHEMA_MODULE, kpro_schema).
 -define(PRELUDE, kpro_prelude_schema).
+-define(NO_TIMESTAMP, -1).
 
 %%%_* APIs =====================================================================
 
@@ -150,7 +153,7 @@ max_corr_id() -> ?MAX_CORR_ID.
 %% @doc Help function to contruct a OffsetsRequest
 %% against one single topic-partition.
 %% @end
--spec offsets_request(vsn(), topic(), partition(), integer()) -> req().
+-spec offsets_request(vsn(), topic(), partition(), msg_ts()) -> req().
 offsets_request(Vsn, Topic, Partition, Time) ->
   PartitionFields =
     case Vsn of
@@ -463,20 +466,27 @@ encode_messages(KvList, Compression) ->
 %% @private
 -spec encode_messages(kv_list()) -> iodata().
 encode_messages([]) -> [];
-encode_messages([{_K, [{_NestedK, _NestedV} | _] = NestedKvList} | KvList]) ->
-  [ encode_messages(NestedKvList)
-  | encode_messages(KvList)
+encode_messages([{_K, [Msg | _] = Nested} | Rest]) when is_tuple(Msg) ->
+  [ encode_messages(Nested)
+  | encode_messages(Rest)
   ];
-encode_messages([{K, V} | KvList]) ->
-  Attributes = ?KPRO_ATTRIBUTES, %% default attributes
-  [encode_message(Attributes, K, V) | encode_messages(KvList)].
+encode_messages([{K, V} | Rest]) ->
+  [ encode_message(?KPRO_ATTRIBUTES, ?NO_TIMESTAMP, K, V)
+  | encode_messages(Rest)];
+encode_messages([{T, K, V} | Rest]) ->
+  [encode_message(?KPRO_ATTRIBUTES, T, K, V) | encode_messages(Rest)].
 
 %% @private
--spec encode_message(byte(), key(), value()) -> iodata().
-encode_message(Attributes, Key, Value) ->
-  MagicByte = ?KPRO_MAGIC_BYTE,
+-spec encode_message(byte(), msg_ts(), key(), value()) -> iodata().
+encode_message(Attributes, T, Key, Value) ->
+  {MagicByte, CreateTs} =
+    case T of
+      ?NO_TIMESTAMP -> {?KPRO_MAGIC_0, <<>>};
+      _             -> {?KPRO_MAGIC_1, encode(int64, T)}
+    end,
   Body = [ encode(int8, MagicByte)
          , encode(int8, Attributes)
+         , CreateTs
          , encode(bytes, Key)
          , encode(bytes, Value)
          ],
@@ -595,7 +605,7 @@ compress(Method, IoData) ->
                end,
   Key = <<>>,
   Value = do_compress(Method, IoData),
-  encode_message(Attributes, Key, Value).
+  encode_message(Attributes, ?NO_TIMESTAMP, Key, Value).
 
 %% @private TODO: lz4 compression.
 -spec do_compress(compress_option(), iodata()) -> iodata().
