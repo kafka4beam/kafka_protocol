@@ -41,7 +41,8 @@
 %% some pre-defined default values
 -define(KPRO_REPLICA_ID, -1).
 -define(KPRO_API_VERSION, 0).
--define(KPRO_MAGIC_BYTE, 0).
+-define(KPRO_MAGIC_0, 0).
+-define(KPRO_MAGIC_1, 1).
 -define(KPRO_ATTRIBUTES, ?KPRO_COMPRESS_NONE).
 
 %% correlation IDs are 32 bit signed integers.
