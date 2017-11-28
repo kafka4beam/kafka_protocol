@@ -1,6 +1,6 @@
 {application,kafka_protocol,
              [{description,"Kafka protocol library for Erlang/Elixir"},
-              {vsn,"1.1.0"},
+              {vsn,"1.1.1"},
               {registered,[]},
               {applications,[kernel,stdlib,snappyer]},
               {env,[]},
