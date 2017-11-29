@@ -457,28 +457,37 @@ find(Field, Struct, Default) ->
 %% @private
 -spec encode_messages(kv_list(), compress_option()) -> iodata().
 encode_messages(KvList, Compression) ->
-  Encoded = encode_messages(KvList),
+  Encoded = do_encode_messages(KvList, 0),
   case Compression =:= no_compression of
     true  -> Encoded;
     false -> compress(Compression, Encoded)
   end.
 
-%% @private
--spec encode_messages(kv_list()) -> iodata().
-encode_messages([]) -> [];
-encode_messages([{_K, [Msg | _] = Nested} | Rest]) when is_tuple(Msg) ->
-  [ encode_messages(Nested)
-  | encode_messages(Rest)
+%% @private Assign relative offsets to help kafka save some CPU when compressed.
+%% Kafka will decompress to validate CRC, and assign real or relative offsets
+%% depending on kafka verson and/or broker config. For 0.10 or later if relative
+%% offsets are correctly assigned by producer, kafka will take the original
+%% compressed batch as-is instead of reassign offsets then re-compress.
+%% ref: https://cwiki.apache.org/confluence/display/KAFKA/ \
+%%           KIP-31+-+Move+to+relative+offsets+in+compressed+message+sets
+%% @end
+-spec do_encode_messages(kv_list(), offset()) -> iodata().
+do_encode_messages([], _RelativeOffset) -> [];
+do_encode_messages([{_K, [Msg | _] = Nested} | Rest],
+                   RelativeOffset) when is_tuple(Msg) ->
+  do_encode_messages(Nested ++ Rest, RelativeOffset);
+do_encode_messages([{K, V} | Rest], RelativeOffset) ->
+  [ encode_message(?KPRO_ATTRIBUTES, ?NO_TIMESTAMP, K, V, RelativeOffset)
+  | do_encode_messages(Rest, RelativeOffset + 1)
   ];
-encode_messages([{K, V} | Rest]) ->
-  [ encode_message(?KPRO_ATTRIBUTES, ?NO_TIMESTAMP, K, V)
-  | encode_messages(Rest)];
-encode_messages([{T, K, V} | Rest]) ->
-  [encode_message(?KPRO_ATTRIBUTES, T, K, V) | encode_messages(Rest)].
+do_encode_messages([{T, K, V} | Rest], RelativeOffset) ->
+  [ encode_message(?KPRO_ATTRIBUTES, T, K, V, RelativeOffset)
+  | do_encode_messages(Rest, RelativeOffset + 1)
+  ].
 
 %% @private
--spec encode_message(byte(), msg_ts(), key(), value()) -> iodata().
-encode_message(Attributes, T, Key, Value) ->
+-spec encode_message(byte(), msg_ts(), key(), value(), offset()) -> iodata().
+encode_message(Attributes, T, Key, Value, RelativeOffset) ->
   {MagicByte, CreateTs} =
     case T of
       ?NO_TIMESTAMP -> {?KPRO_MAGIC_0, <<>>};
@@ -492,7 +501,7 @@ encode_message(Attributes, T, Key, Value) ->
          ],
   Crc  = encode(int32, erlang:crc32(Body)),
   Size = data_size([Crc, Body]),
-  [encode(int64, _Offset = -1),
+  [encode(int64, RelativeOffset),
    encode(int32, Size),
    Crc, Body
   ].
@@ -579,8 +588,26 @@ do_decode_message(Offset, <<Crc:32/unsigned-integer, Body/binary>>, Acc) ->
       [Msg | Acc];
     false ->
       Bin = decompress(Compression, Value),
-      decode_message_stream(Bin, Acc)
+      %% relative offsets breake continuation, can not pass in Acc here.
+      MsgsReversed = decode_message_stream(Bin, _Acc = []),
+      maybe_assign_offsets(Offset, MsgsReversed) ++ Acc
   end.
+
+%% @private Kafka may assign relative or real offsets for compressed messages.
+-spec maybe_assign_offsets(offset(), [message()]) -> [message()].
+maybe_assign_offsets(Offset, [#kafka_message{offset = Offset} | _] = Msgs) ->
+  %% broker assigned 'real' offsets to the messages
+  %% either downverted for version 0 fetch request
+  %% or message format is 0.9.0.0 on disk
+  %% do nothing
+  Msgs;
+maybe_assign_offsets(MaxOffset,
+                     [#kafka_message{offset = MaxRelative} | _] = Msgs) ->
+  BaseOffset = MaxOffset - MaxRelative,
+  true = (BaseOffset >= 0), %% assert
+  lists:map(fun(#kafka_message{offset = RelativeOffset} = M) ->
+                M#kafka_message{offset = BaseOffset + RelativeOffset}
+            end, Msgs).
 
 %% @private
 -spec decode_compression_codec(byte()) -> compress_option().
@@ -605,7 +632,7 @@ compress(Method, IoData) ->
                end,
   Key = <<>>,
   Value = do_compress(Method, IoData),
-  encode_message(Attributes, ?NO_TIMESTAMP, Key, Value).
+  encode_message(Attributes, ?NO_TIMESTAMP, Key, Value, -1).
 
 %% @private TODO: lz4 compression.
 -spec do_compress(compress_option(), iodata()) -> iodata().
