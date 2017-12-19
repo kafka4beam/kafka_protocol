@@ -11,3 +11,9 @@
       * Adding missing error code and add api-key interpretation
   - New Features
       * Support message timestamp in message-set encoding input `{Ts, Key, Value}`
+* 1.1.1
+  - Fix relative offset encoding/decoding in compressed batches
+* 1.1.2
+  - Fix compressed message wrapper timestamp handling, use the max ts in compressed batch
+  - Fix wrapper message offset (always set to 0) to work with kafka 0.11
+  - Fix snappy decompression, version 1 record (MagicByte=1) may not have java snappy packing
