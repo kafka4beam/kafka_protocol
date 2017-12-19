@@ -34,6 +34,9 @@
 -define(KPRO_IS_LZ4_ATTR(ATTR),
         ((?KPRO_COMPRESSION_MASK band ATTR) =:= ?KPRO_COMPRESS_LZ4)).
 
+-define(KPRO_TS_TYPE_CREATE, 0).
+-define(KPRO_TS_TYPE_APPEND, 2#1000).
+
 -define(KPRO_TS_TYPE_MASK, 2#1000).
 -define(KPRO_IS_CREATE_TS(ATTR), ((?KPRO_TS_TYPE_MASK band ATTR) =:= 0)).
 -define(KPRO_IS_APPEND_TS(ATTR), ((?KPRO_TS_TYPE_MASK band ATTR) =/= 0)).
@@ -43,7 +46,6 @@
 -define(KPRO_API_VERSION, 0).
 -define(KPRO_MAGIC_0, 0).
 -define(KPRO_MAGIC_1, 1).
--define(KPRO_ATTRIBUTES, ?KPRO_COMPRESS_NONE).
 
 %% correlation IDs are 32 bit signed integers.
 %% we use 24 bits only, and use the highest 5 bits to be redudant with API key

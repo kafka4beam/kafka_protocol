@@ -101,7 +101,8 @@
 
 -type key() :: ?null | iodata().
 -type value() :: ?null | iodata() | [{key(), kv_list()}].
--type kv_list() :: [{key(), value()} | {msg_ts(), key(), value()}].
+-type kv() :: {key(), value()} | {msg_ts(), key(), value()}.
+-type kv_list() :: [kv()].
 
 -type incomplete_message() :: ?incomplete_message(int32()).
 -type message() :: #kafka_message{}.
@@ -457,11 +458,27 @@ find(Field, Struct, Default) ->
 %% @private
 -spec encode_messages(kv_list(), compress_option()) -> iodata().
 encode_messages(KvList, Compression) ->
-  Encoded = do_encode_messages(KvList, 0),
+  {Encoded, WrapperTs} = do_encode_messages(KvList),
   case Compression =:= no_compression of
-    true  -> Encoded;
-    false -> compress(Compression, Encoded)
+    true -> Encoded;
+    false -> compress(Compression, Encoded, WrapperTs)
   end.
+
+%% @private Get nested kv-list.
+-spec nested(kv()) -> kv_list() | false.
+nested({_K, [Msg | _] = Nested}) when is_tuple(Msg) -> Nested;
+nested({_T, _K, [Msg | _] = Nested}) when is_tuple(Msg) -> Nested;
+nested(_) -> false.
+
+%% @private Foldl kv-list.
+-spec foldl_kvlist(fun((kv(), term()) -> term()), term(), kv_list()) -> term().
+foldl_kvlist(_Fun, Acc, []) -> Acc;
+foldl_kvlist(Fun, Acc, [Msg | Rest]) ->
+  NewAcc = case nested(Msg) of
+             false -> Fun(Msg, Acc);
+             Nested -> foldl_kvlist(Fun, Acc, Nested)
+           end,
+  foldl_kvlist(Fun, NewAcc, Rest).
 
 %% @private Assign relative offsets to help kafka save some CPU when compressed.
 %% Kafka will decompress to validate CRC, and assign real or relative offsets
@@ -470,28 +487,43 @@ encode_messages(KvList, Compression) ->
 %% compressed batch as-is instead of reassign offsets then re-compress.
 %% ref: https://cwiki.apache.org/confluence/display/KAFKA/ \
 %%           KIP-31+-+Move+to+relative+offsets+in+compressed+message+sets
+%%
+%% Also try to find out the timestamp for compressed wrapper message.
+%% In case all messages have timestamp, i.e. of spec `{T, K, V}', the max
+%% timestamp is to be used for the wrapper.
+%% In case all messages have no timestamp, i.e. of spec `{K, V}', default
+%% value -1 (as in 'no timestamp') is used for wrapper.
+%% In case of mixed presence, `false' is returned to indicate that the batch
+%% should not be compressed otherwise kafka will consider it 'corrupted'.
 %% @end
--spec do_encode_messages(kv_list(), offset()) -> iodata().
-do_encode_messages([], _RelativeOffset) -> [];
-do_encode_messages([{_K, [Msg | _] = Nested} | Rest],
-                   RelativeOffset) when is_tuple(Msg) ->
-  do_encode_messages(Nested ++ Rest, RelativeOffset);
-do_encode_messages([{K, V} | Rest], RelativeOffset) ->
-  [ encode_message(?KPRO_ATTRIBUTES, ?NO_TIMESTAMP, K, V, RelativeOffset)
-  | do_encode_messages(Rest, RelativeOffset + 1)
-  ];
-do_encode_messages([{T, K, V} | Rest], RelativeOffset) ->
-  [ encode_message(?KPRO_ATTRIBUTES, T, K, V, RelativeOffset)
-  | do_encode_messages(Rest, RelativeOffset + 1)
-  ].
+-spec do_encode_messages(kv_list()) -> {iodata(), msg_ts() | false}.
+do_encode_messages(KvList) ->
+  F = fun(Msg, {Acc, Offset, MaxTs, KvCount0}) ->
+          {T, K, V, KvCount} =
+            case Msg of
+              {Kx, Vx}     -> {?NO_TIMESTAMP, Kx, Vx, KvCount0 + 1};
+              {Tx, Kx, Vx} -> {Tx, Kx, Vx, KvCount0}
+            end,
+          Encoded = encode_message(?KPRO_COMPRESS_NONE, T, K, V, Offset),
+          {[Encoded | Acc], Offset + 1, erlang:max(MaxTs, T), KvCount}
+      end,
+  {Stream, _Offset, MaxTs, KvCount} =
+    foldl_kvlist(F, {[], _Offset0 = 0, ?NO_TIMESTAMP, _KvCount = 0}, KvList),
+  WrapperTs = case KvCount > 0 andalso MaxTs =/= ?NO_TIMESTAMP of
+                true  -> false; %% some are {T, K} some are {T, K, V}
+                false -> MaxTs
+              end,
+  {lists:reverse(Stream), WrapperTs}.
 
 %% @private
 -spec encode_message(byte(), msg_ts(), key(), value(), offset()) -> iodata().
-encode_message(Attributes, T, Key, Value, RelativeOffset) ->
-  {MagicByte, CreateTs} =
+encode_message(Codec, T, Key, Value, Offset) ->
+  {MagicByte, CreateTs, Attributes} =
     case T of
-      ?NO_TIMESTAMP -> {?KPRO_MAGIC_0, <<>>};
-      _             -> {?KPRO_MAGIC_1, encode(int64, T)}
+      ?NO_TIMESTAMP ->
+        {?KPRO_MAGIC_0, <<>>, Codec};
+      _ ->
+        {?KPRO_MAGIC_1, encode(int64, T), Codec bor ?KPRO_TS_TYPE_CREATE}
     end,
   Body = [ encode(int8, MagicByte)
          , encode(int8, Attributes)
@@ -501,7 +533,7 @@ encode_message(Attributes, T, Key, Value, RelativeOffset) ->
          ],
   Crc  = encode(int32, erlang:crc32(Body)),
   Size = data_size([Crc, Body]),
-  [encode(int64, RelativeOffset),
+  [encode(int64, Offset),
    encode(int32, Size),
    Crc, Body
   ].
@@ -588,7 +620,7 @@ do_decode_message(Offset, <<Crc:32/unsigned-integer, Body/binary>>, Acc) ->
       [Msg | Acc];
     false ->
       Bin = decompress(Compression, Value),
-      %% relative offsets breake continuation, can not pass in Acc here.
+      %% relative offsets breaks continuation, can not pass in Acc here.
       MsgsReversed = decode_message_stream(Bin, _Acc = []),
       maybe_assign_offsets(Offset, MsgsReversed) ++ Acc
   end.
@@ -597,7 +629,7 @@ do_decode_message(Offset, <<Crc:32/unsigned-integer, Body/binary>>, Acc) ->
 -spec maybe_assign_offsets(offset(), [message()]) -> [message()].
 maybe_assign_offsets(Offset, [#kafka_message{offset = Offset} | _] = Msgs) ->
   %% broker assigned 'real' offsets to the messages
-  %% either downverted for version 0 fetch request
+  %% either downverted for version 0~2 fetch request
   %% or message format is 0.9.0.0 on disk
   %% do nothing
   Msgs;
@@ -623,16 +655,23 @@ decode_timestamp_type(_, A) when ?KPRO_IS_CREATE_TS(A) -> create;
 decode_timestamp_type(_, A) when ?KPRO_IS_APPEND_TS(A) -> append.
 
 %% @private
--spec compress(compress_option(), iodata()) -> iodata().
-compress(Method, IoData) ->
-  Attributes = case Method of
-                 gzip   -> ?KPRO_COMPRESS_GZIP;
-                 snappy -> ?KPRO_COMPRESS_SNAPPY;
-                 lz4    -> ?KPRO_COMPRESS_LZ4
-               end,
+-spec compress(compress_option(), iodata(), msg_ts() | false) -> iodata().
+compress(_Method, IoData, false) -> IoData; %% no way to compress
+compress(Method, IoData, WrapperMsgTs) ->
+  Codec = case Method of
+            gzip -> ?KPRO_COMPRESS_GZIP;
+            snappy -> ?KPRO_COMPRESS_SNAPPY;
+            lz4 -> ?KPRO_COMPRESS_LZ4
+          end,
   Key = <<>>,
   Value = do_compress(Method, IoData),
-  encode_message(Attributes, ?NO_TIMESTAMP, Key, Value, -1).
+  %% Wrapper message offset for 0.10 or prior is ignored.
+  %% For 0.11 or later, it has to be one of:
+  %%  - 0: a special acceptable case
+  %%  - Offset of the last message in the inner batch
+  %%  - The absolute offset in kafka which is unknown to clients
+  WrapperOffset = 0,
+  encode_message(Codec, WrapperMsgTs, Key, Value, WrapperOffset).
 
 %% @private TODO: lz4 compression.
 -spec do_compress(compress_option(), iodata()) -> iodata().
@@ -816,18 +855,16 @@ data_size([H | T], Size0) ->
   Size1 = data_size(H, Size0),
   data_size(T, Size1).
 
-%% @private snappy-java adds its own header (SnappyCodec)
-%% which is not compatible with the official Snappy
-%% implementation.
-%% 8: magic, 4: version, 4: compatible
-%% followed by any number of chunks:
-%%    4: length
-%%  ...: snappy-compressed data.
+%% @private Java snappy implementation has its own non-standard
+%% magic header, see org/xerial/snappy/SnappyCodec.java
 %% @end
+java_snappy_unpack(<<130, "SNAPPY", 0,
+                     _Version:32, _MinCompatibleV:32, Chunks/binary>>) ->
+  java_snappy_unpack_chunks(Chunks, []);
 java_snappy_unpack(Bin) ->
-  <<_:16/binary, Chunks/binary>> = Bin,
-  java_snappy_unpack_chunks(Chunks, []).
+  snappy_decompress(Bin).
 
+%% @private
 java_snappy_unpack_chunks(<<>>, Acc) ->
   bin(Acc);
 java_snappy_unpack_chunks(Chunks, Acc) ->
