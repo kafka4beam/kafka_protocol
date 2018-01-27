@@ -117,6 +117,9 @@ expand_fields([{array, Name} | Rest], Refs) ->
   Type = expand_type(Type0, Refs),
   [{Name, {array, Type}} | expand_fields(Rest, Refs)].
 
+expand_type({array, Type}, Refs) ->
+  %% Array of array
+  {array, expand_type(Type, Refs)};
 expand_type(Type, _Refs) when ?IS_KAFKA_PRIMITIVE(Type) ->
   Type;
 expand_type(Fields, Refs) when is_list(Fields) ->

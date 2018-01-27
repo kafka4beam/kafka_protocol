@@ -1,5 +1,5 @@
 import org.apache.kafka.common.protocol.types.ArrayOf;
-import org.apache.kafka.common.protocol.types.Field;
+import org.apache.kafka.common.protocol.types.BoundField;
 import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Type;
 import org.apache.kafka.common.protocol.Protocol;
@@ -23,15 +23,15 @@ public class KafkaProtocolBnf {
         return b.toString();
     }
 
-    private static void populateSchemaFields(Schema schema, Set<Field> fields) {
-        for (Field field: schema.fields()) {
+    private static void populateSchemaFields(Schema schema, Set<BoundField> fields) {
+        for (BoundField field: schema.fields()) {
             fields.add(field);
-            if (field.type instanceof ArrayOf) {
-                Type innerType = ((ArrayOf) field.type).type();
+            if (field.def.type instanceof ArrayOf) {
+                Type innerType = ((ArrayOf) field.def.type).type();
                 if (innerType instanceof Schema)
                     populateSchemaFields((Schema) innerType, fields);
-            } else if (field.type instanceof Schema)
-                populateSchemaFields((Schema) field.type, fields);
+            } else if (field.def.type instanceof Schema)
+                populateSchemaFields((Schema) field.def.type, fields);
         }
     }
 
@@ -42,23 +42,23 @@ public class KafkaProtocolBnf {
         // Top level fields
         int index = 0;
         int length = schema.fields().length;
-        for (Field field: schema.fields()) {
-            String fieldName = field.name;
-            if (field.type instanceof ArrayOf) {
+        for (BoundField field: schema.fields()) {
+            String fieldName = field.def.name;
+            if (field.def.type instanceof ArrayOf) {
                 b.append("[");
                 b.append(fieldName);
                 b.append("]");
-                Type innerType = ((ArrayOf) field.type).type();
+                Type innerType = ((ArrayOf) field.def.type).type();
                 if (!subTypes.containsKey(fieldName))
                     subTypes.put(fieldName, innerType);
-            } else if (field.type instanceof Schema) {
+            } else if (field.def.type instanceof Schema) {
                 b.append(fieldName);
                 if (!subTypes.containsKey(fieldName))
-                    subTypes.put(fieldName, field.type);
+                    subTypes.put(fieldName, field.def.type);
             } else {
                 b.append(fieldName);
                 if (!subTypes.containsKey(fieldName))
-                    subTypes.put(fieldName, field.type);
+                    subTypes.put(fieldName, field.def.type);
             }
             if (index < (length - 1))
                 b.append(" ");
@@ -86,17 +86,17 @@ public class KafkaProtocolBnf {
     }
 
     private static void schemaToFieldTableText(Schema schema, StringBuilder b) {
-        Set<Field> fields = new LinkedHashSet<>();
+        Set<BoundField> fields = new LinkedHashSet<>();
         populateSchemaFields(schema, fields);
 
-        for (Field field : fields) {
-            if (field.doc.isEmpty())
-                continue;
-            b.append("# ");
-            b.append(field.name);
-            b.append(": ");
-            b.append(field.doc);
-            b.append("\n");
+        for (BoundField field : fields) {
+            if (field.def.docString != null) {
+              b.append("# ");
+              b.append(field.def.name);
+              b.append(": ");
+              b.append(field.def.docString);
+              b.append("\n");
+            }
         }
     }
 
@@ -105,7 +105,7 @@ public class KafkaProtocolBnf {
         b.append("# generated code, do not edit!\n\n");
         for (ApiKeys key : ApiKeys.values()) {
             // Requests
-            Schema[] requests = Protocol.REQUESTS[key.id];
+            Schema[] requests = key.requestSchemas;
             for (int i = 0; i < requests.length; i++) {
                 Schema schema = requests[i];
                 // Schema
@@ -123,7 +123,7 @@ public class KafkaProtocolBnf {
             }
 
             // Responses
-            Schema[] responses = Protocol.RESPONSES[key.id];
+            Schema[] responses = key.responseSchemas;
             for (int i = 0; i < responses.length; i++) {
                 Schema schema = responses[i];
                 // Schema

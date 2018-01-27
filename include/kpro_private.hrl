@@ -20,6 +20,11 @@
 
 -include("kpro.hrl").
 
+-define(no_compression, no_compression).
+-define(gzip, gzip).
+-define(snappy, snappy).
+-define(lz4, lz4).
+
 %% Compression attributes
 -define(KPRO_COMPRESS_NONE,   0).
 -define(KPRO_COMPRESS_GZIP,   1).
@@ -140,6 +145,8 @@
         end).
 
 -define(null, ?kpro_null).
+
+-define(INT, signed-integer).
 
 -endif.
 
