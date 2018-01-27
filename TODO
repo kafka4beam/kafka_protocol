@@ -1,0 +1,2 @@
+* Make {active, false} | {active, N} configurable in kpro_connection
+

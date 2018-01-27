@@ -7,19 +7,21 @@ rebar_cmd = $(rebar) $(profile:%=as %)
 GEN_INPUT = include/*.hrl priv/kpro_gen.escript priv/kafka.bnf priv/kpro_scanner.xrl priv/kpro_parser.yrl
 GEN_CODE = src/kpro_schema.erl
 
-.PHONY: gen-code gen-clean kafka-bnf
 
+.PHONY: kafka-bnf
 kafka-bnf:
 	@cd priv/kafka_protocol_bnf && gradle run
 
-$(GEN_CODE):: $(GEN_INPUT)
-	priv/kpro_gen.escript
+$(GEN_CODE): $(GEN_INPUT)
+	@priv/kpro_gen.escript
 
-$(PROJECT).d:: $(GEN_CODE)
+$(PROJECT).d: $(GEN_CODE)
 
+.PHONY: gen-code
 gen-code: $(GEN_CODE)
-	$(verbose) :
+	@$(verbose) :
 
+.PHONY: gen-clean
 gen-clean:
 	@rm -f priv/*.beam priv/*.erl
 
@@ -55,4 +57,8 @@ dialyze: compile
 .PHONY: hex-publish
 hex-publish: distclean
 	$(verbose) rebar3 hex publish
+
+.PHONY: testbed
+testbed:
+	@$(verbose) ./scripts/setup-testbed.sh
 

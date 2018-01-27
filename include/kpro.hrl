@@ -35,10 +35,25 @@
         }).
 
 
--define(incomplete_message(ExpectedSize), {incomplete_message, ExpectedSize}).
+-define(incomplete_batch(ExpectedSize), {incomplete_message, ExpectedSize}).
 -define(kpro_null, undefined).
 -define(kpro_cg_no_assignment, ?kpro_null).
 -define(kpro_cg_no_member_metadata, ?kpro_null).
+
+-define(KPRO_NO_BATCH_META, undefined).
+
+-record(kpro_batch_meta,
+        { first_offset :: kpro:offset()
+        , magic :: kpro:magic()
+        , crc :: non_neg_integer()
+        , attributes = [] :: kpro:batch_attributes()
+        , last_offset_delta :: kpro:offset()
+        , first_ts :: kpro:msg_ts()
+        , max_ts :: kpro:msg_ts()
+        , producer_id :: kpro:producer_id()
+        , producer_epoch :: kpro:int16()
+        , first_seq :: kpro:int32()
+        }).
 
 -endif.
 

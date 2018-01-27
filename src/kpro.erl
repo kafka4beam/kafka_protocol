@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2014-2017, Klarna AB
+%%%   Copyright (c) 2014-2018, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@
 
 %% APIs for the socket process
 -export([ decode_response/1
-        , decode_message_set/1
+        , decode_batches/1
         , encode_request/3
         , next_corr_id/1
         ]).
@@ -46,7 +46,10 @@
         , get_schema/3
         ]).
 
--export_type([ bytes/0
+-export_type([ batch_decode_result/0
+             , batch_input/0
+             , batch_meta/0
+             , bytes/0
              , client_id/0
              , compress_option/0
              , corr_id/0
@@ -54,18 +57,27 @@
              , error_code/0
              , field_name/0
              , field_value/0
-             , incomplete_message/0
+             , headers/0
+             , header_key/0
+             , header_val/0
+             , hostname/0
+             , incomplete_batch/0
              , int8/0
              , int16/0
              , int32/0
              , int64/0
              , key/0
              , kv_list/0
+             , magic/0
              , message/0
+             , meta_input/0
              , msg_ts/0
              , offset/0
              , partition/0
+             , portnum/0
+             , primitive/0
              , primitive_type/0
+             , producer_id/0
              , req/0
              , req_tag/0
              , rsp/0
@@ -90,23 +102,51 @@
 -type str()        :: ?null | string() | binary().
 -type bytes()      :: ?null | binary().
 -type error_code() :: int16() | atom().
--type msg_ts() :: integer().
+-type msg_ts() :: int64().
+-type producer_id() :: int64().
+-type magic() :: int8().
 
-%% type re-define for readability
--type client_id() :: str().
--type corr_id()   :: int32().
--type topic()     :: str().
+-type client_id() :: binary().
+-type hostname() :: binary() | string().
+-type portnum() :: non_neg_integer().
+-type corr_id() :: int32().
+-type topic() :: binary().
 -type partition() :: int32().
--type offset()    :: int64().
+-type offset() :: int64().
+
+% Attribute :: {compression, kpro:compress_option()}
+%            | {ts_type, kpro:timestamp_type()}
+%            | is_transaction | {is_transaction, boolean()}
+%            | is_control | {is_control, boolean()}.
+-type batch_attributes() :: proplists:proplist().
+
+-type header_key() :: binary().
+-type header_val() :: binary().
+-type headers() :: [{header_key(), header_val()}].
 
 -type key() :: ?null | iodata().
--type value() :: ?null | iodata() | [{key(), kv_list()}].
--type kv() :: {key(), value()} | {msg_ts(), key(), value()}.
--type kv_list() :: [kv()].
+-type value() :: ?null | iodata().
+-type value_mabye_nested() :: value() | [{key(), kv_list()}].
+-type kv_list() :: [kv() | tkv()].
 
--type incomplete_message() :: ?incomplete_message(int32()).
+-type msg_key() :: headers | ts | key | value.
+-type msg_val() :: headers() | msg_ts() | key() | value().
+
+-type kv() :: {key(), value_mabye_nested()}. % magic 0
+-type tkv() :: {msg_ts(), key(), value_mabye_nested()}. % magic 1
+-type msg_input() :: #{msg_key() => msg_val()}. % magic 2
+
+-type meta_input() :: #{}.
+-type batch_input() :: [kv()] % magic 0
+                     | [tkv()] % magic 1
+                     | [msg_input()]. % magic 2 non-transactional
+
+-type incomplete_batch() :: ?incomplete_batch(int32()).
 -type message() :: #kafka_message{}.
--type decoded_message() :: incomplete_message() | message().
+-type batch_meta() :: ?KPRO_NO_BATCH_META %% magic 0-1
+                    | #kpro_batch_meta{}.
+-type batch_decode_result() :: ?incomplete_batch(int32())
+                             | {batch_meta(), [message()]}.
 
 -type vsn() :: non_neg_integer().
 -type count() :: non_neg_integer().
@@ -121,13 +161,17 @@
 -type tag() :: req_tag() | rsp_tag().
 -type req() :: #kpro_req{}.
 -type rsp() :: #kpro_rsp{}.
--type compress_option() :: no_compression | gzip | snappy | lz4.
+-type compress_option() :: ?no_compression
+                         | ?gzip
+                         | ?snappy
+                         | ?lz4.
 -type timestamp_type() :: undefined | create | append.
 -type primitive_type() :: boolean
                         | int8
                         | int16
                         | int32
                         | int64
+                        | varint
                         | string
                         | nullable_string
                         | bytes
@@ -140,10 +184,18 @@
                 | decode_fun(). %% caller defined decoder
 -type stack() :: [{tag(), vsn()} | field_name()]. %% encode / decode stack
 
--define(INT, signed-integer).
 -define(SCHEMA_MODULE, kpro_schema).
 -define(PRELUDE, kpro_prelude_schema).
--define(NO_TIMESTAMP, -1).
+%% All versions of kafka messages (records) share the same header:
+%% Offset => int64
+%% Length => int32
+%% We need to at least fetch 12 bytes in order to fetch:
+%%  - one complete message when it's magic v0-1 not compressed
+%%  - one comprete batch when it's v0-1 compressed batch
+%%    v0-1 compressed batch is embedded in a wrapper message (i.e. recursive)
+%%  - one complete batch when it is v2.
+%%    v2 batch is flat and trailing the batch header.
+-define(BATCH_LEADING_BYTES, 12).
 
 %%%_* APIs =====================================================================
 
@@ -201,22 +253,22 @@ fetch_request(Vsn, Topic, Partition, Offset,
   req(fetch_request, Vsn, Fields).
 
 %% @equiv produce_request(Vsn, Topic, Partition, KvList, RequiredAcks,
-%%                        AckTimeout, no_compression)
+%%                        AckTimeout, ?no_compression)
 %% @end
--spec produce_request(vsn(), topic(), partition(), kv_list(),
+-spec produce_request(vsn(), topic(), partition(), batch_input(),
                       required_acks(), wait()) -> req().
-produce_request(Vsn, Topic, Partition, KvList, RequiredAcks, AckTimeout) ->
-  produce_request(Vsn, Topic, Partition, KvList, RequiredAcks, AckTimeout,
-                  no_compression).
+produce_request(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout) ->
+  produce_request(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout,
+                  ?no_compression).
 
 %% @doc Help function to construct a produce request for
 %% messages targeting one single topic-partition.
 %% @end
--spec produce_request(vsn(), topic(), partition(), kv_list(),
+-spec produce_request(vsn(), topic(), partition(), batch_input(),
                       required_acks(), wait(), compress_option()) -> req().
-produce_request(Vsn, Topic, Partition, KvList,
+produce_request(Vsn, Topic, Partition, Batch,
                 RequiredAcks, AckTimeout, CompressOption) ->
-  Messages = encode_messages(KvList, CompressOption),
+  Messages = kpro_batch:encode(Batch, CompressOption),
   Fields =
     [{acks, RequiredAcks},
      {timeout, AckTimeout},
@@ -244,7 +296,7 @@ next_corr_id(CorrId)       -> CorrId + 1.
 
 %% @doc Encode a request to bytes that can be sent on wire.
 -spec encode_request(client_id(), corr_id(), req()) -> iodata().
-encode_request(ClientId, CorrId0, Req) ->
+encode_request(ClientName, CorrId0, Req) ->
   #kpro_req{tag = Tag, vsn = Vsn, msg = Msg} = Req,
   ApiKey = ?REQ_TO_API_KEY(Tag),
   true = (CorrId0 =< ?MAX_CORR_ID), %% assert
@@ -257,10 +309,10 @@ encode_request(ClientId, CorrId0, Req) ->
     [ encode(int16, ApiKey)
     , encode(int16, Vsn)
     , CorrId
-    , encode(string, ClientId)
+    , encode(string, ClientName)
     , encode_struct(Tag, Vsn, Msg)
     ],
-  Size = data_size(IoData),
+  Size = kpro_lib:data_size(IoData),
   [encode(int32, Size), IoData].
 
 %% @doc Parse binary stream received from kafka broker.
@@ -272,81 +324,30 @@ decode_response(Bin) ->
 
 %% @doc The messageset is not decoded upon receiving (in socket process).
 %% Pass the message set as binary to the consumer process and decode there
-%% Return {incomplete_message, ExpectedSize} if the fetch size is not big
-%% enough for even one single message. Otherwise return a list of decoded
-%% messages.
-%% @end
--spec decode_message_set(binary()) -> incomplete_message() | [message()].
-decode_message_set(MessageSetBin) when is_binary(MessageSetBin) ->
-  case decode_message_stream(MessageSetBin, []) of
-    [?incomplete_message(_) = Incomplete] ->
-      %% The only message is incomplete
-      %% return the special tuple
-      Incomplete;
-    [?incomplete_message(_) | Messages] ->
-      %% Discard the last incomplete message
-      lists:reverse(Messages);
-    Messages ->
-      lists:reverse(Messages)
-  end.
+%% Return `?incomplete_batch(ExpectedSize)' if the fetch size is not big
+%% enough for even one single message. Otherwise return `{Meta, Messages}'
+%% where `Meta' is either `?KPRO_NO_BATCH_META' for magic-version 0-1 or
+%% `#kafka_batch_meta{}' for magic-version 2 or above.
+-spec decode_batches(binary()) -> batch_decode_result().
+decode_batches(<<_:64/?INT, L:32, T/binary>> = Bin) when size(T) >= L ->
+  kpro_batch:decode(Bin);
+decode_batches(<<_:64/?INT, L:32, _T/binary>>) ->
+  %% not enough to decode one single message for magic v0-1
+  %% or a single batch for magic v2
+  ?incomplete_batch(L + ?BATCH_LEADING_BYTES);
+decode_batches(_) ->
+  %% not enough to even get the size header
+  ?incomplete_batch(?BATCH_LEADING_BYTES).
 
 %%%_* Hidden APIs ==============================================================
 
 %% @hidden Encode prmitives.
 -spec encode(primitive_type(), primitive()) -> iodata().
-encode(boolean, true) -> <<1:8/?INT>>;
-encode(boolean, false) -> <<0:8/?INT>>;
-encode(int8,  I) when is_integer(I) -> <<I:8/?INT>>;
-encode(int16, I) when is_integer(I) -> <<I:16/?INT>>;
-encode(int32, I) when is_integer(I) -> <<I:32/?INT>>;
-encode(int64, I) when is_integer(I) -> <<I:64/?INT>>;
-encode(nullable_string, ?null) -> <<-1:16/?INT>>;
-encode(nullable_string, Str) -> encode(string, Str);
-encode(string, Atom) when is_atom(Atom) ->
-  encode(string, atom_to_binary(Atom, utf8));
-encode(string, <<>>) -> <<0:16/?INT>>;
-encode(string, L) when is_list(L) ->
-  encode(string, bin(L));
-encode(string, B) when is_binary(B) ->
-  Length = size(B),
-  <<Length:16/?INT, B/binary>>;
-encode(bytes, ?null) -> <<-1:32/?INT>>;
-encode(bytes, B) when is_binary(B) orelse is_list(B) ->
-  Size = data_size(B),
-  case Size =:= 0 of
-    true  -> <<-1:32/?INT>>;
-    false -> [<<Size:32/?INT>>, B]
-  end;
-encode(records, B) ->
-  encode(bytes, B).
+encode(Type, Value) -> kpro_lib:encode(Type, Value).
 
 %% @hidden Decode prmitives.
 -spec decode(primitive_type(), binary()) -> {primitive(), binary()}.
-decode(boolean, Bin) ->
-  <<Value:8/?INT, Rest/binary>> = Bin,
-  {Value =/= 0, Rest};
-decode(int8, Bin) ->
-  <<Value:8/?INT, Rest/binary>> = Bin,
-  {Value, Rest};
-decode(int16, Bin) ->
-  <<Value:16/?INT, Rest/binary>> = Bin,
-  {Value, Rest};
-decode(int32, Bin) ->
-  <<Value:32/?INT, Rest/binary>> = Bin,
-  {Value, Rest};
-decode(int64, Bin) ->
-  <<Value:64/?INT, Rest/binary>> = Bin,
-  {Value, Rest};
-decode(string, Bin) ->
-  <<Size:16/?INT, Rest/binary>> = Bin,
-  copy_bytes(Size, Rest);
-decode(bytes, Bin) ->
-  <<Size:32/?INT, Rest/binary>> = Bin,
-  copy_bytes(Size, Rest);
-decode(nullable_string, Bin) ->
-  decode(string, Bin);
-decode(records, Bin) ->
-  decode(bytes, Bin).
+decode(Type, Bin) -> kpro_lib:decode(Type, Bin).
 
 %% @hidden Encode struct.
 -spec enc_struct(schema(), struct(), stack()) -> iodata().
@@ -455,232 +456,6 @@ find(Field, Struct, Default) ->
 
 %%%_* Internal functions =======================================================
 
-%% @private
--spec encode_messages(kv_list(), compress_option()) -> iodata().
-encode_messages(KvList, Compression) ->
-  {Encoded, WrapperTs} = do_encode_messages(KvList),
-  case Compression =:= no_compression of
-    true -> Encoded;
-    false -> compress(Compression, Encoded, WrapperTs)
-  end.
-
-%% @private Get nested kv-list.
--spec nested(kv()) -> kv_list() | false.
-nested({_K, [Msg | _] = Nested}) when is_tuple(Msg) -> Nested;
-nested({_T, _K, [Msg | _] = Nested}) when is_tuple(Msg) -> Nested;
-nested(_) -> false.
-
-%% @private Foldl kv-list.
--spec foldl_kvlist(fun((kv(), term()) -> term()), term(), kv_list()) -> term().
-foldl_kvlist(_Fun, Acc, []) -> Acc;
-foldl_kvlist(Fun, Acc, [Msg | Rest]) ->
-  NewAcc = case nested(Msg) of
-             false -> Fun(Msg, Acc);
-             Nested -> foldl_kvlist(Fun, Acc, Nested)
-           end,
-  foldl_kvlist(Fun, NewAcc, Rest).
-
-%% @private Assign relative offsets to help kafka save some CPU when compressed.
-%% Kafka will decompress to validate CRC, and assign real or relative offsets
-%% depending on kafka verson and/or broker config. For 0.10 or later if relative
-%% offsets are correctly assigned by producer, kafka will take the original
-%% compressed batch as-is instead of reassign offsets then re-compress.
-%% ref: https://cwiki.apache.org/confluence/display/KAFKA/ \
-%%           KIP-31+-+Move+to+relative+offsets+in+compressed+message+sets
-%%
-%% Also try to find out the timestamp for compressed wrapper message.
-%% In case all messages have timestamp, i.e. of spec `{T, K, V}', the max
-%% timestamp is to be used for the wrapper.
-%% In case all messages have no timestamp, i.e. of spec `{K, V}', default
-%% value -1 (as in 'no timestamp') is used for wrapper.
-%% In case of mixed presence, `false' is returned to indicate that the batch
-%% should not be compressed otherwise kafka will consider it 'corrupted'.
-%% @end
--spec do_encode_messages(kv_list()) -> {iodata(), msg_ts() | false}.
-do_encode_messages(KvList) ->
-  F = fun(Msg, {Acc, Offset, MaxTs, KvCount0}) ->
-          {T, K, V, KvCount} =
-            case Msg of
-              {Kx, Vx}     -> {?NO_TIMESTAMP, Kx, Vx, KvCount0 + 1};
-              {Tx, Kx, Vx} -> {Tx, Kx, Vx, KvCount0}
-            end,
-          Encoded = encode_message(?KPRO_COMPRESS_NONE, T, K, V, Offset),
-          {[Encoded | Acc], Offset + 1, erlang:max(MaxTs, T), KvCount}
-      end,
-  {Stream, _Offset, MaxTs, KvCount} =
-    foldl_kvlist(F, {[], _Offset0 = 0, ?NO_TIMESTAMP, _KvCount = 0}, KvList),
-  WrapperTs = case KvCount > 0 andalso MaxTs =/= ?NO_TIMESTAMP of
-                true  -> false; %% some are {T, K} some are {T, K, V}
-                false -> MaxTs
-              end,
-  {lists:reverse(Stream), WrapperTs}.
-
-%% @private
--spec encode_message(byte(), msg_ts(), key(), value(), offset()) -> iodata().
-encode_message(Codec, T, Key, Value, Offset) ->
-  {MagicByte, CreateTs, Attributes} =
-    case T of
-      ?NO_TIMESTAMP ->
-        {?KPRO_MAGIC_0, <<>>, Codec};
-      _ ->
-        {?KPRO_MAGIC_1, encode(int64, T), Codec bor ?KPRO_TS_TYPE_CREATE}
-    end,
-  Body = [ encode(int8, MagicByte)
-         , encode(int8, Attributes)
-         , CreateTs
-         , encode(bytes, Key)
-         , encode(bytes, Value)
-         ],
-  Crc  = encode(int32, erlang:crc32(Body)),
-  Size = data_size([Crc, Body]),
-  [encode(int64, Offset),
-   encode(int32, Size),
-   Crc, Body
-  ].
-
-%% @private Decode byte stream of kafka messages.
-%% Messages are returned in reversed order
-%% @end
--spec decode_message_stream(binary(), [decoded_message()]) ->
-        [decoded_message()].
-decode_message_stream(<<>>, Acc) ->
-  %% NOTE: called recursively, do NOT reverse Acc here
-  Acc;
-decode_message_stream(Bin, Acc) ->
-  {NewAcc, Rest} = decode_message(Bin, Acc),
-  decode_message_stream(Rest, NewAcc).
-
-%% @private
--spec decode_message(binary(), [decoded_message()]) ->
-        {[decoded_message()], binary()}.
-decode_message(<<>>, Acc) -> {Acc, <<>>};
-decode_message(<<Offset:64/?INT, MsgSize:32/?INT, T/binary>>, Acc) ->
-  case size(T) < MsgSize of
-    true ->
-      {[?incomplete_message(MsgSize + 12) | Acc], <<>>};
-    false ->
-      <<Body:MsgSize/binary, Rest/binary>> = T,
-      {do_decode_message(Offset, Body, Acc), Rest}
-  end;
-decode_message(_, Acc) ->
-  %% need to fetch at least 12 bytes to know the message size
-  {[?incomplete_message(12) | Acc], <<>>}.
-
-%% @private Comment is copied from:
-%% core/src/main/scala/kafka/message/Message.scala
-%%
-%% The format of an N byte message is the following:
-%% 1. 4 byte CRC32 of the message
-%% 2. 1 byte "magic" identifier to allow format changes, value is 0 or 1
-%% 3. 1 byte "attributes" identifier to allow annotations on the message
-%%           independent of the version
-%%    bit 0 ~ 2 : Compression codec.
-%%      0 : no compression
-%%      1 : gzip
-%%      2 : snappy
-%%      3 : lz4
-%%    bit 3 : Timestamp type
-%%      0 : create time
-%%      1 : log append time
-%%    bit 4 ~ 7 : reserved
-%% 4. (Optional) 8 byte timestamp only if "magic" identifier is greater than 0
-%% 5. 4 byte key length, containing length K
-%% 6. K byte key
-%% 7. 4 byte payload length, containing length V
-%% 8. V byte payload
-%% @end
--spec do_decode_message(offset(), binary(), [message()]) -> [message()].
-do_decode_message(Offset, <<Crc:32/unsigned-integer, Body/binary>>, Acc) ->
-  case Crc =:= erlang:crc32(Body) of
-    true  -> ok;
-    false -> erlang:error({corrupted_message, Offset, Body})
-  end,
-  {MagicByte, Rest0} = decode(int8, Body),
-  {Attributes, Rest1} = decode(int8, Rest0),
-  Compression = decode_compression_codec(Attributes),
-  TsType = decode_timestamp_type(MagicByte, Attributes),
-  {Ts, Rest2} =
-    case TsType of
-      undefined -> {undefined, Rest1};
-      _         -> decode(int64, Rest1)
-    end,
-  {Key, Rest} = decode(bytes, Rest2),
-  {Value, <<>>} = decode(bytes, Rest),
-  case Compression =:= no_compression of
-    true ->
-      Msg = #kafka_message{ offset = Offset
-                          , value = Value
-                          , key = Key
-                          , ts = Ts
-                          , ts_type = TsType
-                          , crc = Crc
-                          , magic_byte = MagicByte
-                          , attributes = Attributes
-                          },
-      [Msg | Acc];
-    false ->
-      Bin = decompress(Compression, Value),
-      %% relative offsets breaks continuation, can not pass in Acc here.
-      MsgsReversed = decode_message_stream(Bin, _Acc = []),
-      maybe_assign_offsets(Offset, MsgsReversed) ++ Acc
-  end.
-
-%% @private Kafka may assign relative or real offsets for compressed messages.
--spec maybe_assign_offsets(offset(), [message()]) -> [message()].
-maybe_assign_offsets(Offset, [#kafka_message{offset = Offset} | _] = Msgs) ->
-  %% broker assigned 'real' offsets to the messages
-  %% either downverted for version 0~2 fetch request
-  %% or message format is 0.9.0.0 on disk
-  %% do nothing
-  Msgs;
-maybe_assign_offsets(MaxOffset,
-                     [#kafka_message{offset = MaxRelative} | _] = Msgs) ->
-  BaseOffset = MaxOffset - MaxRelative,
-  true = (BaseOffset >= 0), %% assert
-  lists:map(fun(#kafka_message{offset = RelativeOffset} = M) ->
-                M#kafka_message{offset = BaseOffset + RelativeOffset}
-            end, Msgs).
-
-%% @private
--spec decode_compression_codec(byte()) -> compress_option().
-decode_compression_codec(A) when ?KPRO_IS_GZIP_ATTR(A) -> gzip;
-decode_compression_codec(A) when ?KPRO_IS_SNAPPY_ATTR(A) -> snappy;
-decode_compression_codec(A) when ?KPRO_IS_LZ4_ATTR(A) -> lz4;
-decode_compression_codec(_) -> no_compression.
-
-%% @private
--spec decode_timestamp_type(byte(), byte()) -> timestamp_type().
-decode_timestamp_type(0, _) -> undefined;
-decode_timestamp_type(_, A) when ?KPRO_IS_CREATE_TS(A) -> create;
-decode_timestamp_type(_, A) when ?KPRO_IS_APPEND_TS(A) -> append.
-
-%% @private
--spec compress(compress_option(), iodata(), msg_ts() | false) -> iodata().
-compress(_Method, IoData, false) -> IoData; %% no way to compress
-compress(Method, IoData, WrapperMsgTs) ->
-  Codec = case Method of
-            gzip -> ?KPRO_COMPRESS_GZIP;
-            snappy -> ?KPRO_COMPRESS_SNAPPY;
-            lz4 -> ?KPRO_COMPRESS_LZ4
-          end,
-  Key = <<>>,
-  Value = do_compress(Method, IoData),
-  %% Wrapper message offset for 0.10 or prior is ignored.
-  %% For 0.11 or later, it has to be one of:
-  %%  - 0: a special acceptable case
-  %%  - Offset of the last message in the inner batch
-  %%  - The absolute offset in kafka which is unknown to clients
-  WrapperOffset = 0,
-  encode_message(Codec, WrapperMsgTs, Key, Value, WrapperOffset).
-
-%% @private TODO: lz4 compression.
--spec do_compress(compress_option(), iodata()) -> iodata().
-do_compress(gzip, IoData) ->
-  zlib:gzip(IoData);
-do_compress(snappy, IoData) ->
-  snappy_compress(IoData).
-
-%% @private
 -spec decode_response(binary(), [rsp()]) -> {[rsp()], binary()}.
 decode_response(Bin, Acc) ->
   case do_decode_response(Bin) of
@@ -690,9 +465,8 @@ decode_response(Bin, Acc) ->
       decode_response(Rest, [Response | Acc])
   end.
 
-%% @private Decode responses received from kafka broker.
+%% Decode responses received from kafka broker.
 %% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
-%% @end
 -spec do_decode_response(binary()) -> {incomplete | rsp(), binary()}.
 do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
   << ApiKey:?API_KEY_BITS,
@@ -722,16 +496,6 @@ do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
 do_decode_response(Bin) ->
   {incomplete, Bin}.
 
-%% @private
--spec decompress(compress_option(), binary()) -> binary().
-decompress(Method, Value) ->
-  case Method of
-    gzip -> zlib:gunzip(Value);
-    snappy -> java_snappy_unpack(Value);
-    lz4 -> lz4_unpack(Value)
-  end.
-
-%% @private
 -spec enc_struct_field(schema(), struct(), stack()) -> iodata().
 enc_struct_field({array, _Schema}, ?null, _Stack) ->
   encode(int32, -1); %% NULL
@@ -754,7 +518,7 @@ enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
       erlang:throw({Reason, Stack})
   end.
 
-%% @private Encode embedded bytes.
+%% Encode embedded bytes.
 -spec enc_embedded(stack(), field_value()) -> field_value().
 enc_embedded([protocol_metadata | _] = Stack, Value) ->
   Schema = get_schema(?PRELUDE, cg_protocol_metadata, 0),
@@ -764,12 +528,11 @@ enc_embedded([member_assignment | _] = Stack, Value) ->
   bin(enc_struct(Schema, Value, Stack));
 enc_embedded(_Stack, Value) -> Value.
 
-%% @private A struct field should have one of below types:
+%% A struct field should have one of below types:
 %% 1. An array of any
 %% 2. Another struct
 %% 3. A user define decoder
 %% 4. A primitive
-%% @end
 -spec dec_struct_field(schema(), stack(), binary()) ->
         {field_value(), binary()}.
 dec_struct_field({array, Schema}, Stack, Bin0) ->
@@ -791,7 +554,6 @@ dec_struct_field(Primitive, Stack, Bin) when is_atom(Primitive) ->
       erlang:error({Stack, Primitive, Bin})
   end.
 
-%% @private
 -spec dec_array_elements(count(), schema(), stack(), binary(), Acc) ->
         {Acc, binary()} when Acc :: [field_value()].
 dec_array_elements(0, _Schema, _Stack, Bin, Acc) ->
@@ -800,7 +562,7 @@ dec_array_elements(N, Schema, Stack, Bin, Acc) ->
   {Element, Rest} = dec_struct_field(Schema, Stack, Bin),
   dec_array_elements(N-1, Schema, Stack, Rest, [Element | Acc]).
 
-%% @private Translate error codes; Dig up embedded bytes.
+%% Translate error codes; Dig up embedded bytes.
 -spec dec_embedded(stack(), field_value()) -> field_value().
 dec_embedded([error_code | _], ErrorCode) ->
   kpro_error_code:decode(ErrorCode);
@@ -824,76 +586,12 @@ dec_embedded([api_key | _], ApiKey) ->
 dec_embedded(_Stack, Value) ->
   Value.
 
-%% @private Decode struct, assume no tail bytes.
+%% Decode struct, assume no tail bytes.
 -spec dec_struct_clean(schema(), stack(), binary()) -> struct().
 dec_struct_clean(Schema, Stack, Bin) ->
   {Fields, <<>>} = dec_struct(Schema, [], Stack, Bin),
   Fields.
 
-%% @private
--spec copy_bytes(-1 | count(), binary()) -> {undefined | binary(), binary()}.
-copy_bytes(-1, Bin) ->
-  {undefined, Bin};
-copy_bytes(Size, Bin) ->
-  <<Bytes:Size/binary, Rest/binary>> = Bin,
-  {binary:copy(Bytes), Rest}.
-
--define(IS_BYTE(I), (I>=0 andalso I<256)).
-
-%% @private
--spec data_size(iodata()) -> count().
-data_size(IoData) ->
-  data_size(IoData, 0).
-
-%% @private
--spec data_size(iodata(), count()) -> count().
-data_size([], Size) -> Size;
-data_size(<<>>, Size) -> Size;
-data_size(I, Size) when ?IS_BYTE(I) -> Size + 1;
-data_size(B, Size) when is_binary(B) -> Size + size(B);
-data_size([H | T], Size0) ->
-  Size1 = data_size(H, Size0),
-  data_size(T, Size1).
-
-%% @private Java snappy implementation has its own non-standard
-%% magic header, see org/xerial/snappy/SnappyCodec.java
-%% @end
-java_snappy_unpack(<<130, "SNAPPY", 0,
-                     _Version:32, _MinCompatibleV:32, Chunks/binary>>) ->
-  java_snappy_unpack_chunks(Chunks, []);
-java_snappy_unpack(Bin) ->
-  snappy_decompress(Bin).
-
-%% @private
-java_snappy_unpack_chunks(<<>>, Acc) ->
-  bin(Acc);
-java_snappy_unpack_chunks(Chunks, Acc) ->
-  <<Len:32/unsigned-integer, Rest/binary>> = Chunks,
-  case Len =:= 0 of
-    true ->
-      Rest =:= <<>> orelse erlang:error({Len, Rest}), %% assert
-      Acc;
-    false ->
-      <<Data:Len/binary, Tail/binary>> = Rest,
-      Decompressed = snappy_decompress(Data),
-      java_snappy_unpack_chunks(Tail, [Acc, Decompressed])
-  end.
-
-%% @private
--spec lz4_unpack(_) -> no_return().
-lz4_unpack(_) -> erlang:error({no_impl, lz4}).
-
-%% @private
-snappy_compress(IoData) ->
-  {ok, Compressed} = snappyer:compress(IoData),
-  Compressed.
-
-%% @private
-snappy_decompress(BinData) ->
-  {ok, Decompressed} = snappyer:decompress(BinData),
-  Decompressed.
-
-%% @private
 -spec bin(iodata()) -> binary().
 bin(X) -> iolist_to_binary(X).
 
