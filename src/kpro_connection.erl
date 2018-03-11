@@ -112,9 +112,10 @@ start(Parent, Host, Port) ->
 start(Parent, Host, Port, Options) ->
   proc_lib:start(?MODULE, init, [Parent, host(Host), Port, Options]).
 
-%% @doc Send a request and wait (indefinitely) for response.
+%% @doc Send a request and get back a correlation ID to match future response.
+%% Return 'ok' if it is a produce request with `required_acks = 0'.
 -spec request_async(pid(), kpro:req()) ->
-        {ok, corr_id()} | ok | {error, any()}.
+        ok | {ok, corr_id()} | {error, any()}.
 request_async(Pid, Request) ->
   case call(Pid, {send, Request}) of
     {ok, CorrId} ->
@@ -128,7 +129,7 @@ request_async(Pid, Request) ->
 
 %% @doc Send a request and wait for response for at most Timeout milliseconds.
 -spec request_sync(pid(), kpro:req(), timeout()) ->
-        {ok, term()} | ok | {error, any()}.
+        ok | {ok, term()} | {error, any()}.
 request_sync(Pid, Request, Timeout) ->
   case request_async(Pid, Request) of
     ok              -> ok;

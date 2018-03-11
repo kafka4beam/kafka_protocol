@@ -48,17 +48,17 @@
 %% Depending on the input pattern, if it is magic version 0 - 1
 %% call kpro_batch_v01 to do the work.
 %% If it is magic version 2, encode with dummy (non-transactional) batch meta.
--spec encode(batch_input(), compress_option()) -> iodata().
+-spec encode(batch_input(), compress_option()) -> binary().
 encode([#{} | _] = Batch, Compression) ->
   encode_with_dummy_meta(Batch, Compression);
 encode(Batch, Compression) ->
-  kpro_batch_v01:encode(Batch, Compression).
+  iolist_to_binary(kpro_batch_v01:encode(Batch, Compression)).
 
 %% @doc Encode a list of batch inputs with dummy (non-transactional info) meta.
--spec encode_with_dummy_meta(batch_input(), compress_option()) -> iodata().
+-spec encode_with_dummy_meta(batch_input(), compress_option()) -> binary().
 encode_with_dummy_meta(Batch, Compression) ->
   Meta = dummy_meta(Compression),
-  encode_tx(Meta, Batch).
+  iolist_to_binary(encode_tx(Meta, Batch)).
 
 %% @doc Encode a batch of magic version 2.
 %% @end
@@ -81,39 +81,38 @@ encode_tx(#{ attributes := Attributes
            , producer_id := ProducerId
            , producer_epoch := ProducerEpoch
            , first_sequence := FirstSequence
-           }, [#{ts := FirstTimestamp} | _] = Batch) ->
-  EncodedBatch = encode_batch(Attributes, Batch),
-  AttributesByte = encode_attributes(Attributes),
-  PartitionLeaderEpoch = 0, %% producer can set whatever
+           }, [FirstMsg | _] = Batch) ->
+  FirstTimestamp = maps:get(ts, FirstMsg, os:system_time() div 1000000),
+  EncodedBatch = encode_batch(Attributes, FirstTimestamp, Batch),
+  EncodedAttributes = encode_attributes(Attributes),
+  PartitionLeaderEpoch = -1, %% producer can set whatever
   FirstOffset = 0, %% always 0
   Magic = 2, %% always 2
   {Count, MaxTimestamp} = scan_max_ts(1, FirstTimestamp, tl(Batch)),
   LastOffsetDelta = Count - 1, %% always count - 1 for producer
-  Meta =
-    iolist_to_binary(
-      [ enc(int8, AttributesByte)
-      , enc(int32, LastOffsetDelta)
-      , enc(int64, FirstTimestamp)
-      , enc(int64, MaxTimestamp)
-      , enc(int64, ProducerId)
-      , enc(int16, ProducerEpoch)
-      , enc(int32, FirstSequence)
-      , enc(int32, Count)
-      ]),
-  CRC1 = crc32cer:nif(Meta),
-  CRC = crc32cer:nif(CRC1, EncodedBatch),
-  % 4 bytes PartitionLeaderEpoch
-  % 1 byte Magic
-  % 4 bytes CRC
-  % ALL bytes after CRC
-  Size = 9 + size(Meta) + size(EncodedBatch),
+  Body0 =
+    [ EncodedAttributes           % {Attributes0,     T1} = dec(int16, T0),
+    , enc(int32, LastOffsetDelta) % {LastOffsetDelta, T2} = dec(int32, T1),
+    , enc(int64, FirstTimestamp)  % {FirstTimestamp,  T3} = dec(int64, T2),
+    , enc(int64, MaxTimestamp)    % {MaxTimestamp,    T4} = dec(int64, T3),
+    , enc(int64, ProducerId)      % {ProducerId,      T5} = dec(int64, T4),
+    , enc(int16, ProducerEpoch)   % {ProducerEpoch,   T6} = dec(int16, T5),
+    , enc(int32, FirstSequence)   % {FirstSequence,   T7} = dec(int32, T6),
+    , enc(int32, Count)           % {Count,           T8} = dec(int32, T7),
+    , EncodedBatch
+    ],
+  Body1 = iolist_to_binary(Body0),
+  CRC = crc32cer:nif(Body1),
+  Body =
+    [ enc(int32, PartitionLeaderEpoch)
+    , enc(int8,  Magic)
+    , enc(int32, CRC)
+    , Body1
+    ],
+  Size = kpro_lib:data_size(Body),
   [ enc(int64, FirstOffset)
   , enc(int32, Size)
-  , enc(int32, PartitionLeaderEpoch)
-  , enc(int8,  Magic)
-  , enc(int32, CRC)
-  , Meta
-  , EncodedBatch
+  | Body
   ].
 
 %% @doc Decode received message-set into a batch list.
@@ -127,7 +126,7 @@ decode(Bin) ->
 
 -spec decode(binary(), Acc) -> Acc when Acc :: [{batch_meta(), [message()]}].
 decode(<<Offset:64, L:32, Body:L/binary, Rest/binary>>, Acc) ->
-  <<_CRC:32, Magic:8, _/binary>> = Body,
+  <<_:32, Magic:8, _:32, _/binary>> = Body,
   Batch = case Magic < 2 of
             true  -> {?NO_META, kpro_batch_v01:decode(Offset, Body)};
             false -> do_decode(Offset, Body)
@@ -159,16 +158,18 @@ scan_max_ts(Count, MaxTs, []) -> {Count, MaxTs};
 scan_max_ts(Count, MaxTs, [#{ts := Ts} | Rest]) ->
   %% It is named 'Max' in document,
   %% but it also clams that it should be the timestamp of the 'last' message
-  %% so I'm guessing it has to be monotonic within batch.
+  %% so the assumption here is: it has to be monotonic within batch.
   MaxTs > Ts andalso erlang:error({bad_ts_sequence, Count, MaxTs, Ts}),
-  scan_max_ts(Count + 1, Ts, Rest).
+  scan_max_ts(Count + 1, Ts, Rest);
+scan_max_ts(Count, MaxTs, [#{} | Rest]) ->
+  scan_max_ts(Count + 1, MaxTs, Rest).
 
--spec encode_batch(batch_attributes(), [msg_input()]) -> binary().
-encode_batch(Attributes, [#{ts := TsBase} | _] = Batch) ->
+-spec encode_batch(batch_attributes(), msg_ts(), [msg_input()]) -> iodata().
+encode_batch(Attributes, TsBase, Batch) ->
   Compression = proplists:get_value(compression, Attributes, ?no_compression),
   Encoded0 = enc_records(_Offset = 0, TsBase, Batch),
   Encoded = kpro_compress:compress(Compression, Encoded0),
-  iolist_to_binary(Encoded).
+  Encoded.
 
 -spec enc_records(offset(), msg_ts(), [msg_input()]) -> iodata().
 enc_records(_Offset, _TsBase, []) -> [];
@@ -192,7 +193,11 @@ enc_records(Offset, TsBase, [Msg | Batch]) ->
 %   FirstSequence => int32
 %   Records => [Record]
 -spec do_decode(offset(), binary()) -> {batch_meta(), [message()]}.
-do_decode(Offset, <<CRC:32/unsigned-integer, T0/binary>>) ->
+do_decode(Offset, <<_PartitionLeaderEpoch:32,
+                    _Magic:8,
+                    CRC:32/unsigned-integer,
+                    T0/binary>>) ->
+  CRC = crc32cer:nif(T0), %% assert
   {Attributes0,     T1} = dec(int16, T0),
   {LastOffsetDelta, T2} = dec(int32, T1),
   {FirstTimestamp,  T3} = dec(int64, T2),
@@ -206,17 +211,17 @@ do_decode(Offset, <<CRC:32/unsigned-integer, T0/binary>>) ->
   Compression = proplists:get_value(compression, Attributes),
   RecordsBin = kpro_compress:decompress(Compression, T8),
   Messages = dec_records(Count, Offset, FirstTimestamp, TsType, RecordsBin),
-  Meta = #kpro_batch_meta{ first_offset = Offset
-                         , magic = 2
-                         , crc = CRC
-                         , attributes = Attributes
-                         , last_offset_delta = LastOffsetDelta
-                         , first_ts = FirstTimestamp
-                         , max_ts = MaxTimestamp
-                         , producer_id = ProducerId
-                         , producer_epoch = ProducerEpoch
-                         , first_seq = FirstSequence
-                         },
+  Meta = #{ first_offset => Offset
+          , magic => 2
+          , crc => CRC
+          , attributes => Attributes
+          , last_offset_delta => LastOffsetDelta
+          , first_ts => FirstTimestamp
+          , max_ts => MaxTimestamp
+          , producer_id => ProducerId
+          , producer_epoch => ProducerEpoch
+          , first_sequence => FirstSequence
+          },
   {Meta, Messages}.
 
 -spec dec_records(integer(), offset(), msg_ts(),
@@ -247,7 +252,6 @@ dec_records(Count, Offset, Ts, TsType, Bin, Acc) ->
 -spec dec_record(offset(), msg_ts(), ts_type(), binary()) ->
         {message(), binary()}.
 dec_record(Offset, Ts, TsType, Bin) ->
-  %% Why!? why there is a length here
   {_Len,        T0} = dec(varint, Bin),
   {Attr,        T1} = dec(int8, T0),
   {TsDelta,     T2} = dec(varint, T1),
@@ -277,24 +281,22 @@ dec_record(Offset, Ts, TsType, Bin) ->
 %   Value => data
 %   Headers => [Header]
 -spec enc_record(offset(), msg_ts(), msg_input()) -> iodata().
-enc_record(Offset, TsBase, #{ ts := Ts
-                            , headers := Headers
-                            , key := Key
-                            , value := Value
-                            }) ->
-  Body = [ 0 %% no per-message attributes in magic 2
+enc_record(Offset, TsBase, #{value := Value} = M) ->
+  Ts = maps:get(ts, M, TsBase),
+  Key = maps:get(key, M, <<>>),
+  %% 'headers' is a non-nullable array
+  %% do not encode 'undefined' -> -1
+  Headers = maps:get(headers, M, []),
+  Body = [ enc(int8, 0) %% no per-message attributes in magic 2
          , enc(varint, Ts - TsBase)
          , enc(varint, Offset)
-         , enc(varint, size(Key))
-         , Key
-         , enc(varint, size(Value))
-         , Value
+         , enc(bytes, Key)
+         , enc(bytes, Value)
          , enc_headers(Headers)
          ],
   Size = kpro_lib:data_size(Body),
   [enc(varint, Size), Body].
 
-enc_headers(undefined) -> enc(varint, -1);
 enc_headers(Headers) ->
   Count = length(Headers),
   %% TODO: check int32 or varint
@@ -342,6 +344,13 @@ dec(bytes, Bin) ->
 dec(Primitive, Bin) ->
   kpro_lib:decode(Primitive, Bin).
 
+enc(bytes, undefined) ->
+  enc(varint, -1);
+enc(bytes, <<>>) ->
+  enc(varint, -1);
+enc(bytes, Bin) ->
+  Len = size(Bin),
+  [enc(varint, Len), Bin];
 enc(Primitive, Val) ->
   kpro_lib:encode(Primitive, Val).
 
@@ -366,14 +375,16 @@ parse_attributes(Attr) ->
   , {is_control, (Attr band (1 bsl 5)) =/= 0}
   ].
 
--spec encode_attributes(batch_attributes()) -> byte().
+-spec encode_attributes(batch_attributes()) -> binary().
 encode_attributes(Attr) ->
   Compression = proplists:get_value(compression, Attr, ?no_compression),
   Codec = kpro_compress:method_to_codec(Compression),
   TsType = 0, %% producer always set 0
   IsTxn = flag(proplists:get_bool(is_transaction, Attr), 1 bsl 4),
   IsCtrl = flag(proplists:get_bool(is_control, Attr), 1 bsl 5),
-  Codec bor TsType bor IsTxn bor IsCtrl.
+  Result = Codec bor TsType bor IsTxn bor IsCtrl,
+  %% yes, it's int16 for batch level attributes
+  enc(int16, Result).
 
 flag(false, _) -> 0;
 flag(true, BitMask) -> BitMask.

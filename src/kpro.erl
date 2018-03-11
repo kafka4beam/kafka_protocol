@@ -15,8 +15,9 @@
 
 -module(kpro).
 
-%% APIs to build requests.
--export([ fetch_request/7
+%% APIs for producer to build requests.
+-export([ decode_batches/1
+        , fetch_request/8
         , offsets_request/4
         , produce_request/6
         , produce_request/7
@@ -26,9 +27,13 @@
         , max_corr_id/0
         ]).
 
-%% APIs for the socket process
+%% APIs to send requests (forward calls to kpro_connection)
+-export([ request_sync/3
+        , request_async/2
+        ]).
+
+%% Hidden APIs for kpro_connection
 -export([ decode_response/1
-        , decode_batches/1
         , encode_request/3
         , next_corr_id/1
         ]).
@@ -123,6 +128,16 @@
 -type header_key() :: binary().
 -type header_val() :: binary().
 -type headers() :: [{header_key(), header_val()}].
+-type batch_meta_key() :: first_offset
+                        | magic
+                        | crc
+                        | attributes
+                        | last_offset_delta
+                        | first_ts
+                        | max_ts
+                        | producer_id
+                        | producer_epoch
+                        | first_sequence.
 
 -type key() :: ?null | iodata().
 -type value() :: ?null | iodata().
@@ -144,7 +159,7 @@
 -type incomplete_batch() :: ?incomplete_batch(int32()).
 -type message() :: #kafka_message{}.
 -type batch_meta() :: ?KPRO_NO_BATCH_META %% magic 0-1
-                    | #kpro_batch_meta{}.
+                    | #{batch_meta_key() => term()}.
 -type batch_decode_result() :: ?incomplete_batch(int32())
                              | {batch_meta(), [message()]}.
 
@@ -155,7 +170,8 @@
 -type primitive() :: integer() | string() | binary() | atom().
 -type field_name() :: atom().
 -type field_value() :: primitive() | struct() | [struct()].
--type struct() :: [{field_name(), field_value()}].
+-type struct() :: #{field_name() => field_value()}
+                | [{field_name(), field_value()}].
 -type req_tag() :: atom().
 -type rsp_tag() :: atom().
 -type tag() :: req_tag() | rsp_tag().
@@ -184,6 +200,7 @@
                 | decode_fun(). %% caller defined decoder
 -type stack() :: [{tag(), vsn()} | field_name()]. %% encode / decode stack
 
+-define(IS_STRUCT(S), (is_list(S) orelse is_map(S))).
 -define(SCHEMA_MODULE, kpro_schema).
 -define(PRELUDE, kpro_prelude_schema).
 %% All versions of kafka messages (records) share the same header:
@@ -198,6 +215,20 @@
 -define(BATCH_LEADING_BYTES, 12).
 
 %%%_* APIs =====================================================================
+
+%% @doc Send a request, wait for response.
+%% Immediately return 'ok' if it is a produce request with `required_acks = 0'.
+-spec request_sync(pid(), req(), timeout()) ->
+        ok | {ok, rsp()} | {error, any()}.
+request_sync(ConnectionPid, Request, Timeout) ->
+  kpro_connection:request_sync(ConnectionPid, Request, Timeout).
+
+%% @doc Send a request and get back a correlation ID to match future response.
+%% Immediately return 'ok' if it is a produce request with `required_acks = 0'.
+-spec request_async(pid(), req()) ->
+        ok | {ok, corr_id()} | {error, any()}.
+request_async(ConnectionPid, Request) ->
+  kpro_connection:request_async(ConnectionPid, Request).
 
 %% @doc Return the allowed maximum correlation ID.
 -spec max_corr_id() -> corr_id().
@@ -230,26 +261,22 @@ offsets_request(Vsn, Topic, Partition, Time) ->
 %% against one single topic-partition.
 %% @end
 -spec fetch_request(vsn(), topic(), partition(), offset(),
-                    wait(), count(), count()) -> req().
+                    wait(), count(), count(), 0 | 1) -> req().
 fetch_request(Vsn, Topic, Partition, Offset,
-              MaxWaitTime, MinBytes, MaxBytes) ->
-  Fields0 =
+              MaxWaitTime, MinBytes, MaxBytes, IsolationLevel) ->
+  Fields =
     [{replica_id, ?KPRO_REPLICA_ID},
      {max_wait_time, MaxWaitTime},
+     {max_bytes, MaxBytes},
      {min_bytes, MinBytes},
+     {isolation_level, IsolationLevel},
      {topics,[[{topic, Topic},
                {partitions,
                 [[{partition, Partition},
                   {fetch_offset, Offset},
-                  {max_bytes, MaxBytes}]]}]]}],
-  %% Version 3 introduced a top level max_bytes
-  %% we use the same value as per-partition max_bytes
-  %% because this API is to build request against single partition
-  Fields =
-    case Vsn >= 3 of
-      true  -> [{max_bytes, MaxBytes} | Fields0];
-      false -> Fields0
-    end,
+                  {max_bytes, MaxBytes},
+                  {log_start_offset, -1} %% irelevant to clients
+                 ]]}]]}],
   req(fetch_request, Vsn, Fields).
 
 %% @equiv produce_request(Vsn, Topic, Partition, KvList, RequiredAcks,
@@ -270,7 +297,8 @@ produce_request(Vsn, Topic, Partition, Batch,
                 RequiredAcks, AckTimeout, CompressOption) ->
   Messages = kpro_batch:encode(Batch, CompressOption),
   Fields =
-    [{acks, RequiredAcks},
+    [{transactional_id, ?kpro_null},
+     {acks, RequiredAcks},
      {timeout, AckTimeout},
      {topic_data, [[{topic, Topic},
                     {data, [[{partition, Partition},
@@ -352,19 +380,13 @@ decode(Type, Bin) -> kpro_lib:decode(Type, Bin).
 %% @hidden Encode struct.
 -spec enc_struct(schema(), struct(), stack()) -> iodata().
 enc_struct([], _Values, _Stack) -> [];
-enc_struct([{Name, FieldSc} | Schema], Values, Stack) when is_list(Values) ->
+enc_struct([{Name, FieldSc} | Schema], Values, Stack) ->
   NewStack = [Name | Stack],
-  case lists:keytake(Name, 1, Values) of
-    {value, {_, Value0}, ValuesLeft} ->
-      Value = enc_embedded(NewStack, Value0),
-      [ enc_struct_field(FieldSc, Value, NewStack)
-      | enc_struct(Schema, ValuesLeft, Stack)
-      ];
-    false ->
-      erlang:throw({field_missing, [Name | Stack]})
-  end;
-enc_struct(_Schema, _Value, Stack) ->
-  erlang:throw({not_struct, Stack}).
+  Value0 = do_find(Name, Values, {field_missing, NewStack}),
+  Value = enc_embedded(NewStack, Value0),
+  [ enc_struct_field(FieldSc, Value, NewStack)
+  | enc_struct(Schema, Values, Stack)
+  ].
 
 %% @hidden Decode struct.
 -spec dec_struct(struct_schema(), struct(), stack(), binary()) ->
@@ -437,12 +459,9 @@ get_schema(Module, Tag, Vsn) ->
   end.
 
 %% @doc Find field value in a struct, raise an exception if not found.
--spec find(field_name(), struct()) -> field_value() | no_return().
+-spec find(field_name(), struct()) -> field_value().
 find(Field, Struct) ->
-  case lists:keyfind(Field, 1, Struct) of
-    {_, Value} -> Value;
-    false -> erlang:throw({no_such_field, Field})
-  end.
+  do_find(Field, Struct, {no_such_field, Field}).
 
 %% @doc Find field value in a struct, reutrn default if not found.
 -spec find(field_name(), struct(), field_value()) -> field_value().
@@ -455,6 +474,21 @@ find(Field, Struct, Default) ->
   end.
 
 %%%_* Internal functions =======================================================
+
+do_find(Field, Struct, Throw) when is_map(Struct) ->
+  try
+    maps:get(Field, Struct)
+  catch
+    error : {badkey, _} ->
+      erlang:throw(Throw)
+  end;
+do_find(Field, Struct, Throw) when is_list(Struct) ->
+  case lists:keyfind(Field, 1, Struct) of
+    {_, Value} -> Value;
+    false -> erlang:throw(Throw)
+  end;
+do_find(_Field, Other, _Throw) ->
+  erlang:throw({not_struct, Other}).
 
 -spec decode_response(binary(), [rsp()]) -> {[rsp()], binary()}.
 decode_response(Bin, Acc) ->
@@ -508,14 +542,14 @@ enc_struct_field({array, Schema}, Values, Stack) ->
     false ->
       erlang:throw({not_array, Stack})
   end;
-enc_struct_field(Schema, Value, Stack) when is_list(Schema) ->
+enc_struct_field(Schema, Value, Stack) when ?IS_STRUCT(Schema) ->
   enc_struct(Schema, Value, Stack);
 enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
   try
     encode(Primitive, Value)
   catch
     error : Reason ->
-      erlang:throw({Reason, Stack})
+      erlang:throw({Reason, Stack, erlang:get_stacktrace()})
   end.
 
 %% Encode embedded bytes.
@@ -541,7 +575,7 @@ dec_struct_field({array, Schema}, Stack, Bin0) ->
     true -> {?null, Bin};
     false -> dec_array_elements(Count, Schema, Stack, Bin, [])
   end;
-dec_struct_field(Schema, Stack, Bin) when is_list(Schema) ->
+dec_struct_field(Schema, Stack, Bin) when ?IS_STRUCT(Schema) ->
   dec_struct(Schema, [], Stack, Bin);
 dec_struct_field(F, _Stack, Bin) when is_function(F) ->
   %% Caller provided decoder
