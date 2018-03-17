@@ -72,7 +72,7 @@
         case ApiKey of
            0 -> produce_request;
            1 -> fetch_request;
-           2 -> offsets_request;
+           2 -> list_offsets_request;
            3 -> metadata_request;
            4 -> leader_and_isr_request;
            5 -> stop_replica_request;
@@ -98,7 +98,7 @@
         case Req of
           produce_request             ->  0;
           fetch_request               ->  1;
-          offsets_request             ->  2;
+          list_offsets_request        ->  2;
           metadata_request            ->  3;
           leader_and_isr_request      ->  4;
           stop_replica_request        ->  5;
@@ -147,6 +147,25 @@
 -define(null, ?kpro_null).
 
 -define(INT, signed-integer).
+
+-define(ISOLATION_LEVEL_ATOM(I),
+        case I of
+          0 -> ?kpro_read_uncommitted;
+          1 -> ?kpro_read_committed
+        end).
+
+-define(ISOLATION_LEVEL_INTEGER(I),
+        case I of
+          ?kpro_read_uncommitted -> 0;
+          ?kpro_read_committed   -> 1
+        end).
+
+
+-define(SCHEMA_MODULE, kpro_schema).
+
+-define(PRELUDE, kpro_prelude_schema).
+
+-define(IS_STRUCT(S), (is_list(S) orelse is_map(S))).
 
 -endif.
 

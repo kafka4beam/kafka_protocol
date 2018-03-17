@@ -50,7 +50,6 @@
 %% try not to use 0 corr ID for the first few requests
 %% as they are usually used by upper level callers
 -define(SASL_AUTH_REQ_CORRID, kpro:max_corr_id()).
--define(API_VERSIONS_REQ_CORRID, (kpro:max_corr_id() - 1)).
 
 -type opt_key() :: connect_timeout
                  | client_id
@@ -245,7 +244,8 @@ sasl_auth(_Host, _Sock, _Mod, _ClientId, _Timeout, ?undef) ->
 sasl_auth(_Host, Sock, Mod, ClientId, Timeout,
           {_Method = plain, SaslUser, SaslPassword}) ->
   ok = setopts(Sock, Mod, [{active, false}]),
-  Req = kpro:req(sasl_handshake_request, _V = 0, [{mechanism, <<"PLAIN">>}]),
+  Req = kpro:make_request(sasl_handshake_request, _V = 0,
+                          [{mechanism, <<"PLAIN">>}]),
   HandshakeRequestBin =
     kpro:encode_request(ClientId, ?SASL_AUTH_REQ_CORRID, Req),
   Rsp = inactive_request_sync(Sock, Mod, HandshakeRequestBin, Timeout,

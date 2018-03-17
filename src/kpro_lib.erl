@@ -6,6 +6,7 @@
         , encode/2
         , get_ts_type/2
         , get_now_ts/0
+        , parse_endpoints/1
         ]).
 
 -include("kpro_private.hrl").
@@ -17,6 +18,20 @@
 -type count() :: non_neg_integer().
 
 %%%_* APIs =====================================================================
+
+%% @doc Parse 'host:port,host2:port2' string into endpoint list
+parse_endpoints(Str) ->
+  Eps0 = string:tokens(Str, ",\n"),
+  Eps = [Ep || Ep <- Eps0, Ep =/= ""],
+  F = fun(Ep) ->
+          case string:tokens(Ep, ":") of
+            [Host] ->
+              {Host, 9092};
+            [Host, Port] ->
+              {Host, list_to_integer(Port)}
+          end
+      end,
+  lists:map(F, Eps).
 
 %% @doc Return number of bytes in the given `iodata()'.
 -spec data_size(iodata()) -> count().

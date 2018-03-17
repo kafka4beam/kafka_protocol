@@ -39,6 +39,8 @@
 -define(kpro_null, undefined).
 -define(kpro_cg_no_assignment, ?kpro_null).
 -define(kpro_cg_no_member_metadata, ?kpro_null).
+-define(kpro_read_committed, read_committed).
+-define(kpro_read_uncommitted, read_uncommitted).
 
 -define(KPRO_NO_BATCH_META, undefined).
 
