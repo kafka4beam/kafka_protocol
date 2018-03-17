@@ -82,7 +82,11 @@ encode_tx(#{ attributes := Attributes
            , producer_epoch := ProducerEpoch
            , first_sequence := FirstSequence
            }, [FirstMsg | _] = Batch) ->
-  FirstTimestamp = maps:get(ts, FirstMsg, os:system_time() div 1000000),
+  FirstTimestamp =
+    case maps:get(ts, FirstMsg, false) of
+      false -> kpro_lib:get_now_ts();
+      Ts -> Ts
+    end,
   EncodedBatch = encode_batch(Attributes, FirstTimestamp, Batch),
   EncodedAttributes = encode_attributes(Attributes),
   PartitionLeaderEpoch = -1, %% producer can set whatever
@@ -155,12 +159,9 @@ reverse_hd_messages([{Meta, Messages} | R]) ->
 -spec scan_max_ts(pos_integer(), msg_ts(), batch_input()) ->
         {pos_integer(), msg_ts()}.
 scan_max_ts(Count, MaxTs, []) -> {Count, MaxTs};
-scan_max_ts(Count, MaxTs, [#{ts := Ts} | Rest]) ->
-  %% It is named 'Max' in document,
-  %% but it also clams that it should be the timestamp of the 'last' message
-  %% so the assumption here is: it has to be monotonic within batch.
-  MaxTs > Ts andalso erlang:error({bad_ts_sequence, Count, MaxTs, Ts}),
-  scan_max_ts(Count + 1, Ts, Rest);
+scan_max_ts(Count, MaxTs0, [#{ts := Ts} | Rest]) ->
+  MaxTs = max(MaxTs0, Ts),
+  scan_max_ts(Count + 1, MaxTs, Rest);
 scan_max_ts(Count, MaxTs, [#{} | Rest]) ->
   scan_max_ts(Count + 1, MaxTs, Rest).
 

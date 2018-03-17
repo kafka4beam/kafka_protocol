@@ -8,32 +8,35 @@
 -define(HOST, "localhost").
 -define(TIMEOUT, 5000).
 
+-define(ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp),
+        begin
+          #kpro_rsp{ tag = produce_response
+                   , vsn = Vsn
+                   , msg = [ {responses, [Response]}
+                           | _
+                           ]
+                   } = Rsp,
+          [ {topic, ?TOPIC}
+          , {partition_responses, [PartitionRsp]}
+          | _
+          ] = Response,
+          ?assertMatch([ {partition, ?PARTI}
+                       , {error_code, no_error}
+                       , {base_offset, _}
+                       | _
+                       ], PartitionRsp)
+        end).
+
 magic_v0_basic_test_() ->
   MkTestFun =
     fun(Vsn) ->
         fun() ->
-            {ok, Pid} = kpro_connection:start(self(), ?HOST, 9092, #{}),
-            try
+          with_connection(
+            fun(Pid) ->
               Req = make_req(Vsn),
               {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
-              #kpro_rsp{ tag = produce_response
-                       , vsn = Vsn
-                       , msg = [ {responses, [Response]}
-                               | _
-                               ]
-                       } = Rsp,
-              [ {topic, ?TOPIC}
-              , {partition_responses, [PartitionRsp]}
-              | _
-              ] = Response,
-              ?assertMatch([ {partition, ?PARTI}
-                           , {error_code, no_error}
-                           , {base_offset, _}
-                           | _
-                           ], PartitionRsp)
-            after
-              kpro_connection:stop(Pid)
-            end
+              ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
+            end)
         end
     end,
   MkTest =
@@ -43,6 +46,28 @@ magic_v0_basic_test_() ->
     end,
   [MkTest(Vsn) || Vsn <- lists:seq(0, 5)].
 
+non_monotoic_ts_in_batch_test() ->
+  RequestVersion = 5,
+  Ts = kpro_lib:get_now_ts() - 1000,
+  Msgs = [ #{ts => Ts,
+             value => make_value(?LINE)
+            },
+           #{ts => Ts - 1000,
+             value => make_value(?LINE)
+            },
+           #{ts => Ts + 1000,
+             value => make_value(?LINE)
+            }
+         ],
+  Req = kpro:produce_request(RequestVersion, ?TOPIC, ?PARTI, Msgs,
+                             _RequiredAcks = -1, _AckTimeout = 1000,
+                             no_compression),
+  with_connection(
+    fun(Pid) ->
+      {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
+      ?ASSERT_RESPONSE_NO_ERROR(RequestVersion, Rsp)
+    end).
+
 make_req(Vsn) ->
   Batch = make_batch(Vsn),
   kpro:produce_request(Vsn, ?TOPIC, ?PARTI, Batch,
@@ -50,21 +75,32 @@ make_req(Vsn) ->
                        _AckTimeout = 1000,
                        no_compression).
 
-% Produce requests with version 3 are only allowed to contain record batches
-% with magic version 2
+with_connection(Fun) ->
+  {ok, Pid} = kpro_connection:start(self(), ?HOST, 9092, #{}),
+  try
+    Fun(Pid)
+  after
+    kpro_connection:stop(Pid)
+  end.
+
+% Produce requests since v3 are only allowed to
+% contain record batches with magic v2
+% magic 0-1 have tuple list as batch input
+% magic 2 has map list as batch input
 make_batch(Vsn) when Vsn < 3 ->
   [ {<<"key1">>, make_value(Vsn)}
   , {<<"key2">>, make_value(Vsn)}
   ];
 make_batch(Vsn) ->
   F = fun(I) ->
-          #{ value => <<>>
+          #{ key => iolist_to_binary("key" ++ integer_to_list(I))
+           , value => make_value(Vsn)
            }
       end,
-  [F(1)].
+  [F(1), F(2)].
 
-make_value(Vsn) ->
-  term_to_binary({Vsn, os:system_time()}).
+make_value(Random) ->
+  term_to_binary({Random, os:system_time()}).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
