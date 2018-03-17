@@ -27,9 +27,9 @@
 
 %% API
 -export([ new/0
-        , add/2
+        , add/5
         , del/2
-        , get_caller/2
+        , get_req/2
         , get_corr_id/1
         , increment_corr_id/1
         , scan_for_max_age/1
@@ -37,18 +37,19 @@
 
 -export_type([requests/0]).
 
+-type corr_id() :: kpro:corr_id().
+-define(REQ(Caller, Ref, API, Vsn, Ts), {Caller, Ref, API, Vsn, Ts}).
+-type req() :: ?REQ(pid(), reference(), kpro:api(), kpro:vsn(), integer()).
+
 -record(requests,
         { corr_id = 0
-        , sent = #{}
+        , sent = #{} :: #{corr_id() => req()}
         }).
 
 -opaque requests() :: #requests{}.
--type corr_id() :: kpro:corr_id().
 
 -include("kpro_private.hrl").
 
--define(REQ(Caller, Ts), {Caller, Ts}).
--define(MAX_CORR_ID_WINDOW_SIZE, (?MAX_CORR_ID div 2)).
 
 %%%_* APIs =====================================================================
 
@@ -57,12 +58,14 @@ new() -> #requests{}.
 
 %% @doc Add a new request to sent collection.
 %% Return the last corrlation ID and the new opaque.
--spec add(requests(), pid()) -> {corr_id(), requests()}.
+-spec add(requests(), pid(), reference(), kpro:api(), kpro:vsn()) ->
+        {corr_id(), requests()}.
 add(#requests{ corr_id = CorrId
              , sent    = Sent
-             } = Requests, Caller) ->
-  NewSent = maps:put(CorrId, ?REQ(Caller, os:timestamp()), Sent),
-  NewRequests = Requests#requests{ corr_id = kpro:next_corr_id(CorrId)
+             } = Requests, Caller, Ref, API, Vsn) ->
+  Req = ?REQ(Caller, Ref, API, Vsn, os:system_time(millisecond)),
+  NewSent = maps:put(CorrId, Req, Sent),
+  NewRequests = Requests#requests{ corr_id = next_corr_id(CorrId)
                                  , sent    = NewSent
                                  },
   {CorrId, NewRequests}.
@@ -75,10 +78,11 @@ del(#requests{sent = Sent} = Requests, CorrId) ->
 
 %% @doc Get caller of a request having the given correlation ID.
 %% Crash if the request is not found.
--spec get_caller(requests(), corr_id()) -> pid().
-get_caller(#requests{sent = Sent}, CorrId) ->
-  ?REQ(Caller, _Ts) = maps:get(CorrId, Sent),
-  Caller.
+-spec get_req(requests(), corr_id()) ->
+        {pid(), reference(), kpro:api(), kpro:vsn()}.
+get_req(#requests{sent = Sent}, CorrId) ->
+  ?REQ(Caller, Ref, API, Vsn, _Ts) = maps:get(CorrId, Sent),
+  {Caller, Ref, API, Vsn}.
 
 %% @doc Get the correction to be sent for the next request.
 -spec get_corr_id(requests()) -> corr_id().
@@ -89,18 +93,20 @@ get_corr_id(#requests{ corr_id = CorrId }) ->
 %% This is used if we don't want a response from the broker
 -spec increment_corr_id(requests()) -> {corr_id(), requests()}.
 increment_corr_id(#requests{corr_id = CorrId} = Requests) ->
-  {CorrId, Requests#requests{ corr_id = kpro:next_corr_id(CorrId) }}.
+  {CorrId, Requests#requests{ corr_id = next_corr_id(CorrId) }}.
 
 %% @doc Scan all sent requests to get oldest sent request.
 %% Age is in milli-seconds.
 %% 0 is returned if there is no pending response.
 -spec scan_for_max_age(requests()) -> timeout().
 scan_for_max_age(#requests{sent = Sent}) ->
-  Now = os:timestamp(),
-  MinTs = maps:fold(fun(_CorrId, ?REQ(_Caller, Ts), Min) ->
+  Now = os:system_time(millisecond),
+  MinTs = maps:fold(fun(_CorrId, ?REQ(_Caller, _Ref, _API, _Vsn, Ts), Min) ->
                           erlang:min(Ts, Min)
                     end, Now, Sent),
-  timer:now_diff(Now, MinTs) div 1000.
+  Now - MinTs.
+
+next_corr_id(N) -> (N + 1) rem (1 bsl 31).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

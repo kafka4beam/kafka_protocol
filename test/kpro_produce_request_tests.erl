@@ -5,13 +5,12 @@
 
 -define(TOPIC, <<"test-topic">>).
 -define(PARTI, 0).
--define(HOST, "localhost").
 -define(TIMEOUT, 5000).
 -define(MIN_MAGIC_2_VSN, 3).
 
 -define(ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp),
         begin
-          #kpro_rsp{ tag = produce_response
+          #kpro_rsp{ api = produce
                    , vsn = Vsn
                    , msg = [ {responses, [Response]}
                            | _
@@ -56,7 +55,7 @@ non_monotoic_ts_in_batch_test() ->
       %% Nothing to test for kafka < 0.11
       ok;
     false ->
-      Ts = kpro_lib:get_now_ts() - 1000,
+      Ts = kpro_lib:now_ts() - 1000,
       Msgs = [ #{ts => Ts,
                  value => make_value(?LINE)
                 }
@@ -87,7 +86,7 @@ make_req(Vsn) ->
 query_api_versions() ->
   {ok, Versions} =
     with_connection(fun(Pid) -> kpro:query_api_versions(Pid, 1000) end),
-  {_, MinMax} = lists:keyfind(produce_request, 1, Versions),
+  {_, MinMax} = lists:keyfind(produce, 1, Versions),
   MinMax.
 
 with_connection(Fun) ->

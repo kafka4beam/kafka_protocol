@@ -46,7 +46,12 @@ list_offsets(Vsn, Topic, Partition, Time) ->
 %% topic-partition. In transactional mode,
 %% set `IsolationLevel = ?kpro_read_uncommitted' to list uncommited offsets.
 -spec list_offsets(kpro:vsn(), kpro:topic(), kpro:partition(),
-                   kpro:msg_ts(), kpro:isolation_level()) -> kpro:req().
+                   latest | earliest | kpro:msg_ts(),
+                   kpro:isolation_level()) -> kpro:req().
+list_offsets(Vsn, Topic, Partition, latest, IsolationLevel) ->
+  list_offsets(Vsn, Topic, Partition, -1, IsolationLevel);
+list_offsets(Vsn, Topic, Partition, earliest, IsolationLevel) ->
+  list_offsets(Vsn, Topic, Partition, -2, IsolationLevel);
 list_offsets(Vsn, Topic, Partition, Time, IsolationLevel) ->
   PartitionFields =
     case Vsn of
@@ -67,15 +72,15 @@ list_offsets(Vsn, Topic, Partition, Time, IsolationLevel) ->
                  {partitions, [ PartitionFields ]}]
               ]}
     ],
-  make(list_offsets_request, Vsn, Fields).
+  make(list_offsets, Vsn, Fields).
 
-%% @doc Help function to construct a `fetch_request'
+%% @doc Help function to construct a `fetch' request
 %% against one single topic-partition.
 fetch(Vsn, Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
   fetch(Vsn, Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes,
         ?kpro_read_committed).
 
-%% @doc Help function to construct a `fetch_request'
+%% @doc Help function to construct a `fetch' request
 %% against one single topic-partition. In transactional mode, set
 %% `IsolationLevel = kpro_read_uncommitted' to fetch uncommitted messages.
 -spec fetch(kpro:vsn(), kpro:topic(), kpro:partition(), kpro:offset(),
@@ -96,10 +101,10 @@ fetch(Vsn, Topic, Partition, Offset, MaxWaitTime,
                   {max_bytes, MaxBytes},
                   {log_start_offset, -1} %% irelevant to clients
                  ]]}]]}],
-  make(fetch_request, Vsn, Fields).
+  make(fetch, Vsn, Fields).
 
-%% @equiv produce_request(Vsn, Topic, Partition, KvList, RequiredAcks,
-%%                        AckTimeout, ?no_compression)
+%% @equiv produce(Vsn, Topic, Partition, KvList, RequiredAcks,
+%%                AckTimeout, ?no_compression)
 -spec produce(kpro:vsn(), kpro:topic(), kpro:partition(), kpro:batch_input(),
               kpro:required_acks(), kpro:wait()) -> kpro:req().
 produce(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout) ->
@@ -124,51 +129,39 @@ produce(Vsn, Topic, Partition, Batch, RequiredAcks,
                             ]]}
                    ]]}
     ],
-  Req = make(produce_request, Vsn, Fields),
+  Req = make(produce, Vsn, Fields),
   Req#kpro_req{no_ack = RequiredAcks =:= 0}.
 
 %% @doc Help function to make a request body.
--spec make(kpro:req_tag(), kpro:vsn(), kpro:struct()) -> kpro:req().
-make(Tag, Vsn, Fields) ->
-  #kpro_req{ tag = Tag
+-spec make(kpro:api(), kpro:vsn(), kpro:struct()) -> kpro:req().
+make(API, Vsn, Fields) ->
+  #kpro_req{ api = API
            , vsn = Vsn
-           , msg = encode_struct(Tag, Vsn, Fields)
+           , msg = encode_struct(API, Vsn, Fields)
            }.
 
 %% @doc Encode a request to bytes that can be sent on wire.
 -spec encode(kpro:client_id(), kpro:corr_id(), kpro:req()) -> iodata().
-encode(ClientName, CorrId0, Req) ->
-  #kpro_req{tag = Tag, vsn = Vsn, msg = Msg} = Req,
-  ApiKey = ?REQ_TO_API_KEY(Tag),
-  true = (CorrId0 =< ?MAX_CORR_ID), %% assert
-  true = (ApiKey < 1 bsl ?API_KEY_BITS), %% assert
-  true = (Vsn < 1 bsl ?API_VERSION_BITS), %% assert
-  CorrId = <<ApiKey:?API_KEY_BITS,
-             Vsn:?API_VERSION_BITS,
-             CorrId0:?CORR_ID_BITS>>,
+encode(ClientName, CorrId, Req) ->
+  #kpro_req{api = API, vsn = Vsn, msg = Msg} = Req,
+  ApiKey = ?API_KEY_INTEGER(API),
   IoData =
     [ encode(int16, ApiKey)
     , encode(int16, Vsn)
-    , CorrId
+    , encode(int32, CorrId)
     , encode(string, ClientName)
-    , encode_struct(Tag, Vsn, Msg)
+    , encode_struct(API, Vsn, Msg)
     ],
   Size = kpro_lib:data_size(IoData),
   [encode(int32, Size), IoData].
 
 %%%_* Internal functions =======================================================
 
-%% Encode struct having schema predefined in kpro_schema.
-encode_struct(Tag, Vsn, Bin) ->
-  encode_struct(?SCHEMA_MODULE, Tag, Vsn, Bin).
-
-%% Encode struct having schema predefined in a callback:
-%% Module:get(Tag, Vsn)
-encode_struct(_Module, _Tag, _Vsn, Bin) when is_binary(Bin) -> Bin;
-encode_struct(Module, Tag, Vsn, Fields) ->
-  Schema = kpro:get_schema(Module, Tag, Vsn),
+encode_struct(_API, _Vsn, Bin) when is_binary(Bin) -> Bin;
+encode_struct(API, Vsn, Fields) ->
+  Schema = kpro_lib:get_req_schema(API, Vsn),
   try
-    bin(enc_struct(Schema, Fields, [{Tag, Vsn}]))
+    bin(enc_struct(Schema, Fields, [{API, Vsn}]))
   catch
     throw : {Reason, Stack} ->
       Trace = erlang:get_stacktrace(),
@@ -210,10 +203,10 @@ enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
 translate([isolation_level | _] , Value) ->
   ?ISOLATION_LEVEL_INTEGER(Value);
 translate([protocol_metadata | _] = Stack, Value) ->
-  Schema = kpro:get_schema(?PRELUDE, cg_protocol_metadata, 0),
+  Schema = kpro:get_prelude_schema(cg_protocol_metadata, 0),
   bin(enc_struct(Schema, Value, Stack));
 translate([member_assignment | _] = Stack, Value) ->
-  Schema = kpro:get_schema(?PRELUDE, cg_memeber_assignment, 0),
+  Schema = kpro:get_prelude_schema(cg_memeber_assignment, 0),
   bin(enc_struct(Schema, Value, Stack));
 translate(_Stack, Value) -> Value.
 

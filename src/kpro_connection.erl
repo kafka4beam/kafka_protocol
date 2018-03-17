@@ -49,7 +49,7 @@
 
 %% try not to use 0 corr ID for the first few requests
 %% as they are usually used by upper level callers
--define(SASL_AUTH_REQ_CORRID, kpro:max_corr_id()).
+-define(SASL_AUTH_REQ_CORRID, ((1 bsl 31) - 1)).
 
 -type opt_key() :: connect_timeout
                  | client_id
@@ -64,7 +64,6 @@
 -type hostname() :: kpro:hostname().
 -type portnum()  :: kpro:portnum().
 -type client_id() :: kpro:client_id().
--type corr_id() :: kpro:corr_id().
 
 -record(acc, { expected_size = error(bad_init) :: byte_count()
              , acc_size = 0 :: byte_count()
@@ -111,29 +110,24 @@ start(Parent, Host, Port) ->
 start(Parent, Host, Port, Options) ->
   proc_lib:start(?MODULE, init, [Parent, host(Host), Port, Options]).
 
-%% @doc Send a request and get back a correlation ID to match future response.
-%% Return 'ok' if it is a produce request with `required_acks = 0'.
--spec request_async(pid(), kpro:req()) ->
-        ok | {ok, corr_id()} | {error, any()}.
+%% @doc Send a request. Caller should expect to receive a response
+%% having `Rsp#kpro_rsp.ref' the same as `Request#kpro_req.ref'
+%% unless `Request#kpro_req.no_ack' is set to 'true'
+-spec request_async(pid(), kpro:req()) -> ok | {error, any()}.
 request_async(Pid, Request) ->
-  case call(Pid, {send, Request}) of
-    {ok, CorrId} ->
-      case Request of
-        #kpro_req{no_ack = true} -> ok;
-        _  -> {ok, CorrId}
-      end;
-    {error, Reason} ->
-      {error, Reason}
-  end.
+  call(Pid, {send, Request}).
 
 %% @doc Send a request and wait for response for at most Timeout milliseconds.
 -spec request_sync(pid(), kpro:req(), timeout()) ->
-        ok | {ok, term()} | {error, any()}.
+        ok | {ok, kpro:rsp()} | {error, any()}.
 request_sync(Pid, Request, Timeout) ->
   case request_async(Pid, Request) of
-    ok              -> ok;
-    {ok, CorrId}    -> wait_for_resp(Pid, Request, CorrId, Timeout);
-    {error, Reason} -> {error, Reason}
+    ok when Request#kpro_req.no_ack ->
+      ok;
+    ok ->
+      wait_for_rsp(Pid, Request, Timeout);
+    {error, Reason} ->
+      {error, Reason}
   end.
 
 %% @doc Stop socket process.
@@ -209,13 +203,16 @@ do_init(State0, Sock, Host, Options) ->
   loop(State#state{requests = Requests, req_timeout = ReqTimeout}, Debug).
 
 % Send request to active = false socket, and wait for response.
-inactive_request_sync(Sock, Mod, ReqBin, Timeout, ErrorTag) ->
+inactive_request_sync(#kpro_req{api = API, vsn = Vsn} = Req,
+                      Sock, Mod, ClientId, CorrId, Timeout, ErrorTag) ->
+  ReqBin = kpro:encode_request(ClientId, ?SASL_AUTH_REQ_CORRID, Req),
   try
     ok = Mod:send(Sock, ReqBin),
     {ok, <<Len:32>>} = Mod:recv(Sock, 4, Timeout),
     {ok, RspBin} = Mod:recv(Sock, Len, Timeout),
-    {[Rsp], <<>>} = kpro:decode_response(<<Len:32, RspBin/binary>>),
-    Rsp
+    {[{CorrId, Rsp}], <<>>} =
+      kpro_rsp_lib:decode_corr_id(<<Len:32, RspBin/binary>>),
+    kpro_rsp_lib:decode_body(API, Vsn, Rsp)
   catch
     error : Reason ->
       Stack = erlang:get_stacktrace(),
@@ -244,13 +241,10 @@ sasl_auth(_Host, _Sock, _Mod, _ClientId, _Timeout, ?undef) ->
 sasl_auth(_Host, Sock, Mod, ClientId, Timeout,
           {_Method = plain, SaslUser, SaslPassword}) ->
   ok = setopts(Sock, Mod, [{active, false}]),
-  Req = kpro:make_request(sasl_handshake_request, _V = 0,
-                          [{mechanism, <<"PLAIN">>}]),
-  HandshakeRequestBin =
-    kpro:encode_request(ClientId, ?SASL_AUTH_REQ_CORRID, Req),
-  Rsp = inactive_request_sync(Sock, Mod, HandshakeRequestBin, Timeout,
-                              sasl_auth_error),
-  #kpro_rsp{tag = sasl_handshake_response, vsn = 0, msg = Body} = Rsp,
+  Req = kpro:make_request(sasl_handshake, _V = 0, [{mechanism, <<"PLAIN">>}]),
+  Rsp = inactive_request_sync(Req, Sock, Mod, ClientId,
+                              ?SASL_AUTH_REQ_CORRID, Timeout, sasl_auth_error),
+  #kpro_rsp{api = sasl_handshake, vsn = 0, msg = Body} = Rsp,
   ErrorCode = kpro:find(error_code, Body),
   case kpro_error_code:is_error(ErrorCode) of
     true ->
@@ -284,12 +278,12 @@ sasl_plain_token(User, Password) ->
 setopts(Sock, _Mod = gen_tcp, Opts) -> inet:setopts(Sock, Opts);
 setopts(Sock, _Mod = ssl, Opts)     ->  ssl:setopts(Sock, Opts).
 
--spec wait_for_resp(pid(), term(), corr_id(), timeout()) ->
+-spec wait_for_rsp(pid(), kpro:req(), timeout()) ->
         {ok, term()} | {error, any()}.
-wait_for_resp(Pid, _, CorrId, Timeout) ->
+wait_for_rsp(Pid, #kpro_req{ref = Ref}, Timeout) ->
   Mref = erlang:monitor(process, Pid),
   receive
-    {msg, Pid, #kpro_rsp{corr_id = CorrId} = Rsp} ->
+    {msg, Pid, #kpro_rsp{ref = Ref} = Rsp} ->
       erlang:demonitor(Mref, [flush]),
       {ok, Rsp};
     {'DOWN', Mref, _, _, Reason} ->
@@ -351,9 +345,10 @@ handle_msg({_, Sock, Bin}, #state{ sock     = Sock
   {Responses, Acc} = decode_response(Acc1),
   NewRequests =
     lists:foldl(
-      fun(#kpro_rsp{corr_id = CorrId} = Rsp, Reqs) ->
-        Caller = kpro_sent_reqs:get_caller(Reqs, CorrId),
-        cast(Caller, {msg, self(), Rsp}),
+      fun({CorrId, Body}, Reqs) ->
+        {Caller, Ref, API, Vsn} = kpro_sent_reqs:get_req(Reqs, CorrId),
+        Rsp = kpro_rsp_lib:decode_body(API, Vsn, Body),
+        ok = cast(Caller, {msg, self(), Rsp#kpro_rsp{ref = Ref}}),
         kpro_sent_reqs:del(Reqs, CorrId)
       end, Requests, Responses),
   ?MODULE:loop(State#state{acc = Acc, requests = NewRequests}, Debug);
@@ -385,8 +380,8 @@ handle_msg({From, {send, Request}},
     case Request of
       #kpro_req{no_ack = true} ->
         kpro_sent_reqs:increment_corr_id(Requests);
-      _ ->
-        kpro_sent_reqs:add(Requests, Caller)
+      #kpro_req{ref = Ref, api = API, vsn = Vsn} ->
+        kpro_sent_reqs:add(Requests, Caller, Ref, API, Vsn)
     end,
   RequestBin = kpro:encode_request(ClientId, CorrId, Request),
   Res = case Mod of
@@ -395,7 +390,7 @@ handle_msg({From, {send, Request}},
         end,
   case Res of
     ok ->
-      _ = reply(From, {ok, CorrId}),
+      _ = reply(From, ok),
       ok;
     {error, Reason} ->
       exit({send_error, Reason})
@@ -513,7 +508,7 @@ decode_response(#acc{ expected_size = ExpectedSize
                     , acc_size = AccSize
                     , acc_buffer = AccBuffer
                     }) when AccSize >= ExpectedSize ->
-  kpro:decode_response(iolist_to_binary(lists:reverse(AccBuffer)));
+  kpro_rsp_lib:decode_corr_id(iolist_to_binary(lists:reverse(AccBuffer)));
 decode_response(Acc) ->
   {[], Acc}.
 

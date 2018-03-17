@@ -38,7 +38,7 @@ main(_Args) ->
 
 -define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
 -module(kpro_schema).
--export([get/2]).
+-export([get/3]).
 ").
 
 generate_schema_module(GrouppedTypes) ->
@@ -54,22 +54,24 @@ generate_schema_module(GrouppedTypes) ->
 
 generate_schema_clauses({Name, VersionedFields0}) ->
   VersionedFields = lists:keysort(1, VersionedFields0),
-  generate_schema_clauses(Name, merge_versions(VersionedFields)).
+  {API, ReqOrRsp} = split_name(Name),
+  generate_schema_clauses(API, ReqOrRsp, merge_versions(VersionedFields)).
 
-generate_schema_clauses(_Name, []) -> [];
-generate_schema_clauses(Name, [{Versions, Fields} | Rest]) ->
+generate_schema_clauses(_API, _ReqOrRsp, []) -> [];
+generate_schema_clauses(API, ReqOrRsp, [{Versions, Fields} | Rest]) ->
   Head =
     case Versions of
       V when is_integer(V) ->
-        ["get(", Name, ", ", integer_to_list(V), ") ->"];
+        ["get(", API, ", ", ReqOrRsp, ", ", integer_to_list(V), ") ->"];
       [V | Vs] ->
         MinV = integer_to_list(V),
         MaxV = integer_to_list(lists:last(Vs)),
-        ["get(", Name, ", V) when V >= ", MinV, ", V =< ", MaxV, " ->"]
+        ["get(", API, ", ", ReqOrRsp, ", V) ",
+         "when V >= ", MinV, ", V =< ", MaxV, " ->"]
     end,
   Body = io_lib:format("  ~p", [Fields]),
   [ iolist_to_binary([Head, "\n", Body])
-  | generate_schema_clauses(Name, Rest)
+  | generate_schema_clauses(API, ReqOrRsp, Rest)
   ].
 
 group_per_name([], Acc) -> Acc;
@@ -103,6 +105,12 @@ split_name_version({Tag, Fields}) ->
   Name = lists:reverse(NameReversed),
   Version = Vsn - $0,
   {Name, Version, Fields}.
+
+split_name(Name) ->
+  case lists:reverse(Name) of
+    "tseuqer_" ++ API -> {lists:reverse(API), "req"};
+    "esnopser_" ++ API -> {lists:reverse(API), "rsp"}
+  end.
 
 expand([{Tag, Fields} | Refs]) ->
   {Tag, expand_fields(Fields, Refs)}.
