@@ -14,7 +14,7 @@ fetch_request_v6_test() ->
   try
     Req = make_req(Vsn),
     {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
-    #kpro_rsp{ tag = fetch_response
+    #kpro_rsp{ api = fetch
              , vsn = Vsn
              , msg = Msg
              } = Rsp,

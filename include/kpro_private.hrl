@@ -52,96 +52,94 @@
 -define(KPRO_MAGIC_0, 0).
 -define(KPRO_MAGIC_1, 1).
 
-%% correlation IDs are 32 bit signed integers.
-%% we use 24 bits only, and use the highest 5 bits to be redudant with API key
-%% and next 3 bits with API version
-%% so that the decoder may decode the responses without the need of an extra
-%% correlation ID to API key association.
--define(API_KEY_BITS, 5).
--define(API_VERSION_BITS, 3).
--define(CORR_ID_BITS, (32 - (?API_KEY_BITS + ?API_VERSION_BITS))).
--define(MAX_CORR_ID, ((1 bsl ?CORR_ID_BITS) - 1)).
-
 -define(IS_KAFKA_PRIMITIVE(T),
         (T =:= boolean orelse T =:= int8 orelse T =:= int16 orelse
          T =:= int32 orelse T =:= int64 orelse
          T =:= string orelse T =:= nullable_string orelse
          T =:= bytes orelse T =:= records)).
 
--define(API_KEY_TO_REQ(ApiKey),
+-define(API_KEY_ATOM(ApiKey),
         case ApiKey of
-           0 -> produce_request;
-           1 -> fetch_request;
-           2 -> list_offsets_request;
-           3 -> metadata_request;
-           4 -> leader_and_isr_request;
-           5 -> stop_replica_request;
-           6 -> update_metadata_request;
-           7 -> controlled_shutdown_request;
-           8 -> offset_commit_request;
-           9 -> offset_fetch_request;
-          10 -> group_coordinator_request;
-          11 -> join_group_request;
-          12 -> heartbeat_request;
-          13 -> leave_group_request;
-          14 -> sync_group_request;
-          15 -> describe_groups_request;
-          16 -> list_groups_request;
-          17 -> sasl_handshake_request;
-          18 -> api_versions_request;
-          19 -> create_topics_request;
-          20 -> delete_topics_request;
-          N  -> N %% unknown api key
+           0 -> produce;
+           1 -> fetch;
+           2 -> list_offsets;
+           3 -> metadata;
+           4 -> leader_and_isr;
+           5 -> stop_replica;
+           6 -> update_metadata;
+           7 -> controlled_shutdown;
+           8 -> offset_commit;
+           9 -> offset_fetch;
+          10 -> group_coordinator;
+          11 -> join_group;
+          12 -> heartbeat;
+          13 -> leave_group;
+          14 -> sync_group;
+          15 -> describe_groups;
+          16 -> list_groups;
+          17 -> sasl_handshake;
+          18 -> api_versions;
+          19 -> create_topics;
+          20 -> delete_topics;
+          21 -> delete_records;
+          22 -> init_producer_id;
+          23 -> offset_for_leader_epoch;
+          24 -> add_partitions_to_txn;
+          25 -> add_offsets_to_txn;
+          26 -> end_txn;
+          27 -> write_txn_markers;
+          28 -> txn_offset_commit;
+          29 -> describe_acls;
+          30 -> create_acls;
+          31 -> delete_acls;
+          32 -> describe_configs;
+          33 -> alter_configs;
+          34 -> alter_replica_log_dirs;
+          35 -> describe_log_dirs;
+          36 -> sasl_authenticate;
+          37 -> create_partitions
         end).
 
--define(REQ_TO_API_KEY(Req),
+-define(API_KEY_INTEGER(Req),
         case Req of
-          produce_request             ->  0;
-          fetch_request               ->  1;
-          list_offsets_request        ->  2;
-          metadata_request            ->  3;
-          leader_and_isr_request      ->  4;
-          stop_replica_request        ->  5;
-          update_metadata_request     ->  6;
-          controlled_shutdown_request ->  7;
-          offset_commit_request       ->  8;
-          offset_fetch_request        ->  9;
-          group_coordinator_request   -> 10;
-          join_group_request          -> 11;
-          heartbeat_request           -> 12;
-          leave_group_request         -> 13;
-          sync_group_request          -> 14;
-          describe_groups_request     -> 15;
-          list_groups_request         -> 16;
-          sasl_handshake_request      -> 17;
-          api_versions_request        -> 18;
-          create_topics_request       -> 19;
-          delete_topics_request       -> 20
-        end).
-
--define(API_KEY_TO_RSP(ApiKey),
-        case ApiKey of
-           0 -> produce_response;
-           1 -> fetch_response;
-           2 -> offsets_response;
-           3 -> metadata_response;
-           4 -> leader_and_isr_response;
-           5 -> stop_replica_response;
-           6 -> update_metadata_response;
-           7 -> controlled_shutdown_response;
-           8 -> offset_commit_response;
-           9 -> offset_fetch_response;
-          10 -> group_coordinator_response;
-          11 -> join_group_response;
-          12 -> heartbeat_response;
-          13 -> leave_group_response;
-          14 -> sync_group_response;
-          15 -> describe_groups_response;
-          16 -> list_groups_response;
-          17 -> sasl_handshake_response;
-          18 -> api_versions_response;
-          19 -> create_topics_response;
-          20 -> delete_topics_response
+          produce                 ->  0;
+          fetch                   ->  1;
+          list_offsets            ->  2;
+          metadata                ->  3;
+          leader_and_isr          ->  4;
+          stop_replica            ->  5;
+          update_metadata         ->  6;
+          controlled_shutdown     ->  7;
+          offset_commit           ->  8;
+          offset_fetch            ->  9;
+          group_coordinator       -> 10;
+          join_group              -> 11;
+          heartbeat               -> 12;
+          leave_group             -> 13;
+          sync_group              -> 14;
+          describe_groups         -> 15;
+          list_groups             -> 16;
+          sasl_handshake          -> 17;
+          api_versions            -> 18;
+          create_topics           -> 19;
+          delete_topics           -> 20;
+          delete_records          -> 21;
+          init_producer_id        -> 22;
+          offset_for_leader_epoch -> 23;
+          add_partitions_to_txn   -> 24;
+          add_offsets_to_txn      -> 25;
+          end_txn                 -> 26;
+          write_txn_markers       -> 27;
+          txn_offset_commit       -> 28;
+          describe_acls           -> 29;
+          create_acls             -> 30;
+          delete_acls             -> 31;
+          describe_configs        -> 32;
+          alter_configs           -> 33;
+          alter_replica_log_dirs  -> 34;
+          describe_log_dirs       -> 35;
+          sasl_authenticate       -> 36;
+          create_partitions       -> 37
         end).
 
 -define(null, ?kpro_null).

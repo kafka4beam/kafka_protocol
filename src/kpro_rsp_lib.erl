@@ -15,19 +15,40 @@
 
 -module(kpro_rsp_lib).
 
--export([ decode/1
+-export([ decode_corr_id/1
+        , decode_body/3
         ]).
 
 -include("kpro_private.hrl").
 
 -define(IS_STRUCT_SCHEMA(Schema), is_list(Schema)).
 
-%% @doc Parse binary stream received from kafka broker.
-%% Return a list of kpro:rsp() and the remaining bytes.
-%% @end
--spec decode(binary()) -> {[kpro:rsp()], binary()}.
-decode(Bin) ->
-  decode(Bin, []).
+%% @doc Decode byte stream into a list of `{correlation_id, message_body}'
+%% tuples. It is unable to decode `message_body' binary because we do not know
+%% what message type it is. Only after a lookup with `correlation_id'
+%% to find the sent request type, can we decode the message body.
+-spec decode_corr_id(binary()) -> {[{kpro:corr_id(), binary()}], binary()}.
+decode_corr_id(Bin) ->
+  decode_corr_id(Bin, []).
+
+%% @doc Decode body binary.
+-spec decode_body(kpro:api(), kpro:vsn(), binary()) -> kpro:rsp().
+decode_body(API, Vsn, Body) ->
+  {Message, <<>>} =
+    try
+      decode_struct(API, Vsn, Body)
+    catch error : E ->
+      Context = [ {api, API}
+                , {vsn, Vsn}
+                , {body, Body}
+                ],
+      Trace = erlang:get_stacktrace(),
+      erlang:raise(error, {E, Context}, Trace)
+    end,
+  #kpro_rsp{ api = API
+           , vsn = Vsn
+           , msg = Message
+           }.
 
 %%%_* Internal functions =======================================================
 
@@ -43,52 +64,24 @@ dec_struct([{Name, FieldSc} | Schema], Fields, Stack, Bin) ->
   Value = translate(NewStack, Value0),
   dec_struct(Schema, [{Name, Value} | Fields], Stack, Rest).
 
-%% Decode struct having schema predefined in kpro_schema.
-decode_struct(Tag, Vsn, Bin) ->
-  decode_struct(?SCHEMA_MODULE, Tag, Vsn, Bin).
+decode_struct(API, Vsn, Bin) ->
+  Schema = kpro_lib:get_rsp_schema(API, Vsn),
+  dec_struct(Schema, _Fields = [], _Stack = [{API, Vsn}], Bin).
 
-%% Decode struct having schema predefined in a callback:
-%% Module:get(Tag, Vsn)
-decode_struct(Module, Tag, Vsn, Bin) ->
-  Schema = kpro:get_schema(Module, Tag, Vsn),
-  dec_struct(Schema, _Fields = [], _Stack = [{Tag, Vsn}], Bin).
-
-decode(Bin, Acc) ->
-  case do_decode(Bin) of
+decode_corr_id(Bin, Acc) ->
+  case do_decode_corr_id(Bin) of
     {incomplete, Rest} ->
       {lists:reverse(Acc), Rest};
     {Response, Rest} ->
-      decode(Rest, [Response | Acc])
+      decode_corr_id(Rest, [Response | Acc])
   end.
 
 %% Decode responses received from kafka broker.
 %% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
-do_decode(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
-  << ApiKey:?API_KEY_BITS,
-     Vsn:?API_VERSION_BITS,
-     CorrId:?CORR_ID_BITS,
-     Rest0/binary >> = Bin,
-  Tag = ?API_KEY_TO_RSP(ApiKey),
-  {Message, Rest} =
-    try
-      decode_struct(Tag, Vsn, Rest0)
-    catch error : E ->
-      Context = [ {tag, Tag}
-                , {vsn, Vsn}
-                , {corr_id, CorrId}
-                , {payload, Bin}
-                ],
-      Trace = erlang:get_stacktrace(),
-      erlang:raise(error, {E, Context}, Trace)
-    end,
-  Result =
-    #kpro_rsp{ tag = Tag
-             , vsn = Vsn
-             , corr_id = CorrId
-             , msg = Message
-             },
-  {Result, Rest};
-do_decode(Bin) ->
+do_decode_corr_id(<<Size:32/?INT, Bin:Size/binary, Rest/binary>>) ->
+  <<CorrId:32/unsigned-integer, MsgBody/binary>> = Bin,
+  {{CorrId, MsgBody}, Rest};
+do_decode_corr_id(Bin) ->
   {incomplete, Bin}.
 
 %% A struct field should have one of below types:
@@ -123,7 +116,7 @@ dec_array_elements(N, Schema, Stack, Bin, Acc) ->
 
 %% Translate error codes; Dig up embedded bytes. etc.
 translate([api_key | _], ApiKey) ->
-  ?API_KEY_TO_REQ(ApiKey);
+  ?API_KEY_ATOM(ApiKey);
 translate([error_code | _], ErrorCode) ->
   kpro_error_code:decode(ErrorCode);
 translate([member_metadata | _] = Stack, Bin) ->
@@ -137,8 +130,6 @@ translate([member_assignment | _], <<>>) ->
 translate([member_assignment | _] = Stack, Bin) ->
   Schema = kpro:get_schema(?PRELUDE, cg_memeber_assignment, 0),
   dec_struct_clean(Schema, [{cg_memeber_assignment, 0} | Stack], Bin);
-translate([api_key | _], ApiKey) ->
-  ?API_KEY_TO_REQ(ApiKey);
 translate([isolation_level | _], Integer) ->
   ?ISOLATION_LEVEL_ATOM(Integer);
 translate(_Stack, Value) ->

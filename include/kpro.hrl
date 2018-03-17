@@ -21,19 +21,19 @@
 -include("kpro_error_code.hrl").
 
 -record(kpro_req,
-        { tag :: kpro:req_tag()
+        { ref = make_ref() :: reference()
+        , api :: kpro:api()
         , vsn :: kpro:vsn()
         , no_ack = false :: boolean() %% set to true for fire-n-forget requests
         , msg :: binary() | kpro:struct()
         }).
 
 -record(kpro_rsp,
-        { tag :: kpro:rsp_tag()
+        { ref :: reference()
+        , api :: kpro:api()
         , vsn :: kpro:vsn()
-        , corr_id :: kpro:corr_id()
         , msg :: binary() | kpro:struct()
         }).
-
 
 -define(incomplete_batch(ExpectedSize), {incomplete_message, ExpectedSize}).
 -define(kpro_null, undefined).

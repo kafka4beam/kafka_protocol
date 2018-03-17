@@ -15,8 +15,7 @@
 
 -module(kpro).
 
--export([ decode_response/1
-        , encode_request/3
+-export([ encode_request/3
         , make_request/3
         ]).
 
@@ -24,7 +23,6 @@
         , do_find/3
         , find/2
         , find/3
-        , max_corr_id/0
         ]).
 
 -export([ request_sync/3
@@ -33,15 +31,6 @@
 
 -export([ connect_any/2
         , query_api_versions/2
-        ]).
-
-%% Hidden APIs for kpro_connection
--export([ next_corr_id/1
-        ]).
-
-%% Hidden APIs for internal use
--export([ get_schema/2
-        , get_schema/3
         ]).
 
 -export_type([ batch_decode_result/0
@@ -78,15 +67,12 @@
              , primitive_type/0
              , producer_id/0
              , req/0
-             , req_tag/0
              , required_acks/0
              , rsp/0
-             , rsp_tag/0
              , schema/0
              , stack/0
              , str/0
              , struct/0
-             , tag/0
              , timestamp_type/0
              , topic/0
              , value/0
@@ -168,9 +154,7 @@
 -type field_value() :: primitive() | struct() | [struct()].
 -type struct() :: #{field_name() => field_value()}
                 | [{field_name(), field_value()}].
--type req_tag() :: atom().
--type rsp_tag() :: atom().
--type tag() :: req_tag() | rsp_tag().
+-type api() :: atom().
 -type req() :: #kpro_req{}.
 -type rsp() :: #kpro_rsp{}.
 -type compress_option() :: ?no_compression
@@ -194,7 +178,7 @@
                 | struct_schema()
                 | {array, schema()}
                 | decode_fun(). %% caller defined decoder
--type stack() :: [{tag(), vsn()} | field_name()]. %% encode / decode stack
+-type stack() :: [{api(), vsn()} | field_name()]. %% encode / decode stack
 -type isolation_level() :: read_committed | read_uncommitted.
 
 %% All versions of kafka messages (records) share the same header:
@@ -212,18 +196,14 @@
 
 %% @doc Help function to make a request. See also kpro_req_lib for more help
 %% functions.
--spec make_request(req_tag(), vsn(), struct()) -> req().
-make_request(Tag, Vsn, Fields) ->
-  kpro_req_lib:make(Tag, Vsn, Fields).
+-spec make_request(api(), vsn(), struct()) -> req().
+make_request(Api, Vsn, Fields) ->
+  kpro_req_lib:make(Api, Vsn, Fields).
 
 %% @doc Encode request to byte stream.
 -spec encode_request(client_id(), corr_id(), req()) -> iodata().
 encode_request(ClientId, CorrId, Req) ->
   kpro_req_lib:encode(ClientId, CorrId, Req).
-
-%% @doc Decode response
--spec decode_response(binary()) -> struct().
-decode_response(Bin) -> kpro_rsp_lib:decode(Bin).
 
 %% @doc The messageset is not decoded upon receiving (in socket process).
 %% Pass the message set as binary to the consumer process and decode there
@@ -256,15 +236,6 @@ request_sync(ConnectionPid, Request, Timeout) ->
 request_async(ConnectionPid, Request) ->
   kpro_connection:request_async(ConnectionPid, Request).
 
-%% @doc Return the allowed maximum correlation ID.
--spec max_corr_id() -> corr_id().
-max_corr_id() -> ?MAX_CORR_ID.
-
-%% @doc Get the next correlation ID.
--spec next_corr_id(corr_id()) -> corr_id().
-next_corr_id(?MAX_CORR_ID) -> 0;
-next_corr_id(CorrId)       -> CorrId + 1.
-
 %% @doc Connect to any of the endpoints in the given list.
 %% NOTE: Connection process is linked to caller process.
 -spec connect_any([{hostname(), portnum()}], kpro_connection:options()) ->
@@ -274,11 +245,11 @@ connect_any(Endpoints, Options) ->
 
 %% @doc Qury API versions using the given `kpro_connection' pid.
 -spec query_api_versions(pid(), timeout()) ->
-        {ok, [{req_tag(), {Min :: vsn(), Max :: vsn()}}]} | {error, any()}.
+        {ok, [{api(), {Min :: vsn(), Max :: vsn()}}]} | {error, any()}.
 query_api_versions(Pid, Timeout) ->
-  Req = make_request(api_versions_request, 0, []),
+  Req = make_request(api_versions, 0, []),
   case kpro_connection:request_sync(Pid, Req, Timeout) of
-    {ok, #kpro_rsp{ tag = api_versions_response
+    {ok, #kpro_rsp{ api = api_versions
                   , msg = [ {error_code, ErrorCode}
                           , {api_versions, ApiVersions}
                           ]}} ->
@@ -293,31 +264,6 @@ query_api_versions(Pid, Timeout) ->
       end;
     {error, Reason} ->
       {error, Reason}
-  end.
-
-%%%_* Hidden APIs ==============================================================
-
-%% @hidden Get predefined schema from kpro_schema:get/2.
--spec get_schema(tag(), vsn()) -> struct_schema().
-get_schema(Tag, Vsn) ->
-  get_schema(?SCHEMA_MODULE, Tag, Vsn).
-
-%% @hidden Get predefined schema from Module:get/2 API.
--spec get_schema(module(), tag(), vsn()) -> struct_schema().
-get_schema(Module, Tag, Vsn) ->
-  try
-    Module:get(Tag, Vsn)
-  catch
-    error : function_clause when Vsn =:= 0 ->
-      erlang:error({unknown_tag, Tag});
-    error : function_clause when Vsn > 0 ->
-      try
-        _ = Module:get(Tag, 0)
-      catch
-        error : function_clause ->
-          erlang:error({unknown_tag, Tag})
-      end,
-      erlang:error({unsupported_version, Tag, Vsn})
   end.
 
 %% @doc Find field value in a struct, raise an exception if not found.

@@ -84,7 +84,7 @@ encode_tx(#{ attributes := Attributes
            }, [FirstMsg | _] = Batch) ->
   FirstTimestamp =
     case maps:get(ts, FirstMsg, false) of
-      false -> kpro_lib:get_now_ts();
+      false -> kpro_lib:now_ts();
       Ts -> Ts
     end,
   EncodedBatch = encode_batch(Attributes, FirstTimestamp, Batch),

@@ -4,8 +4,11 @@
         , data_size/1
         , decode/2
         , encode/2
+        , get_prelude_schema/2
+        , get_req_schema/2
+        , get_rsp_schema/2
         , get_ts_type/2
-        , get_now_ts/0
+        , now_ts/0
         , parse_endpoints/1
         ]).
 
@@ -110,8 +113,23 @@ get_ts_type(0, _) -> undefined;
 get_ts_type(_, A) when ?KPRO_IS_CREATE_TS(A) -> create;
 get_ts_type(_, A) when ?KPRO_IS_APPEND_TS(A) -> append.
 
--spec get_now_ts() -> kpro:msg_ts().
-get_now_ts() -> os:system_time() div 1000000.
+-spec now_ts() -> kpro:msg_ts().
+now_ts() -> os:system_time(millisecond).
+
+-spec get_req_schema(kpro:api(), kpro:vsn()) -> kpro:struct_schema().
+get_req_schema(Api, Vsn) ->
+  F = fun() -> kpro_schema:get(Api, req, Vsn) end,
+  get_schema(F, {Api, req, Vsn}).
+
+-spec get_rsp_schema(kpro:api(), kpro:vsn()) -> kpro:struct_schema().
+get_rsp_schema(Api, Vsn) ->
+  F = fun() -> kpro_schema:get(Api, rsp, Vsn) end,
+  get_schema(F, {Api, rsp, Vsn}).
+
+-spec get_prelude_schema(atom(), kpro:vsn()) -> kpro:struct_schema().
+get_prelude_schema(Tag, Vsn) ->
+  F = fun() -> kpro_prelude_schema:get(Tag, Vsn) end,
+  get_schema(F, {Tag, Vsn}).
 
 %%%_* Internals ================================================================
 
@@ -123,6 +141,14 @@ data_size(B, Size) when is_binary(B) -> Size + size(B);
 data_size([H | T], Size0) ->
   Size1 = data_size(H, Size0),
   data_size(T, Size1).
+
+get_schema(F, Context) ->
+  try
+    F()
+  catch
+    error : function_clause ->
+      erlang:error({unknown_type, Context})
+  end.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
