@@ -5,6 +5,7 @@
         , decode/2
         , encode/2
         , get_ts_type/2
+        , get_now_ts/0
         ]).
 
 -include("kpro_private.hrl").
@@ -93,6 +94,9 @@ copy_bytes(Size, Bin) ->
 get_ts_type(0, _) -> undefined;
 get_ts_type(_, A) when ?KPRO_IS_CREATE_TS(A) -> create;
 get_ts_type(_, A) when ?KPRO_IS_APPEND_TS(A) -> append.
+
+-spec get_now_ts() -> kpro:msg_ts().
+get_now_ts() -> os:system_time() div 1000000.
 
 %%%_* Internals ================================================================
 
