@@ -15,39 +15,32 @@
 
 -module(kpro).
 
-%% APIs for producer to build requests.
+-export([ decode_response/1
+        , encode_request/3
+        , make_request/3
+        ]).
+
 -export([ decode_batches/1
-        , fetch_request/8
-        , offsets_request/4
-        , produce_request/6
-        , produce_request/7
+        , do_find/3
         , find/2
         , find/3
-        , req/3
         , max_corr_id/0
         ]).
 
-%% APIs to send requests (forward calls to kpro_connection)
 -export([ request_sync/3
         , request_async/2
         ]).
 
-%% Hidden APIs for kpro_connection
--export([ decode_response/1
-        , encode_request/3
-        , next_corr_id/1
+-export([ connect_any/2
+        , query_api_versions/2
         ]).
 
-%% Hidden APIs
--export([ dec_struct/4
-        , decode/2
-        , decode_struct/3
-        , decode_struct/4
-        , enc_struct/3
-        , encode/2
-        , encode_struct/3
-        , encode_struct/4
-        , get_schema/2
+%% Hidden APIs for kpro_connection
+-export([ next_corr_id/1
+        ]).
+
+%% Hidden APIs for internal use
+-export([ get_schema/2
         , get_schema/3
         ]).
 
@@ -71,6 +64,7 @@
              , int16/0
              , int32/0
              , int64/0
+             , isolation_level/0
              , key/0
              , kv_list/0
              , magic/0
@@ -85,9 +79,11 @@
              , producer_id/0
              , req/0
              , req_tag/0
+             , required_acks/0
              , rsp/0
              , rsp_tag/0
              , schema/0
+             , stack/0
              , str/0
              , struct/0
              , tag/0
@@ -119,12 +115,6 @@
 -type partition() :: int32().
 -type offset() :: int64().
 
-% Attribute :: {compression, kpro:compress_option()}
-%            | {ts_type, kpro:timestamp_type()}
-%            | is_transaction | {is_transaction, boolean()}
-%            | is_control | {is_control, boolean()}.
--type batch_attributes() :: proplists:proplist().
-
 -type header_key() :: binary().
 -type header_val() :: binary().
 -type headers() :: [{header_key(), header_val()}].
@@ -138,6 +128,12 @@
                         | producer_id
                         | producer_epoch
                         | first_sequence.
+% Attribute :: {compression, kpro:compress_option()}
+%            | {ts_type, kpro:timestamp_type()}
+%            | is_transaction | {is_transaction, boolean()}
+%            | is_control | {is_control, boolean()}.
+-type batch_attributes() :: proplists:proplist().
+-type batch_meta_val() :: batch_attributes() | integer().
 
 -type key() :: ?null | iodata().
 -type value() :: ?null | iodata().
@@ -159,7 +155,7 @@
 -type incomplete_batch() :: ?incomplete_batch(int32()).
 -type message() :: #kafka_message{}.
 -type batch_meta() :: ?KPRO_NO_BATCH_META %% magic 0-1
-                    | #{batch_meta_key() => term()}.
+                    | #{batch_meta_key() => batch_meta_val()}.
 -type batch_decode_result() :: ?incomplete_batch(int32())
                              | {batch_meta(), [message()]}.
 
@@ -199,10 +195,8 @@
                 | {array, schema()}
                 | decode_fun(). %% caller defined decoder
 -type stack() :: [{tag(), vsn()} | field_name()]. %% encode / decode stack
+-type isolation_level() :: read_committed | read_uncommitted.
 
--define(IS_STRUCT(S), (is_list(S) orelse is_map(S))).
--define(SCHEMA_MODULE, kpro_schema).
--define(PRELUDE, kpro_prelude_schema).
 %% All versions of kafka messages (records) share the same header:
 %% Offset => int64
 %% Length => int32
@@ -215,6 +209,38 @@
 -define(BATCH_LEADING_BYTES, 12).
 
 %%%_* APIs =====================================================================
+
+%% @doc Help function to make a request. See also kpro_req_lib for more help
+%% functions.
+-spec make_request(req_tag(), vsn(), struct()) -> req().
+make_request(Tag, Vsn, Fields) ->
+  kpro_req_lib:make(Tag, Vsn, Fields).
+
+%% @doc Encode request to byte stream.
+-spec encode_request(client_id(), corr_id(), req()) -> iodata().
+encode_request(ClientId, CorrId, Req) ->
+  kpro_req_lib:encode(ClientId, CorrId, Req).
+
+%% @doc Decode response
+-spec decode_response(binary()) -> struct().
+decode_response(Bin) -> kpro_rsp_lib:decode(Bin).
+
+%% @doc The messageset is not decoded upon receiving (in socket process).
+%% Pass the message set as binary to the consumer process and decode there
+%% Return `?incomplete_batch(ExpectedSize)' if the fetch size is not big
+%% enough for even one single message. Otherwise return `{Meta, Messages}'
+%% where `Meta' is either `?KPRO_NO_BATCH_META' for magic-version 0-1 or
+%% `#kafka_batch_meta{}' for magic-version 2 or above.
+-spec decode_batches(binary()) -> kpro:batch_decode_result().
+decode_batches(<<_:64/?INT, L:32, T/binary>> = Bin) when size(T) >= L ->
+  kpro_batch:decode(Bin);
+decode_batches(<<_:64/?INT, L:32, _T/binary>>) ->
+  %% not enough to decode one single message for magic v0-1
+  %% or a single batch for magic v2
+  ?incomplete_batch(L + ?BATCH_LEADING_BYTES);
+decode_batches(_) ->
+  %% not enough to even get the size header
+  ?incomplete_batch(?BATCH_LEADING_BYTES).
 
 %% @doc Send a request, wait for response.
 %% Immediately return 'ok' if it is a produce request with `required_acks = 0'.
@@ -234,206 +260,42 @@ request_async(ConnectionPid, Request) ->
 -spec max_corr_id() -> corr_id().
 max_corr_id() -> ?MAX_CORR_ID.
 
-%% @doc Help function to contruct a OffsetsRequest
-%% against one single topic-partition.
-%% @end
--spec offsets_request(vsn(), topic(), partition(), msg_ts()) -> req().
-offsets_request(Vsn, Topic, Partition, Time) ->
-  PartitionFields =
-    case Vsn of
-      0 ->
-        [{partition, Partition},
-         {timestamp, Time},
-         {max_num_offsets, 1}];
-      1 ->
-        [{partition, Partition},
-         {timestamp, Time}]
-    end,
-  Fields =
-    [{replica_id, ?KPRO_REPLICA_ID},
-     {topics, [ [{topic, Topic},
-                 {partitions, [ PartitionFields ]}]
-              ]}
-    ],
-  req(offsets_request, Vsn, Fields).
-
-%% @doc Help function to construct a FetchRequest
-%% against one single topic-partition.
-%% @end
--spec fetch_request(vsn(), topic(), partition(), offset(),
-                    wait(), count(), count(), 0 | 1) -> req().
-fetch_request(Vsn, Topic, Partition, Offset,
-              MaxWaitTime, MinBytes, MaxBytes, IsolationLevel) ->
-  Fields =
-    [{replica_id, ?KPRO_REPLICA_ID},
-     {max_wait_time, MaxWaitTime},
-     {max_bytes, MaxBytes},
-     {min_bytes, MinBytes},
-     {isolation_level, IsolationLevel},
-     {topics,[[{topic, Topic},
-               {partitions,
-                [[{partition, Partition},
-                  {fetch_offset, Offset},
-                  {max_bytes, MaxBytes},
-                  {log_start_offset, -1} %% irelevant to clients
-                 ]]}]]}],
-  req(fetch_request, Vsn, Fields).
-
-%% @equiv produce_request(Vsn, Topic, Partition, KvList, RequiredAcks,
-%%                        AckTimeout, ?no_compression)
-%% @end
--spec produce_request(vsn(), topic(), partition(), batch_input(),
-                      required_acks(), wait()) -> req().
-produce_request(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout) ->
-  produce_request(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout,
-                  ?no_compression).
-
-%% @doc Help function to construct a produce request for
-%% messages targeting one single topic-partition.
-%% @end
--spec produce_request(vsn(), topic(), partition(), batch_input(),
-                      required_acks(), wait(), compress_option()) -> req().
-produce_request(Vsn, Topic, Partition, Batch,
-                RequiredAcks, AckTimeout, CompressOption) ->
-  Messages = kpro_batch:encode(Batch, CompressOption),
-  Fields =
-    [{transactional_id, ?kpro_null},
-     {acks, RequiredAcks},
-     {timeout, AckTimeout},
-     {topic_data, [[{topic, Topic},
-                    {data, [[{partition, Partition},
-                             {record_set, Messages}
-                            ]]}
-                   ]]}
-    ],
-  Req = req(produce_request, Vsn, Fields),
-  Req#kpro_req{no_ack = RequiredAcks =:= 0}.
-
-%% @doc Help function to make a request body.
--spec req(req_tag(), vsn(), struct()) -> req().
-req(Tag, Vsn, Fields) ->
-  #kpro_req{ tag = Tag
-           , vsn = Vsn
-           , msg = encode_struct(Tag, Vsn, Fields)
-           }.
-
 %% @doc Get the next correlation ID.
 -spec next_corr_id(corr_id()) -> corr_id().
 next_corr_id(?MAX_CORR_ID) -> 0;
 next_corr_id(CorrId)       -> CorrId + 1.
 
-%% @doc Encode a request to bytes that can be sent on wire.
--spec encode_request(client_id(), corr_id(), req()) -> iodata().
-encode_request(ClientName, CorrId0, Req) ->
-  #kpro_req{tag = Tag, vsn = Vsn, msg = Msg} = Req,
-  ApiKey = ?REQ_TO_API_KEY(Tag),
-  true = (CorrId0 =< ?MAX_CORR_ID), %% assert
-  true = (ApiKey < 1 bsl ?API_KEY_BITS), %% assert
-  true = (Vsn < 1 bsl ?API_VERSION_BITS), %% assert
-  CorrId = <<ApiKey:?API_KEY_BITS,
-             Vsn:?API_VERSION_BITS,
-             CorrId0:?CORR_ID_BITS>>,
-  IoData =
-    [ encode(int16, ApiKey)
-    , encode(int16, Vsn)
-    , CorrId
-    , encode(string, ClientName)
-    , encode_struct(Tag, Vsn, Msg)
-    ],
-  Size = kpro_lib:data_size(IoData),
-  [encode(int32, Size), IoData].
+%% @doc Connect to any of the endpoints in the given list.
+%% NOTE: Connection process is linked to caller process.
+-spec connect_any([{hostname(), portnum()}], kpro_connection:options()) ->
+        {ok, pid()} | {error, any()}.
+connect_any(Endpoints, Options) ->
+  connect_any(Endpoints, Options, []).
 
-%% @doc Parse binary stream received from kafka broker.
-%% Return a list of kpro:rsp() and the remaining bytes.
-%% @end
--spec decode_response(binary()) -> {[rsp()], binary()}.
-decode_response(Bin) ->
-  decode_response(Bin, []).
-
-%% @doc The messageset is not decoded upon receiving (in socket process).
-%% Pass the message set as binary to the consumer process and decode there
-%% Return `?incomplete_batch(ExpectedSize)' if the fetch size is not big
-%% enough for even one single message. Otherwise return `{Meta, Messages}'
-%% where `Meta' is either `?KPRO_NO_BATCH_META' for magic-version 0-1 or
-%% `#kafka_batch_meta{}' for magic-version 2 or above.
--spec decode_batches(binary()) -> batch_decode_result().
-decode_batches(<<_:64/?INT, L:32, T/binary>> = Bin) when size(T) >= L ->
-  kpro_batch:decode(Bin);
-decode_batches(<<_:64/?INT, L:32, _T/binary>>) ->
-  %% not enough to decode one single message for magic v0-1
-  %% or a single batch for magic v2
-  ?incomplete_batch(L + ?BATCH_LEADING_BYTES);
-decode_batches(_) ->
-  %% not enough to even get the size header
-  ?incomplete_batch(?BATCH_LEADING_BYTES).
-
-%%%_* Hidden APIs ==============================================================
-
-%% @hidden Encode prmitives.
--spec encode(primitive_type(), primitive()) -> iodata().
-encode(Type, Value) -> kpro_lib:encode(Type, Value).
-
-%% @hidden Decode prmitives.
--spec decode(primitive_type(), binary()) -> {primitive(), binary()}.
-decode(Type, Bin) -> kpro_lib:decode(Type, Bin).
-
-%% @hidden Encode struct.
--spec enc_struct(schema(), struct(), stack()) -> iodata().
-enc_struct([], _Values, _Stack) -> [];
-enc_struct([{Name, FieldSc} | Schema], Values, Stack) ->
-  NewStack = [Name | Stack],
-  Value0 = do_find(Name, Values, {field_missing, NewStack}),
-  Value = enc_embedded(NewStack, Value0),
-  [ enc_struct_field(FieldSc, Value, NewStack)
-  | enc_struct(Schema, Values, Stack)
-  ].
-
-%% @hidden Decode struct.
--spec dec_struct(struct_schema(), struct(), stack(), binary()) ->
-        {struct(), binary()}.
-dec_struct([], Fields, _Stack, Bin) ->
-  {lists:reverse(Fields), Bin};
-dec_struct([{Name, FieldSc} | Schema], Fields, Stack, Bin) ->
-  NewStack = [Name | Stack],
-  {Value0, Rest} = dec_struct_field(FieldSc, NewStack, Bin),
-  Value = dec_embedded(NewStack, Value0),
-  dec_struct(Schema, [{Name, Value} | Fields], Stack, Rest).
-
-%% @hidden Encode struct having schema predefined in kpro_schema.
--spec encode_struct(req_tag(), vsn(), binary() | struct()) -> binary().
-encode_struct(Tag, Vsn, Bin) ->
-  encode_struct(?SCHEMA_MODULE, Tag, Vsn, Bin).
-
-%% @hidden Encode struct having schema predefined in a callback:
-%% Module:get(Tag, Vsn)
-%% @end
--spec encode_struct(module(), req_tag(), vsn(),
-                    binary() | struct()) -> binary().
-encode_struct(_Module, _Tag, _Vsn, Bin) when is_binary(Bin) -> Bin;
-encode_struct(Module, Tag, Vsn, Fields) ->
-  Schema = get_schema(Module, Tag, Vsn),
-  try
-    bin(enc_struct(Schema, Fields, [{Tag, Vsn}]))
-  catch
-    throw : {Reason, Stack} ->
-      Trace = erlang:get_stacktrace(),
-      erlang:raise(error, {Reason, Stack, Fields}, Trace)
+%% @doc Qury API versions using the given `kpro_connection' pid.
+-spec query_api_versions(pid(), timeout()) ->
+        {ok, [{req_tag(), {Min :: vsn(), Max :: vsn()}}]} | {error, any()}.
+query_api_versions(Pid, Timeout) ->
+  Req = make_request(api_versions_request, 0, []),
+  case kpro_connection:request_sync(Pid, Req, Timeout) of
+    {ok, #kpro_rsp{ tag = api_versions_response
+                  , msg = [ {error_code, ErrorCode}
+                          , {api_versions, ApiVersions}
+                          ]}} ->
+      case kpro_error_code:is_error(ErrorCode) of
+        true ->
+          {error, ErrorCode};
+        false ->
+          R = [{find(api_key, Struct),
+                {find(min_version, Struct),
+                 find(max_version, Struct)}} || Struct <- ApiVersions],
+          {ok, R}
+      end;
+    {error, Reason} ->
+      {error, Reason}
   end.
 
-%% @hidden Decode struct having schema predefined in kpro_schema.
--spec decode_struct(rsp_tag(), vsn(), binary()) ->
-        {struct(), binary()}.
-decode_struct(Tag, Vsn, Bin) ->
-  decode_struct(?SCHEMA_MODULE, Tag, Vsn, Bin).
-
-%% @hidden Decode struct having schema predefined in a callback:
-%% Module:get(Tag, Vsn)
-%% @end
--spec decode_struct(module(), rsp_tag(), vsn(), binary()) ->
-        {struct(), binary()}.
-decode_struct(Module, Tag, Vsn, Bin) ->
-  Schema = get_schema(Module, Tag, Vsn),
-  dec_struct(Schema, _Fields = [], _Stack = [{Tag, Vsn}], Bin).
+%%%_* Hidden APIs ==============================================================
 
 %% @hidden Get predefined schema from kpro_schema:get/2.
 -spec get_schema(tag(), vsn()) -> struct_schema().
@@ -490,144 +352,12 @@ do_find(Field, Struct, Throw) when is_list(Struct) ->
 do_find(_Field, Other, _Throw) ->
   erlang:throw({not_struct, Other}).
 
--spec decode_response(binary(), [rsp()]) -> {[rsp()], binary()}.
-decode_response(Bin, Acc) ->
-  case do_decode_response(Bin) of
-    {incomplete, Rest} ->
-      {lists:reverse(Acc), Rest};
-    {Response, Rest} ->
-      decode_response(Rest, [Response | Acc])
+connect_any([], _Options, LastErr) -> {error, LastErr};
+connect_any([{Host, Port} | Rest], Options, _LastErr) ->
+  case kpro_connection:start_link(self(), Host, Port, Options) of
+    {ok, Pid} -> {ok, Pid};
+    {error, Error} -> connect_any(Rest, Options, Error)
   end.
-
-%% Decode responses received from kafka broker.
-%% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
--spec do_decode_response(binary()) -> {incomplete | rsp(), binary()}.
-do_decode_response(<<Size:32/?INT, Bin/binary>>) when size(Bin) >= Size ->
-  << ApiKey:?API_KEY_BITS,
-     Vsn:?API_VERSION_BITS,
-     CorrId:?CORR_ID_BITS,
-     Rest0/binary >> = Bin,
-  Tag = ?API_KEY_TO_RSP(ApiKey),
-  {Message, Rest} =
-    try
-      decode_struct(Tag, Vsn, Rest0)
-    catch error : E ->
-      Context = [ {tag, Tag}
-                , {vsn, Vsn}
-                , {corr_id, CorrId}
-                , {payload, Bin}
-                ],
-      Trace = erlang:get_stacktrace(),
-      erlang:raise(error, {E, Context}, Trace)
-    end,
-  Result =
-    #kpro_rsp{ tag = Tag
-             , vsn = Vsn
-             , corr_id = CorrId
-             , msg = Message
-             },
-  {Result, Rest};
-do_decode_response(Bin) ->
-  {incomplete, Bin}.
-
--spec enc_struct_field(schema(), struct(), stack()) -> iodata().
-enc_struct_field({array, _Schema}, ?null, _Stack) ->
-  encode(int32, -1); %% NULL
-enc_struct_field({array, Schema}, Values, Stack) ->
-  case is_list(Values) of
-    true ->
-      [ encode(int32, length(Values))
-      | [enc_struct_field(Schema, Value, Stack) || Value <- Values]
-      ];
-    false ->
-      erlang:throw({not_array, Stack})
-  end;
-enc_struct_field(Schema, Value, Stack) when ?IS_STRUCT(Schema) ->
-  enc_struct(Schema, Value, Stack);
-enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
-  try
-    encode(Primitive, Value)
-  catch
-    error : Reason ->
-      erlang:throw({Reason, Stack, erlang:get_stacktrace()})
-  end.
-
-%% Encode embedded bytes.
--spec enc_embedded(stack(), field_value()) -> field_value().
-enc_embedded([protocol_metadata | _] = Stack, Value) ->
-  Schema = get_schema(?PRELUDE, cg_protocol_metadata, 0),
-  bin(enc_struct(Schema, Value, Stack));
-enc_embedded([member_assignment | _] = Stack, Value) ->
-  Schema = get_schema(?PRELUDE, cg_memeber_assignment, 0),
-  bin(enc_struct(Schema, Value, Stack));
-enc_embedded(_Stack, Value) -> Value.
-
-%% A struct field should have one of below types:
-%% 1. An array of any
-%% 2. Another struct
-%% 3. A user define decoder
-%% 4. A primitive
--spec dec_struct_field(schema(), stack(), binary()) ->
-        {field_value(), binary()}.
-dec_struct_field({array, Schema}, Stack, Bin0) ->
-  {Count, Bin} = decode(int32, Bin0),
-  case Count =:= -1 of
-    true -> {?null, Bin};
-    false -> dec_array_elements(Count, Schema, Stack, Bin, [])
-  end;
-dec_struct_field(Schema, Stack, Bin) when ?IS_STRUCT(Schema) ->
-  dec_struct(Schema, [], Stack, Bin);
-dec_struct_field(F, _Stack, Bin) when is_function(F) ->
-  %% Caller provided decoder
-  F(Bin);
-dec_struct_field(Primitive, Stack, Bin) when is_atom(Primitive) ->
-  try
-    decode(Primitive, Bin)
-  catch
-    error : _Reason ->
-      erlang:error({Stack, Primitive, Bin})
-  end.
-
--spec dec_array_elements(count(), schema(), stack(), binary(), Acc) ->
-        {Acc, binary()} when Acc :: [field_value()].
-dec_array_elements(0, _Schema, _Stack, Bin, Acc) ->
-  {lists:reverse(Acc), Bin};
-dec_array_elements(N, Schema, Stack, Bin, Acc) ->
-  {Element, Rest} = dec_struct_field(Schema, Stack, Bin),
-  dec_array_elements(N-1, Schema, Stack, Rest, [Element | Acc]).
-
-%% Translate error codes; Dig up embedded bytes.
--spec dec_embedded(stack(), field_value()) -> field_value().
-dec_embedded([error_code | _], ErrorCode) ->
-  kpro_error_code:decode(ErrorCode);
-dec_embedded([topic_error_code | _], ErrorCode) ->
-  kpro_error_code:decode(ErrorCode);
-dec_embedded([partition_error_code | _], ErrorCode) ->
-  kpro_error_code:decode(ErrorCode);
-dec_embedded([member_metadata | _] = Stack, Bin) ->
-  Schema = get_schema(?PRELUDE, cg_member_metadata, 0),
-  case Bin =:= <<>> of
-    true  -> ?kpro_cg_no_member_metadata;
-    false -> dec_struct_clean(Schema, [{cg_member_metadata, 0} | Stack], Bin)
-  end;
-dec_embedded([member_assignment | _], <<>>) ->
-  ?kpro_cg_no_assignment; %% no assignment for this member
-dec_embedded([member_assignment | _] = Stack, Bin) ->
-  Schema = get_schema(?PRELUDE, cg_memeber_assignment, 0),
-  dec_struct_clean(Schema, [{cg_memeber_assignment, 0} | Stack], Bin);
-dec_embedded([api_key | _], ApiKey) ->
-  ?API_KEY_TO_REQ(ApiKey);
-dec_embedded(_Stack, Value) ->
-  Value.
-
-%% Decode struct, assume no tail bytes.
--spec dec_struct_clean(schema(), stack(), binary()) -> struct().
-dec_struct_clean(Schema, Stack, Bin) ->
-  {Fields, <<>>} = dec_struct(Schema, [], Stack, Bin),
-  Fields.
-
--spec bin(iodata()) -> binary().
-bin(X) -> iolist_to_binary(X).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

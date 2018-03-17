@@ -30,8 +30,8 @@ fetch_request_v6_test() ->
   end.
 
 make_req(Vsn) ->
-  kpro:fetch_request(Vsn, ?TOPIC, ?PARTI, 0, 10000, 0, 12,
-                     _IsolationLevel = 1).
+  kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, 0, 10000, 0, 12,
+                     ?kpro_read_committed).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
