@@ -10,7 +10,7 @@
 
 fetch_request_v6_test() ->
   Vsn = 6,
-  {ok, Pid} = kpro_connection:start(self(), ?HOST, 9092, #{}),
+  {ok, Pid} = kpro_connection:start(?HOST, 9092, #{nolink => true}),
   try
     Req = make_req(Vsn),
     {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
