@@ -31,7 +31,7 @@ sasl_file_test() ->
    end}.
 
 connect(Host, Port, Options) ->
-  kpro_connection:start(self(), Host, Port, Options).
+  kpro_connection:start(Host, Port, Options).
 
 ssl_options() ->
   PrivDir = code:priv_dir(?APPLICATION),

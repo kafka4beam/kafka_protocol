@@ -9,7 +9,10 @@
         , get_rsp_schema/2
         , get_ts_type/2
         , now_ts/0
+        , ok_pipe/1
+        , ok_pipe/2
         , parse_endpoints/1
+        , with_timeout/2
         ]).
 
 -include("kpro_private.hrl").
@@ -21,6 +24,21 @@
 -type count() :: non_neg_integer().
 
 %%%_* APIs =====================================================================
+
+%% @doc Function pipeline. The fist function takes no args, all succeeding
+%% functions take one arg. All functions should retrun either
+%% `{ok, Result}' or `{error, Reason}'. `Result' is the input arg of the next
+%% function (or the result of pipeline). Any `{error, Reason}' return value
+%% would cause the pipeline to abort.
+%% NOTE: The pipe funcions are delegated to an agent process to evaluate
+%%       only exceptions and process links are propagated back to caller
+%%       other side-effects like monitor references are not handled.
+ok_pipe(FunList, Timeout) ->
+  with_timeout(fun() -> do_ok_pipe(FunList) end, Timeout).
+
+%% @doc Same as `ok_pipe/2' with `infinity' as default timeout.
+ok_pipe(FunList) ->
+  ok_pipe(FunList, infinity).
 
 %% @doc Parse 'host:port,host2:port2' string into endpoint list
 parse_endpoints(Str) ->
@@ -149,6 +167,67 @@ get_schema(F, Context) ->
     error : function_clause ->
       erlang:error({unknown_type, Context})
   end.
+
+%% delegate function evaluation to a agent process
+%% abort if it does not finish in time.
+%% exceptions and linked processes are caught in agent process
+%% adn propagated to parent process
+with_timeout(F0, Timeout) ->
+  Parent = self(),
+  ResultRef = make_ref(),
+  AgentFun =
+    fun() ->
+        {links, Links0} = process_info(self(), links),
+        Result =
+          try
+            {normal, F0()}
+          catch
+            C : E ->
+              CrashContext = {C, E, erlang:get_stacktrace()},
+              {exception, CrashContext}
+          end,
+        {links, Links1} = process_info(self(), links),
+        Links = Links1 -- Links0,
+        Parent ! {ResultRef, Result, Links},
+        receive
+          done ->
+            %% parent is done linking to links
+            %% safe to unlink and exit
+            [unlink(Pid) || Pid <- Links],
+            exit(normal)
+        end
+      end,
+  Agent = erlang:spawn_link(AgentFun),
+  receive
+    {ResultRef, Result, Links} ->
+      %% replicate links from agent
+      %% TODO handle link/1 exception if any of the links are dead already
+      [link(Pid) || Pid <- Links],
+      unlink(Agent),
+      Agent ! done,
+      case Result of
+        {normal, Return} ->
+          Return;
+        {exception, {C, E, Stacktrace}} ->
+          %% replicate exception from agent
+          erlang:raise(C, E, Stacktrace)
+      end
+  after
+    Timeout ->
+      %% kill agent
+      unlink(Agent),
+      erlang:exit(Agent, kill),
+      {error, timeout}
+  end.
+
+do_ok_pipe([Fun | FunList]) ->
+  do_ok_pipe(FunList, Fun()).
+
+do_ok_pipe([], Result) -> Result;
+do_ok_pipe(_FunList, {error, Reason}) ->
+  {error, Reason};
+do_ok_pipe([Fun | FunList], {ok, LastOkResult}) ->
+  do_ok_pipe(FunList, Fun(LastOkResult)).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

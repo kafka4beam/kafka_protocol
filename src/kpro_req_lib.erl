@@ -29,20 +29,42 @@
         , produce/7
         ]).
 
+-export([ metadata/2
+        , metadata/3
+        ]).
+
 -export([ encode/3
         , make/3
         ]).
 
 -include("kpro_private.hrl").
 
-%% @doc Help function to contruct a `list_offset_rquest'
+%% @doc Make a `metadata' request
+-spec metadata(kpro:vsn(), all | [kpro:topic()]) -> kpro:req().
+metadata(Vsn, Topics) ->
+  metadata(Vsn, Topics, _IsAutoCreateAllowed = false).
+
+%% @doc Make a `metadata' request
+-spec metadata(kpro:vsn(), all | [kpro:topic()], boolean()) -> kpro:req().
+metadata(Vsn, [], IsAutoCreateAllowed) ->
+  metadata(Vsn, all, IsAutoCreateAllowed);
+metadata(Vsn, Topics0, IsAutoCreateAllowed) ->
+  Topics = case Topics0 of
+             all when Vsn =:= 0 -> [];
+             all -> ?kpro_null;
+             List -> List
+           end,
+  make(metadata, Vsn, [{topics, Topics},
+                       {allow_auto_topic_creation, IsAutoCreateAllowed}]).
+
+%% @doc Help function to contruct a `list_offset' request
 %% against one single topic-partition.
 -spec list_offsets(kpro:vsn(), kpro:topic(), kpro:partition(),
                    kpro:msg_ts()) -> kpro:req().
 list_offsets(Vsn, Topic, Partition, Time) ->
   list_offsets(Vsn, Topic, Partition, Time, ?kpro_read_committed).
 
-%% @doc Help function to contruct a `list_offset_rquest' against one single
+%% @doc Help function to contruct a `list_offset' request against one single
 %% topic-partition. In transactional mode,
 %% set `IsolationLevel = ?kpro_read_uncommitted' to list uncommited offsets.
 -spec list_offsets(kpro:vsn(), kpro:topic(), kpro:partition(),

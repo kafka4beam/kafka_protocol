@@ -17,16 +17,13 @@
 -module(kpro_connection).
 
 %% API
--export([ all_opt_keys/0
+-export([ all_cfg_keys/0
         , get_tcp_sock/1
         , init/4
         , loop/2
         , request_sync/3
         , request_async/2
         , start/3
-        , start/4
-        , start_link/3
-        , start_link/4
         , stop/1
         , debug/2
         ]).
@@ -38,7 +35,8 @@
         , format_status/2
         ]).
 
--export_type([ options/0
+-export_type([ config/0
+             , connection/0
              ]).
 
 -include("kpro.hrl").
@@ -51,19 +49,21 @@
 %% as they are usually used by upper level callers
 -define(SASL_AUTH_REQ_CORRID, ((1 bsl 31) - 1)).
 
--type opt_key() :: connect_timeout
+-type cfg_key() :: connect_timeout
                  | client_id
                  | debug
+                 | nolink
                  | request_timeout
                  | sasl
                  | ssl.
--type opt_val() :: term().
--type options() :: #{opt_key() => opt_val()}.
+-type cfg_val() :: term().
+-type config() :: #{cfg_key() => cfg_val()}.
 -type requests() :: kpro_sent_reqs:requests().
 -type byte_count() :: non_neg_integer().
 -type hostname() :: kpro:hostname().
 -type portnum()  :: kpro:portnum().
 -type client_id() :: kpro:client_id().
+-type connection() :: pid().
 
 -record(acc, { expected_size = error(bad_init) :: byte_count()
              , acc_size = 0 :: byte_count()
@@ -87,38 +87,29 @@
 
 %%%_* API ======================================================================
 
-%% @doc Return all option keys make client config management easy.
--spec all_opt_keys() -> [opt_key()].
-all_opt_keys() ->
-  [connect_timeout, debug, client_id, request_timeout, sasl, ssl].
+%% @doc Return all config keys make client config management easy.
+-spec all_cfg_keys() -> [cfg_key()].
+all_cfg_keys() ->
+  [connect_timeout, debug, client_id, request_timeout, sasl, ssl, nolink].
 
-%% @equiv start_link(Parent, Host, Port, #{})
-start_link(Parent, Host, Port) ->
-  start_link(Parent, Host, Port, #{}).
-
--spec start_link(pid(), hostname(), portnum(), term()) ->
-        {ok, pid()} | {error, any()}.
-start_link(Parent, Host, Port, Options) ->
-  proc_lib:start_link(?MODULE, init, [Parent, host(Host), Port, Options]).
-
-%% @equiv start(Parent, Host, Port, #{})
-start(Parent, Host, Port) ->
-  start(Parent, Host, Port, #{}).
-
--spec start(pid(), hostname(), portnum(), options()) ->
-               {ok, pid()} | {error, any()}.
-start(Parent, Host, Port, Options) ->
-  proc_lib:start(?MODULE, init, [Parent, host(Host), Port, Options]).
+%% @doc Connect to the given endpoint.
+%% The started connection pid is linked to caller
+%% unless `nolink := true' is found in `Config'
+-spec start(hostname(), portnum(), config()) -> {ok, pid()} | {error, any()}.
+start(Host, Port, #{nolink := true} = Config) ->
+  proc_lib:start(?MODULE, init, [self(), host(Host), Port, Config]);
+start(Host, Port, Config) ->
+  proc_lib:start_link(?MODULE, init, [self(), host(Host), Port, Config]).
 
 %% @doc Send a request. Caller should expect to receive a response
 %% having `Rsp#kpro_rsp.ref' the same as `Request#kpro_req.ref'
 %% unless `Request#kpro_req.no_ack' is set to 'true'
--spec request_async(pid(), kpro:req()) -> ok | {error, any()}.
+-spec request_async(connection(), kpro:req()) -> ok | {error, any()}.
 request_async(Pid, Request) ->
   call(Pid, {send, Request}).
 
 %% @doc Send a request and wait for response for at most Timeout milliseconds.
--spec request_sync(pid(), kpro:req(), timeout()) ->
+-spec request_sync(connection(), kpro:req(), timeout()) ->
         ok | {ok, kpro:rsp()} | {error, any()}.
 request_sync(Pid, Request, Timeout) ->
   case request_async(Pid, Request) of
@@ -131,7 +122,7 @@ request_sync(Pid, Request, Timeout) ->
   end.
 
 %% @doc Stop socket process.
--spec stop(pid()) -> ok | {error, any()}.
+-spec stop(connection()) -> ok | {error, any()}.
 stop(Pid) when is_pid(Pid) ->
   call(Pid, stop);
 stop(_) ->
@@ -146,7 +137,7 @@ get_tcp_sock(Pid) ->
 %%      debug(Pid, pring) prints debug info on stdout
 %%      debug(Pid, File) prints debug info into a File
 %%      debug(Pid, none) stops debugging
--spec debug(pid(), print | string() | none) -> ok.
+-spec debug(connection(), print | string() | none) -> ok.
 debug(Pid, none) ->
   system_call(Pid, {debug, no_debug});
 debug(Pid, print) ->
@@ -156,21 +147,21 @@ debug(Pid, File) when is_list(File) ->
 
 %%%_* Internal functions =======================================================
 
--spec init(pid(), hostname(), portnum(), options()) -> no_return().
-init(Parent, Host, Port, Options) ->
-  Timeout = get_connect_timeout(Options),
+-spec init(pid(), hostname(), portnum(), config()) -> no_return().
+init(Parent, Host, Port, Config) ->
+  Timeout = get_connect_timeout(Config),
   SockOpts = [{active, once}, {packet, raw}, binary, {nodelay, true}],
   case gen_tcp:connect(Host, Port, SockOpts, Timeout) of
     {ok, Sock} ->
-      State = #state{ client_id = get_client_id(Options)
+      State = #state{ client_id = get_client_id(Config)
                     , parent    = Parent
                     },
       try
-        do_init(State, Sock, Host, Options)
+        do_init(State, Sock, Host, Config)
       catch
         error : Reason ->
-          IsSsl = maps:get(ssl, Options, false),
-          SaslOpt = get_sasl_opt(Options),
+          IsSsl = maps:get(ssl, Config, false),
+          SaslOpt = get_sasl_opt(Config),
           ok = maybe_log_hint(Host, Port, Reason, IsSsl, SaslOpt),
           erlang:exit({Reason, erlang:get_stacktrace()})
       end;
@@ -180,24 +171,24 @@ init(Parent, Host, Port, Options) ->
       erlang:exit({connection_failure, Reason})
   end.
 
--spec do_init(state(), port(), hostname(), options()) -> no_return().
-do_init(State0, Sock, Host, Options) ->
+-spec do_init(state(), port(), hostname(), config()) -> no_return().
+do_init(State0, Sock, Host, Config) ->
   #state{parent = Parent, client_id = ClientId} = State0,
-  Debug = sys:debug_options(maps:get(debug, Options, [])),
-  Timeout = get_connect_timeout(Options),
+  Debug = sys:debug_options(maps:get(debug, Config, [])),
+  Timeout = get_connect_timeout(Config),
   %% adjusting buffer size as per recommendation at
   %% http://erlang.org/doc/man/inet.html#setopts-2
   %% idea is from github.com/epgsql/epgsql
   {ok, [{recbuf, RecBufSize}, {sndbuf, SndBufSize}]} =
     inet:getopts(Sock, [recbuf, sndbuf]),
     ok = inet:setopts(Sock, [{buffer, max(RecBufSize, SndBufSize)}]),
-  SslOpts = maps:get(ssl, Options, false),
+  SslOpts = maps:get(ssl, Config, false),
   Mod = get_tcp_mod(SslOpts),
   NewSock = maybe_upgrade_to_ssl(Sock, Mod, SslOpts, Timeout),
-  ok = sasl_auth(Host, NewSock, Mod, ClientId, Timeout, get_sasl_opt(Options)),
+  ok = sasl_auth(Host, NewSock, Mod, ClientId, Timeout, get_sasl_opt(Config)),
   State = State0#state{mod = Mod, sock = NewSock},
   proc_lib:init_ack(Parent, {ok, self()}),
-  ReqTimeout = get_request_timeout(Options),
+  ReqTimeout = get_request_timeout(Config),
   ok = send_assert_max_req_age(self(), ReqTimeout),
   Requests = kpro_sent_reqs:new(),
   loop(State#state{requests = Requests, req_timeout = ReqTimeout}, Debug).
@@ -278,7 +269,7 @@ sasl_plain_token(User, Password) ->
 setopts(Sock, _Mod = gen_tcp, Opts) -> inet:setopts(Sock, Opts);
 setopts(Sock, _Mod = ssl, Opts)     ->  ssl:setopts(Sock, Opts).
 
--spec wait_for_rsp(pid(), kpro:req(), timeout()) ->
+-spec wait_for_rsp(connection(), kpro:req(), timeout()) ->
         {ok, term()} | {error, any()}.
 wait_for_rsp(Pid, #kpro_req{ref = Ref}, Timeout) ->
   Mref = erlang:monitor(process, Pid),
@@ -455,14 +446,14 @@ ts() ->
   lists:flatten(io_lib:format("~.4.0w-~.2.0w-~.2.0w ~.2.0w:~.2.0w:~.2.0w.~w",
                               [Y, M, D, HH, MM, SS, MicroSec])).
 
--spec get_connect_timeout(options()) -> timeout().
-get_connect_timeout(Options) ->
-  maps:get(connect_timeout, Options, ?DEFAULT_CONNECT_TIMEOUT).
+-spec get_connect_timeout(config()) -> timeout().
+get_connect_timeout(Config) ->
+  maps:get(connect_timeout, Config, ?DEFAULT_CONNECT_TIMEOUT).
 
-%% Get request timeout from options.
--spec get_request_timeout(options()) -> timeout().
-get_request_timeout(Options) ->
-  maps:get(request_timeout, Options, ?DEFAULT_REQUEST_TIMEOUT).
+%% Get request timeout from config.
+-spec get_request_timeout(config()) -> timeout().
+get_request_timeout(Config) ->
+  maps:get(request_timeout, Config, ?DEFAULT_REQUEST_TIMEOUT).
 
 -spec assert_max_req_age(requests(), timeout()) -> ok | no_return().
 assert_max_req_age(Requests, Timeout) ->
@@ -475,7 +466,7 @@ assert_max_req_age(Requests, Timeout) ->
 
 %% Send the 'assert_max_req_age' message to connection process.
 %% The send interval is set to a half of configured timeout.
--spec send_assert_max_req_age(pid(), timeout()) -> ok.
+-spec send_assert_max_req_age(connection(), timeout()) -> ok.
 send_assert_max_req_age(Pid, Timeout) when Timeout >= 1000 ->
   %% Check every 1 minute
   %% or every half of the timeout value if it's less than 2 minute
@@ -554,7 +545,7 @@ hint_msg(_, _, _) ->
   ?undef.
 
 %% Get sasl options from connection config.
--spec get_sasl_opt(options()) -> opt_val().
+-spec get_sasl_opt(config()) -> cfg_val().
 get_sasl_opt(Config) ->
   case maps:get(sasl, Config, ?undef) of
     {plain, User, PassFun} when is_function(PassFun) ->
@@ -581,8 +572,8 @@ host(Host) when is_binary(Host) -> binary_to_list(Host);
 host(Host) when is_list(Host) -> Host.
 
 %% Ensure binary client id
-get_client_id(Options) ->
-  ClientId = maps:get(client_id, Options, <<"kpro_default">>),
+get_client_id(Config) ->
+  ClientId = maps:get(client_id, Config, <<"kpro_default">>),
   case is_atom(ClientId) of
     true -> atom_to_binary(ClientId, utf8);
     false -> ClientId

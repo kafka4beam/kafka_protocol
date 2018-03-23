@@ -30,6 +30,7 @@
         ]).
 
 -export([ connect_any/2
+        , connect_partition_leader/5
         , query_api_versions/2
         ]).
 
@@ -41,6 +42,7 @@
              , compress_option/0
              , corr_id/0
              , count/0
+             , endpoint/0
              , error_code/0
              , field_name/0
              , field_value/0
@@ -96,6 +98,7 @@
 -type client_id() :: binary().
 -type hostname() :: binary() | string().
 -type portnum() :: non_neg_integer().
+-type endpoint() :: {hostname(), portnum()}.
 -type corr_id() :: int32().
 -type topic() :: binary().
 -type partition() :: int32().
@@ -180,6 +183,7 @@
                 | decode_fun(). %% caller defined decoder
 -type stack() :: [{api(), vsn()} | field_name()]. %% encode / decode stack
 -type isolation_level() :: read_committed | read_uncommitted.
+-type conn_config() :: kpro_connection:config().
 
 %% All versions of kafka messages (records) share the same header:
 %% Offset => int64
@@ -237,34 +241,33 @@ request_async(ConnectionPid, Request) ->
   kpro_connection:request_async(ConnectionPid, Request).
 
 %% @doc Connect to any of the endpoints in the given list.
-%% NOTE: Connection process is linked to caller process.
--spec connect_any([{hostname(), portnum()}], kpro_connection:options()) ->
+%% NOTE: Connection process is linked to caller unless `nolink => true'
+%%       is set in connection config
+-spec connect_any([endpoint()], conn_config()) ->
         {ok, pid()} | {error, any()}.
-connect_any(Endpoints, Options) ->
-  connect_any(Endpoints, Options, []).
+connect_any(Endpoints, ConnConfig) ->
+  kpro_connection_lib:connect_any(Endpoints, ConnConfig).
+
+%% @doc Connect to partition leader.
+%% It first tries to connect to any of the bootstraping nodes,
+%% query metata to discover leader node, then connect to leader.
+%% NOTE: Connection process is linked to caller unless `nolink => true'
+%%       is set in connection connection config.
+-spec connect_partition_leader([endpoint()], topic(), partition(),
+                               conn_config(), timeout()) ->
+        {ok, pid()} | {error, any()}.
+connect_partition_leader(BootstrapEndpoints, ConnConfig,
+                         Topic, Partition, Timeout) ->
+  kpro_connection_lib:connect_partition_leader(BootstrapEndpoints,
+                                               ConnConfig,
+                                               Topic, Partition,
+                                               Timeout).
 
 %% @doc Qury API versions using the given `kpro_connection' pid.
 -spec query_api_versions(pid(), timeout()) ->
         {ok, [{api(), {Min :: vsn(), Max :: vsn()}}]} | {error, any()}.
 query_api_versions(Pid, Timeout) ->
-  Req = make_request(api_versions, 0, []),
-  case kpro_connection:request_sync(Pid, Req, Timeout) of
-    {ok, #kpro_rsp{ api = api_versions
-                  , msg = [ {error_code, ErrorCode}
-                          , {api_versions, ApiVersions}
-                          ]}} ->
-      case kpro_error_code:is_error(ErrorCode) of
-        true ->
-          {error, ErrorCode};
-        false ->
-          R = [{find(api_key, Struct),
-                {find(min_version, Struct),
-                 find(max_version, Struct)}} || Struct <- ApiVersions],
-          {ok, R}
-      end;
-    {error, Reason} ->
-      {error, Reason}
-  end.
+  kpro_connection_lib:query_api_versions(Pid, Timeout).
 
 %% @doc Find field value in a struct, raise an exception if not found.
 -spec find(field_name(), struct()) -> field_value().
@@ -297,13 +300,6 @@ do_find(Field, Struct, Throw) when is_list(Struct) ->
   end;
 do_find(_Field, Other, _Throw) ->
   erlang:throw({not_struct, Other}).
-
-connect_any([], _Options, LastErr) -> {error, LastErr};
-connect_any([{Host, Port} | Rest], Options, _LastErr) ->
-  case kpro_connection:start_link(self(), Host, Port, Options) of
-    {ok, Pid} -> {ok, Pid};
-    {error, Error} -> connect_any(Rest, Options, Error)
-  end.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
