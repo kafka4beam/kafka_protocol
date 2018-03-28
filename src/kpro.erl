@@ -265,7 +265,7 @@ connect_partition_leader(BootstrapEndpoints, ConnConfig,
 
 %% @doc Qury API versions using the given `kpro_connection' pid.
 -spec query_api_versions(pid(), timeout()) ->
-        {ok, [{api(), {Min :: vsn(), Max :: vsn()}}]} | {error, any()}.
+        {ok, #{api() => {Min :: vsn(), Max :: vsn()}}} | {error, any()}.
 query_api_versions(Pid, Timeout) ->
   kpro_connection_lib:query_api_versions(Pid, Timeout).
 

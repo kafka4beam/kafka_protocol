@@ -34,7 +34,36 @@ main(_Args) ->
   {ok, DefGroups} = kpro_parser:file("kafka.bnf"),
   ExpandedTypes = [I || I <- lists:map(fun expand/1, DefGroups), is_tuple(I)],
   GrouppedTypes = group_per_name(ExpandedTypes, []),
-  ok = generate_schema_module(GrouppedTypes).
+  ok = generate_schema_module(GrouppedTypes),
+  ok = generate_version_rage_module(GrouppedTypes).
+
+-define(VERSINO_RANGE_MODULE_HEADER,"%% generated code, do not edit!
+-module(kpro_api_vsn).
+-export([range/1]).
+").
+
+generate_version_rage_module(GrouppedTypes) ->
+  Filename = filename:join(["..", "src", "kpro_api_vsn.erl"]),
+  F = fun({Name, VersionedFields}, Acc) ->
+          case split_name(Name) of
+            {API, "req"} ->
+              Versions = [V || {V, _} <- VersionedFields],
+              Min = integer_to_list(lists:min(Versions)),
+              Max = integer_to_list(lists:max(Versions)),
+              Clause = ["range(", API, ") -> {", Min, ", ", Max, "}"],
+              [Clause | Acc];
+            {_API, "rsp"} ->
+              Acc
+          end
+      end,
+  Clauses = lists:foldr(F, [], GrouppedTypes),
+  IoData =
+    [?VERSINO_RANGE_MODULE_HEADER,
+     "\n",
+     infix(Clauses, ";\n"),
+     ".\n\n"
+    ],
+  file:write_file(Filename, IoData).
 
 -define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
 -module(kpro_schema).

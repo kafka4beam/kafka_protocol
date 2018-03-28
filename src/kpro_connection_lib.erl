@@ -83,7 +83,7 @@ connect_partition_leader(BootstrapEndpoints, Topic, Partition,
 
 %% @doc Qury API version ranges using the given `kpro_connection' pid.
 -spec query_api_versions(connection(), timeout()) ->
-        {ok, [{api(), {Min :: vsn(), Max :: vsn()}}]} | {error, any()}.
+        {ok, #{api() => {Min :: vsn(), Max :: vsn()}}} | {error, any()}.
 query_api_versions(Pid, Timeout) ->
   Req = kpro:make_request(api_versions, 0, []),
   case kpro_connection:request_sync(Pid, Req, Timeout) of
@@ -92,13 +92,8 @@ query_api_versions(Pid, Timeout) ->
                           , {api_versions, ApiVersions}
                           ]}} ->
       case kpro_error_code:is_error(ErrorCode) of
-        true ->
-          {error, ErrorCode};
-        false ->
-          R = [{kpro:find(api_key, Struct),
-                {kpro:find(min_version, Struct),
-                 kpro:find(max_version, Struct)}} || Struct <- ApiVersions],
-          {ok, R}
+        true -> {error, ErrorCode};
+        false -> {ok, parse_api_vsn_ranges(ApiVersions)}
       end;
     {error, Reason} ->
       {error, Reason}
@@ -110,13 +105,43 @@ query_api_versions(Pid, Timeout) ->
 query_max_version(Pid, API, Timeout) ->
   case query_api_versions(Pid, Timeout) of
     {ok, Versions} ->
-      {_, {_Min, Max}} = lists:keyfind(API, 1, Versions),
+      {_Min, Max} = maps:get(API, Versions),
       Max;
     {error, Reason} ->
       {error, Reason}
   end.
 
 %%%_* Internal functions =======================================================
+
+parse_api_vsn_ranges(Structs) ->
+  F = fun(Struct, Acc) ->
+          API = kpro:find(api_key, Struct),
+          MinVsn = kpro:find(min_version, Struct),
+          MaxVsn = kpro:find(max_version, Struct),
+          case api_vsn_range_intersection(API, MinVsn, MaxVsn) of
+            false -> Acc;
+            {Min, Max} -> Acc#{API => {Min, Max}}
+          end
+      end,
+  lists:foldl(F, #{}, Structs).
+
+%% Intersect received api version range with supported range.
+api_vsn_range_intersection(API, MinReceived, MaxReceived) ->
+  Supported = try
+                kpro_api_vsn:range(API)
+              catch
+                error : function_clause ->
+                  false
+              end,
+  case Supported of
+    {MinSupported, MaxSupported} ->
+      Min = max(MinSupported, MinReceived),
+      Max = min(MaxSupported, MaxReceived),
+      true = (Min =< Max),
+      {Min, Max};
+    false ->
+      false
+  end.
 
 connect_any([], _Config, Errors) ->
   {error, lists:reverse(Errors)};
