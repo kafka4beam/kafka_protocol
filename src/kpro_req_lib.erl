@@ -195,7 +195,9 @@ encode_struct(API, Vsn, Fields) ->
 enc_struct([], _Values, _Stack) -> [];
 enc_struct([{Name, FieldSc} | Schema], Values, Stack) ->
   NewStack = [Name | Stack],
-  Value0 = kpro:do_find(Name, Values, {field_missing, NewStack}),
+  Value0 = kpro:do_find(Name, Values,
+                        {field_missing, [ {stack, lists:reverse(NewStack)}
+                                        , {input, Values}]}),
   Value = translate(NewStack, Value0),
   [ enc_struct_field(FieldSc, Value, NewStack)
   | enc_struct(Schema, Values, Stack)

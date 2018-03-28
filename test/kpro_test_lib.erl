@@ -3,22 +3,39 @@
 -export([ with_connection/1
         , with_connection/2
         , with_connection/3
+        , with_connection/4
         ]).
 
-with_connection(Fun) ->
-  with_connection(_Options = #{}, Fun).
+-type conn() :: kpro_connection:connection().
+-type config() :: kpro_connection:config().
 
-with_connection(Options, Fun) ->
-  Endpoints =
-    case os:getenv("KAFKA_SEED_HOSTS") of
-      false -> [{"localhost", 9092}];
-      ""    -> [{"localhost", 9092}];
-      Str   -> kpro_lib:parse_endpoints(Str)
-    end,
-  with_connection(Endpoints, Options, Fun).
+-spec with_connection(fun((conn()) -> any())) -> any().
+with_connection(WithConnFun) ->
+  with_connection(fun kpro:connect_any/2, WithConnFun).
 
-with_connection(Endpoints, Options, Fun) ->
-  {ok, Pid} = kpro:connect_any(Endpoints, Options),
+-spec with_connection(fun(([kpro:endpoint()], config()) -> {ok, conn()}),
+                      fun((conn()) -> any())) -> any().
+with_connection(ConnectFun, WithConnFun) ->
+  with_connection(_Config = #{}, ConnectFun, WithConnFun).
+
+with_connection(Config, ConnectFun, WithConnFun) ->
+  Endpoints = get_endpoints(),
+  with_connection(Endpoints, Config, ConnectFun, WithConnFun).
+
+with_connection(Endpoints, Config, ConnectFun, WithConnFun) ->
+  {ok, Pid} = ConnectFun(Endpoints, Config),
+  with_connection_pid(Pid, WithConnFun).
+
+%%%_* Internal functions =======================================================
+
+get_endpoints() ->
+  case os:getenv("KAFKA_SEED_HOSTS") of
+    false -> [{"localhost", 9092}];
+    ""    -> [{"localhost", 9092}];
+    Str   -> kpro_lib:parse_endpoints(Str)
+  end.
+
+with_connection_pid(Pid, Fun) ->
   try
     Fun(Pid)
   after
