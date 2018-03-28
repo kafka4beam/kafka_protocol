@@ -157,6 +157,7 @@ produce(Vsn, Topic, Partition, Batch, RequiredAcks,
 %% @doc Help function to make a request body.
 -spec make(kpro:api(), kpro:vsn(), kpro:struct()) -> kpro:req().
 make(API, Vsn, Fields) ->
+  ok = assert_known_api_and_vsn(API, Vsn),
   #kpro_req{ api = API
            , vsn = Vsn
            , msg = encode_struct(API, Vsn, Fields)
@@ -236,6 +237,23 @@ translate(_Stack, Value) -> Value.
 encode(Type, Value) -> kpro_lib:encode(Type, Value).
 
 bin(X) -> iolist_to_binary(X).
+
+assert_known_api_and_vsn(API, Vsn) ->
+  {Min, Max} =
+    try
+      kpro_api_vsn:range(API)
+    catch
+      error : function_clause ->
+        erlang:error({unknown_api, API})
+    end,
+  case Min =< Vsn andalso Vsn =< Max of
+    true -> ok;
+    false ->
+      erlang:error({unknown_vsn, [ {api, API}
+                                 , {vsn, Vsn}
+                                 , {known_vsn_range, {Min, Max}}
+                                 ]})
+  end.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

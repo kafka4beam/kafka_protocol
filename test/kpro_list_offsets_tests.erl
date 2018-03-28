@@ -8,7 +8,7 @@
 -define(TIMEOUT, 5000).
 
 list_offsets_test_() ->
-  {Min, Max} = query_api_versions(),
+  {Min, Max} = query_api_vsn_rage(),
   [ make_test_case(Vsn, Ts) ||
     Vsn <- lists:seq(Min, Max),
     Ts <- ['earliest', 'latest', kpro_lib:now_ts()]
@@ -39,11 +39,10 @@ assert_no_error(#kpro_rsp{vsn = Vsn, msg = Msg}) ->
     _ -> ?assertMatch([{timestamp, _}, {offset, _}], Rest)
   end.
 
-query_api_versions() ->
+query_api_vsn_rage() ->
   F = fun(Pid) -> kpro:query_api_versions(Pid, 1000) end,
   {ok, Versions} = kpro_test_lib:with_connection(F),
-  {_, MinMax} = lists:keyfind(list_offsets, 1, Versions),
-  MinMax.
+  maps:get(list_offsets, Versions).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
