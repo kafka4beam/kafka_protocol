@@ -224,10 +224,10 @@ do_ok_pipe([Fun | FunList]) ->
   do_ok_pipe(FunList, Fun()).
 
 do_ok_pipe([], Result) -> Result;
-do_ok_pipe(_FunList, {error, Reason}) ->
-  {error, Reason};
 do_ok_pipe([Fun | FunList], {ok, LastOkResult}) ->
-  do_ok_pipe(FunList, Fun(LastOkResult)).
+  do_ok_pipe(FunList, Fun(LastOkResult));
+do_ok_pipe(_FunList, {error, Reason}) ->
+  {error, Reason}.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

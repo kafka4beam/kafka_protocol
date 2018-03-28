@@ -244,7 +244,7 @@ request_async(ConnectionPid, Request) ->
 %% NOTE: Connection process is linked to caller unless `nolink => true'
 %%       is set in connection config
 -spec connect_any([endpoint()], conn_config()) ->
-        {ok, pid()} | {error, any()}.
+        {ok, kpro_connection:connection()} | {error, any()}.
 connect_any(Endpoints, ConnConfig) ->
   kpro_connection_lib:connect_any(Endpoints, ConnConfig).
 
@@ -255,7 +255,7 @@ connect_any(Endpoints, ConnConfig) ->
 %%       is set in connection connection config.
 -spec connect_partition_leader([endpoint()], topic(), partition(),
                                conn_config(), timeout()) ->
-        {ok, pid()} | {error, any()}.
+        {ok, kpro_connection:connection()} | {error, any()}.
 connect_partition_leader(BootstrapEndpoints, ConnConfig,
                          Topic, Partition, Timeout) ->
   kpro_connection_lib:connect_partition_leader(BootstrapEndpoints,

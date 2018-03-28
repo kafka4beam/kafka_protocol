@@ -54,7 +54,7 @@ with_connection(Endpoints, Config, Fun) ->
   try
     Fun(Connection)
   after
-    kpro_connection:close(Connection)
+    kpro_connection:stop(Connection)
   end.
 
 %% @doc Connect to partition leader.
@@ -70,7 +70,7 @@ connect_partition_leader(BootstrapEndpoints, Topic, Partition,
         try
           discover_partition_leader(Connection, Topic, Partition, Timeout)
         after
-          kpro_connection:close(Connection)
+          kpro_connection:stop(Connection)
         end
     end,
   FL =
@@ -106,7 +106,7 @@ query_max_version(Pid, API, Timeout) ->
   case query_api_versions(Pid, Timeout) of
     {ok, Versions} ->
       {_Min, Max} = maps:get(API, Versions),
-      Max;
+      {ok, Max};
     {error, Reason} ->
       {error, Reason}
   end.
@@ -157,7 +157,7 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
   FL =
     [ fun() -> query_max_version(Connection, metadata, Timeout) end
     , fun(Vsn) ->
-          Req = kpro:make_request(metadata, Vsn, [Topic]),
+          Req = kpro_req_lib:metadata(Vsn, [Topic]),
           kpro_connection:request_sync(Connection, Req, Timeout)
       end
     , fun(#kpro_rsp{msg = Meta}) ->
