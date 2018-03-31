@@ -10,35 +10,23 @@ ssl_test() ->
 
 sasl_test() ->
   Config = #{ ssl => ssl_options()
-            , sasl => {plain, "alice", <<"alice-secret">>}
+            , sasl => kpro_test_lib:sasl_config()
             },
   {ok, Pid} = connect(Config),
   ok = kpro_connection:stop(Pid).
 
 sasl_file_test() ->
-  {setup,
-   fun() ->
-      file:write_file("sasl-plain-user-pass-file", "alice\nalice-secret\n")
-   end,
-   fun(_) ->
-       file:delete("sasl-plain-user-pass-file")
-   end,
-   fun() ->
-      Config = #{ ssl => ssl_options()
-                , sasl => {plain, <<"sasl-plain-user-pass-file">>}
-                },
-      {ok, Pid} = connect(Config),
-      ok = kpro_connection:stop(Pid)
-   end}.
+  Config = #{ ssl => ssl_options()
+            , sasl => kpro_test_lib:sasl_config(file)
+            },
+  {ok, Pid} = connect(Config),
+  ok = kpro_connection:stop(Pid).
 
 no_api_version_query_test() ->
   Config = #{query_api_versions => false},
   {ok, Pid} = connect(Config),
-  try
-    ?assertEqual({ok, undefined}, kpro_connection:get_api_vsns(Pid))
-  after
-    ok = kpro_connection:stop(Pid)
-  end.
+  ?assertEqual({ok, undefined}, kpro_connection:get_api_vsns(Pid)),
+  ok = kpro_connection:stop(Pid).
 
 connect(Config) ->
   Protocol = kpro_test_lib:guess_protocol(Config),
