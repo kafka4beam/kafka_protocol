@@ -4,6 +4,9 @@
         , guess_protocol/1
         ]).
 
+-export([ get_topic/0
+        ]).
+
 -export([ sasl_config/0
         , sasl_config/1
         ]).
@@ -18,10 +21,15 @@
 -type config() :: kpro_connection:config().
 
 get_endpoints(Protocol) ->
-  case os:getenv("KAFKA_ENDPOINTS") of
-    false -> default_endpoints(Protocol);
-    ""    -> default_endpoints(Protocol);
-    Str   -> kpro:parse_endpoints(Protocol, Str)
+  case osenv("KPRO_TEST_KAFKA_ENDPOINTS") of
+    undefined -> default_endpoints(Protocol);
+    Str -> kpro:parse_endpoints(Protocol, Str)
+  end.
+
+get_topic() ->
+  case osenv("KPRO_TEST_KAFKA_TOPIC_NAME") of
+    undefined -> <<"test-topic">>;
+    Str -> iolist_to_binary(Str)
   end.
 
 sasl_config() ->
@@ -32,20 +40,13 @@ sasl_config() ->
   {plain, User, Pass}.
 
 sasl_config(file) ->
-  case get_sasl_file() of
+  case osenv("KPRO_TEST_KAFKA_SASL_PLAIN_USER_PASS_FILE") of
     undefined ->
       F = "/tmp/kpro-test-sasl-plain-user-pass",
       ok = file:write_file(F, "alice\necila\n"),
       {plain, F};
     File ->
       {plain, File}
-  end.
-
-get_sasl_file() ->
-  case os:getenv("KAFKA_SASL_PLAIN_USER_PASS_FILE") of
-    false -> undefined;
-    "" -> undefined;
-    F -> F
   end.
 
 -spec with_connection(fun((conn()) -> any())) -> any().
@@ -65,13 +66,20 @@ with_connection(Endpoints, Config, ConnectFun, WithConnFun) ->
   {ok, Pid} = ConnectFun(Endpoints, Config),
   with_connection_pid(Pid, WithConnFun).
 
+%%%_* Internal functions =======================================================
+
+osenv(Name) ->
+  case os:getenv(Name) of
+    "" -> undefined;
+    false -> undefined;
+    Val -> Val
+  end.
+
 %% Guess protocol name from connection config.
 guess_protocol(#{sasl := _}) -> sasl_ssl; %% we only test sasl on ssl
 guess_protocol(#{ssl := false}) -> plaintext;
 guess_protocol(#{ssl := _}) -> ssl;
 guess_protocol(_) -> plaintext.
-
-%%%_* Internal functions =======================================================
 
 default_endpoints(plaintext) -> [{"localhost", 9092}];
 default_endpoints(ssl) -> [{"localhost", 9093}];
