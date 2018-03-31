@@ -4,6 +4,10 @@
         , guess_protocol/1
         ]).
 
+-export([ sasl_config/0
+        , sasl_config/1
+        ]).
+
 -export([ with_connection/1
         , with_connection/2
         , with_connection/3
@@ -18,6 +22,30 @@ get_endpoints(Protocol) ->
     false -> default_endpoints(Protocol);
     ""    -> default_endpoints(Protocol);
     Str   -> kpro:parse_endpoints(Protocol, Str)
+  end.
+
+sasl_config() ->
+  {plain, F} = sasl_config(file),
+  {ok, Lines0} = file:read_file(F),
+  Lines = binary:split(Lines0, <<"\n">>, [global]),
+  [User, Pass] = lists:filter(fun(Line) -> Line =/= <<>> end, Lines),
+  {plain, User, Pass}.
+
+sasl_config(file) ->
+  case get_sasl_file() of
+    undefined ->
+      F = "/tmp/kpro-test-sasl-plain-user-pass",
+      ok = file:write_file(F, "alice\necila\n"),
+      {plain, F};
+    File ->
+      {plain, File}
+  end.
+
+get_sasl_file() ->
+  case os:getenv("KAFKA_SASL_PLAIN_USER_PASS_FILE") of
+    false -> undefined;
+    "" -> undefined;
+    F -> F
   end.
 
 -spec with_connection(fun((conn()) -> any())) -> any().

@@ -69,7 +69,7 @@ non_monotoic_ts_in_batch_test() ->
       Req = kpro_req_lib:produce(Vsn, ?TOPIC, ?PARTI, Msgs,
                                  _RequiredAcks = -1, _AckTimeout = 1000,
                                  no_compression),
-      with_connection(
+      with_connection(#{ssl => true, sasl => kpro_test_lib:sasl_config(file)},
         fun(Pid) ->
           {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
           ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
@@ -88,7 +88,14 @@ get_api_vsn_range() ->
   maps:get(produce, Versions).
 
 with_connection(Fun) ->
-  kpro_test_lib:with_connection(Fun).
+  with_connection(#{}, Fun).
+
+with_connection(Config, Fun) ->
+  ConnFun = fun(Endpoints, Config) ->
+                kpro:connect_partition_leader(Endpoints, ?TOPIC, ?PARTI,
+                                              Config, 1000)
+            end,
+  kpro_test_lib:with_connection(ConnFun, Fun).
 
 % Produce requests since v3 are only allowed to
 % contain record batches with magic v2
