@@ -1,9 +1,8 @@
--module(kpro_produce_request_tests).
+-module(kpro_produce_tests).
 
 -include_lib("eunit/include/eunit.hrl").
 -include("kpro.hrl").
 
--define(TOPIC, <<"test-topic">>).
 -define(PARTI, 0).
 -define(TIMEOUT, 5000).
 -define(MIN_MAGIC_2_VSN, 3).
@@ -16,7 +15,7 @@
                            | _
                            ]
                    } = Rsp,
-          [ {topic, ?TOPIC}
+          [ {topic, _}
           , {partition_responses, [PartitionRsp]}
           | _
           ] = Response,
@@ -66,7 +65,7 @@ non_monotoic_ts_in_batch_test() ->
                  value => make_value(?LINE)
                 }
              ],
-      Req = kpro_req_lib:produce(Vsn, ?TOPIC, ?PARTI, Msgs,
+      Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Msgs,
                                  _RequiredAcks = -1, _AckTimeout = 1000,
                                  no_compression),
       with_connection(#{ssl => true, sasl => kpro_test_lib:sasl_config(file)},
@@ -78,10 +77,8 @@ non_monotoic_ts_in_batch_test() ->
 
 make_req(Vsn) ->
   Batch = make_batch(Vsn),
-  kpro_req_lib:produce(Vsn, ?TOPIC, ?PARTI, Batch,
-                       _RequiredAcks = 1,
-                       _AckTimeout = 1000,
-                       no_compression).
+  kpro_req_lib:produce(Vsn, topic(), ?PARTI, Batch, _RequiredAcks = 1,
+                       _AckTimeout = 1000, no_compression).
 
 get_api_vsn_range() ->
   {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
@@ -91,11 +88,11 @@ with_connection(Fun) ->
   with_connection(#{}, Fun).
 
 with_connection(Config, Fun) ->
-  ConnFun = fun(Endpoints, Config) ->
-                kpro:connect_partition_leader(Endpoints, ?TOPIC, ?PARTI,
-                                              Config, 1000)
-            end,
-  kpro_test_lib:with_connection(ConnFun, Fun).
+  ConnFun =
+    fun(Endpoints, Cfg) ->
+        kpro:connect_partition_leader(Endpoints, topic(), ?PARTI, Cfg, 1000)
+    end,
+  kpro_test_lib:with_connection(Config, ConnFun, Fun).
 
 % Produce requests since v3 are only allowed to
 % contain record batches with magic v2
@@ -115,6 +112,8 @@ make_batch(Vsn) ->
 
 make_value(Random) ->
   term_to_binary({Random, os:system_time()}).
+
+topic() -> kpro_test_lib:get_topic().
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

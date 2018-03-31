@@ -1,9 +1,9 @@
--module(kpro_fetch_request_tests).
+-module(kpro_fetch_tests).
 
 -include_lib("eunit/include/eunit.hrl").
 -include("kpro.hrl").
 
--define(TOPIC, <<"test-topic">>).
+-define(TOPIC, kpro_test_lib:get_topic()).
 -define(PARTI, 0).
 -define(HOST, "localhost").
 -define(TIMEOUT, 5000).
