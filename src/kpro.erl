@@ -20,7 +20,6 @@
         ]).
 
 -export([ decode_batches/1
-        , do_find/3
         , find/2
         , find/3
         ]).
@@ -31,10 +30,12 @@
 
 -export([ connect_any/2
         , connect_partition_leader/5
-        , query_api_versions/2
+        , get_api_versions/1
         ]).
 
--export_type([ batch_decode_result/0
+-export_type([ api/0
+             , api_vsn_ranges/0
+             , batch_decode_result/0
              , batch_input/0
              , batch_meta/0
              , bytes/0
@@ -184,6 +185,7 @@
 -type stack() :: [{api(), vsn()} | field_name()]. %% encode / decode stack
 -type isolation_level() :: read_committed | read_uncommitted.
 -type conn_config() :: kpro_connection:config().
+-type api_vsn_ranges() :: #{api() => {vsn(), vsn()}}.
 
 %% All versions of kafka messages (records) share the same header:
 %% Offset => int64
@@ -264,15 +266,15 @@ connect_partition_leader(BootstrapEndpoints, ConnConfig,
                                                Timeout).
 
 %% @doc Qury API versions using the given `kpro_connection' pid.
--spec query_api_versions(pid(), timeout()) ->
-        {ok, #{api() => {Min :: vsn(), Max :: vsn()}}} | {error, any()}.
-query_api_versions(Pid, Timeout) ->
-  kpro_connection_lib:query_api_versions(Pid, Timeout).
+-spec get_api_versions(pid()) ->
+        {ok, api_vsn_ranges()} | {error, any()}.
+get_api_versions(Pid) ->
+  kpro_connection_lib:get_api_versions(Pid).
 
-%% @doc Find field value in a struct, raise an exception if not found.
+%% @doc Find field value in a struct, raise an 'error' exception if not found.
 -spec find(field_name(), struct()) -> field_value().
 find(Field, Struct) ->
-  do_find(Field, Struct, {no_such_field, Field}).
+  kpro_lib:find(Field, Struct, {no_such_field, Field}).
 
 %% @doc Find field value in a struct, reutrn default if not found.
 -spec find(field_name(), struct(), field_value()) -> field_value().
@@ -280,26 +282,9 @@ find(Field, Struct, Default) ->
   try
     find(Field, Struct)
   catch
-    throw : {no_such_field, _} ->
+    error : {no_such_field, _} ->
       Default
   end.
-
-%%%_* Internal functions =======================================================
-
-do_find(Field, Struct, Throw) when is_map(Struct) ->
-  try
-    maps:get(Field, Struct)
-  catch
-    error : {badkey, _} ->
-      erlang:throw(Throw)
-  end;
-do_find(Field, Struct, Throw) when is_list(Struct) ->
-  case lists:keyfind(Field, 1, Struct) of
-    {_, Value} -> Value;
-    false -> erlang:throw(Throw)
-  end;
-do_find(_Field, Other, _Throw) ->
-  erlang:throw({not_struct, Other}).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

@@ -28,7 +28,7 @@
         end).
 
 magic_v0_basic_test_() ->
-  {Min, Max} = query_api_vsn_range(),
+  {Min, Max} = get_api_vsn_range(),
   MkTestFun =
     fun(Vsn) ->
         fun() ->
@@ -49,7 +49,7 @@ magic_v0_basic_test_() ->
 
 %% Timestamp within batch may not have to be monotonic.
 non_monotoic_ts_in_batch_test() ->
-  {_, Vsn} = query_api_vsn_range(),
+  {_, Vsn} = get_api_vsn_range(),
   case Vsn < ?MIN_MAGIC_2_VSN of
     true ->
       %% Nothing to test for kafka < 0.11
@@ -83,9 +83,8 @@ make_req(Vsn) ->
                        _AckTimeout = 1000,
                        no_compression).
 
-query_api_vsn_range() ->
-  {ok, Versions} =
-    with_connection(fun(Pid) -> kpro:query_api_versions(Pid, 1000) end),
+get_api_vsn_range() ->
+  {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
   maps:get(produce, Versions).
 
 with_connection(Fun) ->

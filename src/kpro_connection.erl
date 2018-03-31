@@ -18,6 +18,7 @@
 
 %% API
 -export([ all_cfg_keys/0
+        , get_api_vsns/1
         , get_tcp_sock/1
         , init/4
         , loop/2
@@ -47,12 +48,14 @@
 
 %% try not to use 0 corr ID for the first few requests
 %% as they are usually used by upper level callers
--define(SASL_AUTH_REQ_CORRID, ((1 bsl 31) - 1)).
+-define(SASL_AUTH_CORRID, ((1 bsl 31) - 1)).
+-define(API_VERSIONS_CORRID, ((1 bsl 31) - 2)).
 
 -type cfg_key() :: connect_timeout
                  | client_id
                  | debug
                  | nolink
+                 | query_api_versions
                  | request_timeout
                  | sasl
                  | ssl.
@@ -76,11 +79,13 @@
 
 -record(state, { client_id   :: client_id()
                , parent      :: pid()
+               , remote      :: kpro:endpoint()
                , sock        :: ?undef | port()
-               , acc = <<>>  :: acc()
-               , requests    :: ?undef | requests()
                , mod         :: ?undef | gen_tcp | ssl
                , req_timeout :: ?undef | timeout()
+               , api_vsns    :: ?undef | kpro:api_vsn_ranges()
+               , acc = <<>>  :: acc()
+               , requests    :: ?undef | requests()
                }).
 
 -type state() :: #state{}.
@@ -90,7 +95,8 @@
 %% @doc Return all config keys make client config management easy.
 -spec all_cfg_keys() -> [cfg_key()].
 all_cfg_keys() ->
-  [connect_timeout, debug, client_id, request_timeout, sasl, ssl, nolink].
+  [ connect_timeout, debug, client_id, request_timeout, sasl, ssl, nolink,
+    query_api_versions].
 
 %% @doc Connect to the given endpoint.
 %% The started connection pid is linked to caller
@@ -128,6 +134,11 @@ stop(Pid) when is_pid(Pid) ->
 stop(_) ->
   ok.
 
+-spec get_api_vsns(pid()) ->
+        {ok, ?undef | kpro:api_vsn_ranges()} | {error, any()}.
+get_api_vsns(Pid) ->
+  call(Pid, get_api_vsns).
+
 %% @hidden
 -spec get_tcp_sock(pid()) -> {ok, port()}.
 get_tcp_sock(Pid) ->
@@ -155,6 +166,7 @@ init(Parent, Host, Port, Config) ->
     {ok, Sock} ->
       State = #state{ client_id = get_client_id(Config)
                     , parent    = Parent
+                    , remote    = {Host, Port}
                     },
       try
         do_init(State, Sock, Host, Config)
@@ -186,17 +198,43 @@ do_init(State0, Sock, Host, Config) ->
   Mod = get_tcp_mod(SslOpts),
   NewSock = maybe_upgrade_to_ssl(Sock, Mod, SslOpts, Timeout),
   ok = sasl_auth(Host, NewSock, Mod, ClientId, Timeout, get_sasl_opt(Config)),
-  State = State0#state{mod = Mod, sock = NewSock},
+  Versions =
+    case Config of
+      #{query_api_versions := false} -> ?undef;
+      _ -> query_api_versions(NewSock, Mod, ClientId, Timeout)
+    end,
+  State = State0#state{mod = Mod, sock = NewSock, api_vsns = Versions},
   proc_lib:init_ack(Parent, {ok, self()}),
   ReqTimeout = get_request_timeout(Config),
   ok = send_assert_max_req_age(self(), ReqTimeout),
   Requests = kpro_sent_reqs:new(),
   loop(State#state{requests = Requests, req_timeout = ReqTimeout}, Debug).
 
+query_api_versions(Sock, Mod, ClientId, Timeout) ->
+  Req = kpro_req_lib:make(api_versions, 0, []),
+  Rsp = inactive_request_sync(Req, Sock, Mod, ClientId, ?API_VERSIONS_CORRID,
+                              Timeout, failed_to_query_api_versions),
+  #kpro_rsp{api = api_versions, vsn = 0, msg = Body} = Rsp,
+  ErrorCode = find(error_code, Body),
+  case kpro_error_code:is_error(ErrorCode) of
+    true ->
+      erlang:error({failed_to_query_api_versions, ErrorCode});
+    false ->
+      Versions = find(api_versions, Body),
+      F = fun(V, Acc) ->
+          API = find(api_key, V),
+          MinVsn = find(min_version, V),
+          MaxVsn = find(max_version, V),
+          Acc#{API => {MinVsn, MaxVsn}}
+      end,
+      lists:foldl(F, #{}, Versions)
+  end.
+
 % Send request to active = false socket, and wait for response.
 inactive_request_sync(#kpro_req{api = API, vsn = Vsn} = Req,
                       Sock, Mod, ClientId, CorrId, Timeout, ErrorTag) ->
-  ReqBin = kpro:encode_request(ClientId, ?SASL_AUTH_REQ_CORRID, Req),
+  ok = setopts(Sock, Mod, [{active, false}]),
+  ReqBin = kpro_req_lib:encode(ClientId, CorrId, Req),
   try
     ok = Mod:send(Sock, ReqBin),
     {ok, <<Len:32>>} = Mod:recv(Sock, 4, Timeout),
@@ -231,12 +269,11 @@ sasl_auth(_Host, _Sock, _Mod, _ClientId, _Timeout, ?undef) ->
   ok;
 sasl_auth(_Host, Sock, Mod, ClientId, Timeout,
           {_Method = plain, SaslUser, SaslPassword}) ->
-  ok = setopts(Sock, Mod, [{active, false}]),
-  Req = kpro:make_request(sasl_handshake, _V = 0, [{mechanism, <<"PLAIN">>}]),
-  Rsp = inactive_request_sync(Req, Sock, Mod, ClientId,
-                              ?SASL_AUTH_REQ_CORRID, Timeout, sasl_auth_error),
+  Req = kpro_req_lib:make(sasl_handshake, 0, [{mechanism, <<"PLAIN">>}]),
+  Rsp = inactive_request_sync(Req, Sock, Mod, ClientId, ?SASL_AUTH_CORRID,
+                              Timeout, sasl_auth_error),
   #kpro_rsp{api = sasl_handshake, vsn = 0, msg = Body} = Rsp,
-  ErrorCode = kpro:find(error_code, Body),
+  ErrorCode = find(error_code, Body),
   case kpro_error_code:is_error(ErrorCode) of
     true ->
       erlang:error({sasl_auth_error, ErrorCode});
@@ -278,7 +315,7 @@ wait_for_rsp(Pid, #kpro_req{ref = Ref}, Timeout) ->
       erlang:demonitor(Mref, [flush]),
       {ok, Rsp};
     {'DOWN', Mref, _, _, Reason} ->
-      {error, {sock_down, Reason}}
+      {error, {connection_down, Reason}}
   after
     Timeout ->
       erlang:demonitor(Mref, [flush]),
@@ -293,7 +330,7 @@ system_call(Pid, Request) ->
       erlang:demonitor(Mref, [flush]),
       Reply;
     {'DOWN', Mref, _, _, Reason} ->
-      {error, {sock_down, Reason}}
+      {error, {connection_down, Reason}}
   end.
 
 call(Pid, Request) ->
@@ -304,7 +341,7 @@ call(Pid, Request) ->
       erlang:demonitor(Mref, [flush]),
       Reply;
     {'DOWN', Mref, _, _, Reason} ->
-      {error, {sock_down, Reason}}
+      {error, {connection_down, Reason}}
   end.
 
 reply({To, Tag}, Reply) ->
@@ -374,7 +411,7 @@ handle_msg({From, {send, Request}},
       #kpro_req{ref = Ref, api = API, vsn = Vsn} ->
         kpro_sent_reqs:add(Requests, Caller, Ref, API, Vsn)
     end,
-  RequestBin = kpro:encode_request(ClientId, CorrId, Request),
+  RequestBin = kpro_req_lib:encode(ClientId, CorrId, Request),
   Res = case Mod of
           gen_tcp -> gen_tcp:send(Sock, RequestBin);
           ssl     -> ssl:send(Sock, RequestBin)
@@ -387,6 +424,9 @@ handle_msg({From, {send, Request}},
       exit({send_error, Reason})
   end,
   ?MODULE:loop(State#state{requests = NewRequests}, Debug);
+handle_msg({From, get_api_vsns}, State, Debug) ->
+  _ = reply(From, {ok, State#state.api_vsns}),
+  ?MODULE:loop(State, Debug);
 handle_msg({From, get_tcp_sock}, State, Debug) ->
   _ = reply(From, {ok, State#state.sock}),
   ?MODULE:loop(State, Debug);
@@ -578,6 +618,9 @@ get_client_id(Config) ->
     true -> atom_to_binary(ClientId, utf8);
     false -> ClientId
   end.
+
+find(FieldName, Struct) ->
+  kpro_lib:find(FieldName, Struct, {no_such_field, FieldName}).
 
 %%%_* Eunit ====================================================================
 

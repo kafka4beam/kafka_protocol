@@ -1,6 +1,6 @@
 %% generated code, do not edit!
 -module(kpro_schema).
--export([get/3]).
+-export([get/3, all_apis/0, vsn_range/1]).
 
 get(produce, req, V) when V >= 0, V =< 2 ->
   [{acks,int16},
@@ -890,4 +890,82 @@ get(create_partitions, rsp, 0) ->
    {topic_errors,{array,[{topic,string},
                          {error_code,int16},
                          {error_message,nullable_string}]}}].
+all_apis() ->
+[add_offsets_to_txn,
+add_partitions_to_txn,
+alter_configs,
+alter_replica_log_dirs,
+api_versions,
+controlled_shutdown,
+create_acls,
+create_partitions,
+create_topics,
+delete_acls,
+delete_records,
+delete_topics,
+describe_acls,
+describe_configs,
+describe_groups,
+describe_log_dirs,
+end_txn,
+fetch,
+find_coordinator,
+heartbeat,
+init_producer_id,
+join_group,
+leader_and_isr,
+leave_group,
+list_groups,
+list_offsets,
+metadata,
+offset_commit,
+offset_fetch,
+offset_for_leader_epoch,
+produce,
+sasl_authenticate,
+sasl_handshake,
+stop_replica,
+sync_group,
+txn_offset_commit,
+update_metadata,
+write_txn_markers].
+
+vsn_range(produce) -> {0, 5};
+vsn_range(fetch) -> {0, 6};
+vsn_range(list_offsets) -> {0, 2};
+vsn_range(metadata) -> {0, 5};
+vsn_range(leader_and_isr) -> {0, 1};
+vsn_range(stop_replica) -> {0, 0};
+vsn_range(update_metadata) -> {0, 4};
+vsn_range(controlled_shutdown) -> {0, 1};
+vsn_range(offset_commit) -> {0, 3};
+vsn_range(offset_fetch) -> {0, 3};
+vsn_range(find_coordinator) -> {0, 1};
+vsn_range(join_group) -> {0, 2};
+vsn_range(heartbeat) -> {0, 1};
+vsn_range(leave_group) -> {0, 1};
+vsn_range(sync_group) -> {0, 1};
+vsn_range(describe_groups) -> {0, 1};
+vsn_range(list_groups) -> {0, 1};
+vsn_range(sasl_handshake) -> {0, 1};
+vsn_range(api_versions) -> {0, 1};
+vsn_range(create_topics) -> {0, 2};
+vsn_range(delete_topics) -> {0, 1};
+vsn_range(delete_records) -> {0, 0};
+vsn_range(init_producer_id) -> {0, 0};
+vsn_range(offset_for_leader_epoch) -> {0, 0};
+vsn_range(add_partitions_to_txn) -> {0, 0};
+vsn_range(add_offsets_to_txn) -> {0, 0};
+vsn_range(end_txn) -> {0, 0};
+vsn_range(write_txn_markers) -> {0, 0};
+vsn_range(txn_offset_commit) -> {0, 0};
+vsn_range(describe_acls) -> {0, 0};
+vsn_range(create_acls) -> {0, 0};
+vsn_range(delete_acls) -> {0, 0};
+vsn_range(describe_configs) -> {0, 0};
+vsn_range(alter_configs) -> {0, 0};
+vsn_range(alter_replica_log_dirs) -> {0, 0};
+vsn_range(describe_log_dirs) -> {0, 0};
+vsn_range(sasl_authenticate) -> {0, 0};
+vsn_range(create_partitions) -> {0, 0}.
 

@@ -8,7 +8,7 @@
 -define(TIMEOUT, 5000).
 
 list_offsets_test_() ->
-  {Min, Max} = query_api_vsn_rage(),
+  {Min, Max} = get_api_vsn_rage(),
   [ make_test_case(Vsn, Ts) ||
     Vsn <- lists:seq(Min, Max),
     Ts <- ['earliest', 'latest', kpro_lib:now_ts()]
@@ -43,8 +43,8 @@ assert_no_error(#kpro_rsp{vsn = Vsn, msg = Msg}) ->
     _ -> ?assertMatch([{timestamp, _}, {offset, _}], Rest)
   end.
 
-query_api_vsn_rage() ->
-  F = fun(Pid) -> kpro:query_api_versions(Pid, 1000) end,
+get_api_vsn_rage() ->
+  F = fun(Pid) -> kpro:get_api_versions(Pid) end,
   {ok, Versions} = kpro_test_lib:with_connection(F),
   maps:get(list_offsets, Versions).
 
