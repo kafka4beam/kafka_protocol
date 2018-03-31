@@ -4,6 +4,7 @@
         , data_size/1
         , decode/2
         , encode/2
+        , find/3
         , get_prelude_schema/2
         , get_req_schema/2
         , get_rsp_schema/2
@@ -148,6 +149,22 @@ get_rsp_schema(Api, Vsn) ->
 get_prelude_schema(Tag, Vsn) ->
   F = fun() -> kpro_prelude_schema:get(Tag, Vsn) end,
   get_schema(F, {Tag, Vsn}).
+
+-spec find(kpro:field_name(), kpro:struct(), term()) -> kpro:field_value().
+find(Field, Struct, Error) when is_map(Struct) ->
+  try
+    maps:get(Field, Struct)
+  catch
+    error : {badkey, _} ->
+      erlang:error(Error)
+  end;
+find(Field, Struct, Error) when is_list(Struct) ->
+  case lists:keyfind(Field, 1, Struct) of
+    {_, Value} -> Value;
+    false -> erlang:error(Error)
+  end;
+find(_Field, Other, _Error) ->
+  erlang:error({not_struct, Other}).
 
 %%%_* Internals ================================================================
 

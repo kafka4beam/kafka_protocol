@@ -17,15 +17,13 @@
 
 -export([ connect_any/2
         , connect_partition_leader/5
-        , query_api_versions/2
-        , query_max_version/3
+        , get_api_versions/1
+        , get_max_api_version/2
         , with_connection/3
         ]).
 
 -include("kpro_private.hrl").
 
--type api() :: kpro:api().
--type vsn() :: kpro:vsn().
 -type endpoint() :: kpro:endpoint().
 -type topic() :: kpro:topic().
 -type partition() :: kpro:partition().
@@ -82,28 +80,21 @@ connect_partition_leader(BootstrapEndpoints, Topic, Partition,
   kpro_lib:ok_pipe(FL, Timeout).
 
 %% @doc Qury API version ranges using the given `kpro_connection' pid.
--spec query_api_versions(connection(), timeout()) ->
-        {ok, #{api() => {Min :: vsn(), Max :: vsn()}}} | {error, any()}.
-query_api_versions(Pid, Timeout) ->
-  Req = kpro:make_request(api_versions, 0, []),
-  case kpro_connection:request_sync(Pid, Req, Timeout) of
-    {ok, #kpro_rsp{ api = api_versions
-                  , msg = [ {error_code, ErrorCode}
-                          , {api_versions, ApiVersions}
-                          ]}} ->
-      case kpro_error_code:is_error(ErrorCode) of
-        true -> {error, ErrorCode};
-        false -> {ok, parse_api_vsn_ranges(ApiVersions)}
-      end;
+-spec get_api_versions(connection()) ->
+        {ok, kpro:api_vsn_ranges()} | {error, any()}.
+get_api_versions(Pid) ->
+  case kpro_connection:get_api_vsns(Pid) of
+    {ok, Vsns} ->
+      {ok, api_vsn_range_intersection(Vsns)};
     {error, Reason} ->
       {error, Reason}
   end.
 
 %% @doc Qury highest supported version for the given API.
--spec query_max_version(connection(), kpro:api_key(), timeout()) ->
+-spec get_max_api_version(connection(), kpro:api_key()) ->
         {ok, kpro:vsn()} | {error, any()}.
-query_max_version(Pid, API, Timeout) ->
-  case query_api_versions(Pid, Timeout) of
+get_max_api_version(Pid, API) ->
+  case get_api_versions(Pid) of
     {ok, Versions} ->
       {_Min, Max} = maps:get(API, Versions),
       {ok, Max};
@@ -113,17 +104,22 @@ query_max_version(Pid, API, Timeout) ->
 
 %%%_* Internal functions =======================================================
 
-parse_api_vsn_ranges(Structs) ->
-  F = fun(Struct, Acc) ->
-          API = kpro:find(api_key, Struct),
-          MinVsn = kpro:find(min_version, Struct),
-          MaxVsn = kpro:find(max_version, Struct),
-          case api_vsn_range_intersection(API, MinVsn, MaxVsn) of
-            false -> Acc;
-            {Min, Max} -> Acc#{API => {Min, Max}}
-          end
-      end,
-  lists:foldl(F, #{}, Structs).
+api_vsn_range_intersection(undefined) ->
+  %% kpro_connection is configured not to query api versions (kafka-0.9)
+  %% always use minimum supported version in this case
+  lists:foldl(
+    fun(API, Acc) ->
+        {Min, _Max} = api_vsn_ranges:range(API),
+        Acc#{API => {Min, Min}}
+    end, kpro_schema:all_apis());
+api_vsn_range_intersection(Vsns) ->
+  maps:fold(
+    fun(API, {Min, Max}, Acc) ->
+        case api_vsn_range_intersection(API, Min, Max) of
+          false -> Acc;
+          Intersection -> Acc#{API => Intersection}
+        end
+    end, #{}, Vsns).
 
 %% Intersect received api version range with supported range.
 api_vsn_range_intersection(API, MinReceived, MaxReceived) ->
@@ -137,8 +133,7 @@ api_vsn_range_intersection(API, MinReceived, MaxReceived) ->
     {MinSupported, MaxSupported} ->
       Min = max(MinSupported, MinReceived),
       Max = min(MaxSupported, MaxReceived),
-      true = (Min =< Max),
-      {Min, Max};
+      Min =< Max andalso {Min, Max};
     false ->
       false
   end.
@@ -155,7 +150,7 @@ connect_any([{Host, Port} | Rest], Config, Errors) ->
 
 discover_partition_leader(Connection, Topic, Partition, Timeout) ->
   FL =
-    [ fun() -> query_max_version(Connection, metadata, Timeout) end
+    [ fun() -> get_max_api_version(Connection, metadata) end
     , fun(Vsn) ->
           Req = kpro_req_lib:metadata(Vsn, [Topic]),
           kpro_connection:request_sync(Connection, Req, Timeout)
