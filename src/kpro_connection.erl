@@ -233,8 +233,8 @@ query_api_versions(Sock, Mod, ClientId, Timeout) ->
 % Send request to active = false socket, and wait for response.
 inactive_request_sync(#kpro_req{api = API, vsn = Vsn} = Req,
                       Sock, Mod, ClientId, CorrId, Timeout, ErrorTag) ->
-  ok = setopts(Sock, Mod, [{active, false}]),
   ReqBin = kpro_req_lib:encode(ClientId, CorrId, Req),
+  ok = setopts(Sock, Mod, [{active, false}]),
   try
     ok = Mod:send(Sock, ReqBin),
     {ok, <<Len:32>>} = Mod:recv(Sock, 4, Timeout),

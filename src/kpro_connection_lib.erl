@@ -76,7 +76,6 @@ connect_partition_leader(BootstrapEndpoints, Topic, Partition,
     , DiscoverLeader
     , fun(LeaderEndpoint) -> connect_any([LeaderEndpoint], Config) end
     ],
-  %% Link the the connection if it's not `nolink => true' in config.
   kpro_lib:ok_pipe(FL, Timeout).
 
 %% @doc Qury API version ranges using the given `kpro_connection' pid.

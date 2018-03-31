@@ -3,15 +3,16 @@
 -include_lib("eunit/include/eunit.hrl").
 
 ssl_test() ->
-  Opts = #{ssl => ssl_options()},
-  {ok, Pid} = connect("localhost", 9093, Opts),
-  ok = kpro_connection:stop(Pid).
+  ok.
+  % Config = #{ssl => ssl_options()},
+  % {ok, Pid} = connect(Config),
+  % ok = kpro_connection:stop(Pid).
 
 sasl_test() ->
-  Opts = #{ ssl => ssl_options()
-          , sasl => {plain, "alice", <<"alice-secret">>}
-          },
-  {ok, Pid} = connect(<<"localhost">>, 9094, Opts),
+  Config = #{ ssl => ssl_options()
+            , sasl => {plain, "alice", <<"alice-secret">>}
+            },
+  {ok, Pid} = connect(Config),
   ok = kpro_connection:stop(Pid).
 
 sasl_file_test() ->
@@ -23,15 +24,26 @@ sasl_file_test() ->
        file:delete("sasl-plain-user-pass-file")
    end,
    fun() ->
-      Opts = #{ ssl => ssl_options()
-              , sasl => {plain, <<"sasl-plain-user-pass-file">>}
-              },
-      {ok, Pid} = connect("localhost", 9094, Opts),
+      Config = #{ ssl => ssl_options()
+                , sasl => {plain, <<"sasl-plain-user-pass-file">>}
+                },
+      {ok, Pid} = connect(Config),
       ok = kpro_connection:stop(Pid)
    end}.
 
-connect(Host, Port, Options) ->
-  kpro_connection:start(Host, Port, Options).
+no_api_version_query_test() ->
+  Config = #{query_api_versions => false},
+  {ok, Pid} = connect(Config),
+  try
+    ?assertEqual({ok, undefined}, kpro_connection:get_api_vsns(Pid))
+  after
+    ok = kpro_connection:stop(Pid)
+  end.
+
+connect(Config) ->
+  Protocol = kpro_test_lib:guess_protocol(Config),
+  [{Host, Port} | _] = kpro_test_lib:get_endpoints(Protocol),
+  kpro_connection:start(Host, Port, Config).
 
 ssl_options() ->
   PrivDir = code:priv_dir(?APPLICATION),

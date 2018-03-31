@@ -15,7 +15,7 @@ with_timeout_test_() ->
                        kpro_lib:with_timeout(fun() -> exit(test) end, 100))}
   , {"links",
      fun() ->
-         Pid = spawn_link(fun() -> receive _ -> ok end end),
+         Pid = spawn(fun() -> receive _ -> ok end end),
          Result = kpro_lib:with_timeout(fun() -> link(Pid) end, 100),
          ?assertEqual(true, Result),
          {links, Links} = process_info(self(), links),
