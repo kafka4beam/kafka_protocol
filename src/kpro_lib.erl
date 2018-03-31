@@ -12,7 +12,7 @@
         , now_ts/0
         , ok_pipe/1
         , ok_pipe/2
-        , parse_endpoints/1
+        , parse_endpoints/2
         , with_timeout/2
         ]).
 
@@ -41,19 +41,17 @@ ok_pipe(FunList, Timeout) ->
 ok_pipe(FunList) ->
   ok_pipe(FunList, infinity).
 
-%% @doc Parse 'host:port,host2:port2' string into endpoint list
-parse_endpoints(Str) ->
+%% @doc Parse comma separated endpoints in a string into a list of
+%% `{Host::string(), Port::integer()}' pairs.
+%% Endpoints may or may not start with protocol prefix (non case sensitive):
+%% `PLAINTEXT://', `SSL://', `SASL_PLAINTEXT://' or `SASL_SSL://'.
+%% The first arg is to filter desired endpoints from parse result.
+-spec parse_endpoints(kpro:protocol() | undefined, string()) ->
+        [kpro:endpoint()].
+parse_endpoints(Protocol, Str) ->
   Eps0 = string:tokens(Str, ",\n"),
-  Eps = [Ep || Ep <- Eps0, Ep =/= ""],
-  F = fun(Ep) ->
-          case string:tokens(Ep, ":") of
-            [Host] ->
-              {Host, 9092};
-            [Host, Port] ->
-              {Host, list_to_integer(Port)}
-          end
-      end,
-  lists:map(F, Eps).
+  L = [parse_endpoint(string:to_lower(Ep)) || Ep <- Eps0, Ep =/= ""],
+  [EP || {P, EP} <- L, Protocol =:= P].
 
 %% @doc Return number of bytes in the given `iodata()'.
 -spec data_size(iodata()) -> count().
@@ -166,7 +164,26 @@ find(Field, Struct, Error) when is_list(Struct) ->
 find(_Field, Other, _Error) ->
   erlang:error({not_struct, Other}).
 
+parse_endpoint("plaintext://" ++ HostPort) ->
+  {plaintext, parse_host_port(HostPort)};
+parse_endpoint("ssl://" ++ HostPort) ->
+  {ssl, parse_host_port(HostPort)};
+parse_endpoint("sasl_ssl://" ++ HostPort) ->
+  {sasl_ssl, parse_host_port(HostPort)};
+parse_endpoint("sasl_plaintext://" ++ HostPort) ->
+  {sasl_plaintext, parse_host_port(HostPort)};
+parse_endpoint(HostPort) ->
+  {undefined, parse_host_port(HostPort)}.
+
 %%%_* Internals ================================================================
+
+parse_host_port(HostPort) ->
+  case string:tokens(HostPort, ":") of
+    [Host] ->
+      {Host, 9092};
+    [Host, Port] ->
+      {Host, list_to_integer(Port)}
+  end.
 
 -spec data_size(iodata(), count()) -> count().
 data_size([], Size) -> Size;

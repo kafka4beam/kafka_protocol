@@ -22,6 +22,8 @@
 -export([ decode_batches/1
         , find/2
         , find/3
+        , parse_endpoints/1
+        , parse_endpoints/2
         ]).
 
 -export([ request_sync/3
@@ -69,6 +71,7 @@
              , primitive/0
              , primitive_type/0
              , producer_id/0
+             , protocol/0
              , req/0
              , required_acks/0
              , rsp/0
@@ -186,6 +189,7 @@
 -type isolation_level() :: read_committed | read_uncommitted.
 -type conn_config() :: kpro_connection:config().
 -type api_vsn_ranges() :: #{api() => {vsn(), vsn()}}.
+-type protocol() :: plaintext | ssl | sasl_plaintext | sasl_ssl.
 
 %% All versions of kafka messages (records) share the same header:
 %% Offset => int64
@@ -199,6 +203,19 @@
 -define(BATCH_LEADING_BYTES, 12).
 
 %%%_* APIs =====================================================================
+
+%% @doc Parse comma separated endpoints in a string into a list of
+%% `{Host::string(), Port::integer()}' pairs.
+parse_endpoints(String) ->
+  parse_endpoints(undefined, String).
+
+%% @doc Same return value as `parse_endpoints/1'.
+%% Endpoints may or may not start with protocol prefix (non case sensitive):
+%% `PLAINTEXT://', `SSL://', `SASL_PLAINTEXT://' or `SASL_SSL://'.
+%% The first arg is to filter desired endpoints from parse result.
+-spec parse_endpoints(protocol() | undefined, string()) -> [endpoint()].
+parse_endpoints(Protocol, String) ->
+  kpro_lib:parse_endpoints(Protocol, String).
 
 %% @doc Help function to make a request. See also kpro_req_lib for more help
 %% functions.
