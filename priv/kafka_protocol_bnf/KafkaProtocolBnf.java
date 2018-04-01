@@ -105,6 +105,14 @@ public class KafkaProtocolBnf {
         b.append("# generated code, do not edit!\n\n");
         for (ApiKeys key : ApiKeys.values()) {
             // Requests
+            if(key.clusterAction) {
+              continue;
+            }
+            b.append("#ApiKey: ");
+            b.append(key.name);
+            b.append(", ");
+            b.append(new Integer(key.id).toString());
+            b.append("\n");
             Schema[] requests = key.requestSchemas;
             for (int i = 0; i < requests.length; i++) {
                 Schema schema = requests[i];
@@ -118,8 +126,8 @@ public class KafkaProtocolBnf {
                     schemaToBnf(requests[i], b, 2);
                     b.append("\n");
                     schemaToFieldTableText(requests[i], b);
+                    b.append("\n\n");
                 }
-                b.append("\n\n");
             }
 
             // Responses

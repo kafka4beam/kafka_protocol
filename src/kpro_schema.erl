@@ -1,6 +1,6 @@
 %% generated code, do not edit!
 -module(kpro_schema).
--export([get/3, all_apis/0, vsn_range/1]).
+-export([get/3, all_apis/0, vsn_range/1, api_key/1]).
 
 get(produce, req, V) when V >= 0, V =< 2 ->
   [{acks,int16},
@@ -303,151 +303,6 @@ get(metadata, rsp, 5) ->
                      {replicas,{array,int32}},
                      {isr,{array,int32}},
                      {offline_replicas,{array,int32}}]}}]}}];
-get(leader_and_isr, req, 0) ->
-  [{controller_id,int32},
-   {controller_epoch,int32},
-   {partition_states,{array,[{topic,string},
-                             {partition,int32},
-                             {controller_epoch,int32},
-                             {leader,int32},
-                             {leader_epoch,int32},
-                             {isr,{array,int32}},
-                             {zk_version,int32},
-                             {replicas,{array,int32}}]}},
-   {live_leaders,{array,[{id,int32},{host,string},{port,int32}]}}];
-get(leader_and_isr, req, 1) ->
-  [{controller_id,int32},
-   {controller_epoch,int32},
-   {partition_states,{array,[{topic,string},
-                             {partition,int32},
-                             {controller_epoch,int32},
-                             {leader,int32},
-                             {leader_epoch,int32},
-                             {isr,{array,int32}},
-                             {zk_version,int32},
-                             {replicas,{array,int32}},
-                             {is_new,boolean}]}},
-   {live_leaders,{array,[{id,int32},{host,string},{port,int32}]}}];
-get(leader_and_isr, rsp, V) when V >= 0, V =< 1 ->
-  [{error_code,int16},
-   {partitions,{array,[{topic,string},{partition,int32},{error_code,int16}]}}];
-get(stop_replica, req, 0) ->
-  [{controller_id,int32},
-   {controller_epoch,int32},
-   {delete_partitions,boolean},
-   {partitions,{array,[{topic,string},{partition,int32}]}}];
-get(stop_replica, rsp, 0) ->
-  [{error_code,int16},
-   {partitions,{array,[{topic,string},{partition,int32},{error_code,int16}]}}];
-get(update_metadata, req, 0) ->
-  [{controller_id,int32},
-   {controller_epoch,int32},
-   {partition_states,{array,[{topic,string},
-                             {partition,int32},
-                             {controller_epoch,int32},
-                             {leader,int32},
-                             {leader_epoch,int32},
-                             {isr,{array,int32}},
-                             {zk_version,int32},
-                             {replicas,{array,int32}}]}},
-   {live_brokers,{array,[{id,int32},{host,string},{port,int32}]}}];
-get(update_metadata, req, 1) ->
-  [{controller_id,int32},
-   {controller_epoch,int32},
-   {partition_states,
-       {array,
-           [{topic,string},
-            {partition,int32},
-            {controller_epoch,int32},
-            {leader,int32},
-            {leader_epoch,int32},
-            {isr,{array,int32}},
-            {zk_version,int32},
-            {replicas,{array,int32}}]}},
-   {live_brokers,
-       {array,
-           [{id,int32},
-            {end_points,
-                {array,
-                    [{port,int32},
-                     {host,string},
-                     {security_protocol_type,int16}]}}]}}];
-get(update_metadata, req, 2) ->
-  [{controller_id,int32},
-   {controller_epoch,int32},
-   {partition_states,
-       {array,
-           [{topic,string},
-            {partition,int32},
-            {controller_epoch,int32},
-            {leader,int32},
-            {leader_epoch,int32},
-            {isr,{array,int32}},
-            {zk_version,int32},
-            {replicas,{array,int32}}]}},
-   {live_brokers,
-       {array,
-           [{id,int32},
-            {end_points,
-                {array,
-                    [{port,int32},
-                     {host,string},
-                     {security_protocol_type,int16}]}},
-            {rack,nullable_string}]}}];
-get(update_metadata, req, 3) ->
-  [{controller_id,int32},
-   {controller_epoch,int32},
-   {partition_states,
-       {array,
-           [{topic,string},
-            {partition,int32},
-            {controller_epoch,int32},
-            {leader,int32},
-            {leader_epoch,int32},
-            {isr,{array,int32}},
-            {zk_version,int32},
-            {replicas,{array,int32}}]}},
-   {live_brokers,
-       {array,
-           [{id,int32},
-            {end_points,
-                {array,
-                    [{port,int32},
-                     {host,string},
-                     {listener_name,string},
-                     {security_protocol_type,int16}]}},
-            {rack,nullable_string}]}}];
-get(update_metadata, req, 4) ->
-  [{controller_id,int32},
-   {controller_epoch,int32},
-   {partition_states,
-       {array,
-           [{topic,string},
-            {partition,int32},
-            {controller_epoch,int32},
-            {leader,int32},
-            {leader_epoch,int32},
-            {isr,{array,int32}},
-            {zk_version,int32},
-            {replicas,{array,int32}},
-            {offline_replicas,{array,int32}}]}},
-   {live_brokers,
-       {array,
-           [{id,int32},
-            {end_points,
-                {array,
-                    [{port,int32},
-                     {host,string},
-                     {listener_name,string},
-                     {security_protocol_type,int16}]}},
-            {rack,nullable_string}]}}];
-get(update_metadata, rsp, V) when V >= 0, V =< 4 ->
-  [{error_code,int16}];
-get(controlled_shutdown, req, V) when V >= 0, V =< 1 ->
-  [{broker_id,int32}];
-get(controlled_shutdown, rsp, V) when V >= 0, V =< 1 ->
-  [{error_code,int16},
-   {partitions_remaining,{array,[{topic,string},{partition,int32}]}}];
 get(offset_commit, req, 0) ->
   [{group_id,string},
    {topics,{array,[{topic,string},
@@ -695,15 +550,6 @@ get(init_producer_id, rsp, 0) ->
    {error_code,int16},
    {producer_id,int64},
    {producer_epoch,int16}];
-get(offset_for_leader_epoch, req, 0) ->
-  [{topics,{array,[{topic,string},
-                   {partitions,{array,[{partition,int32},
-                                       {leader_epoch,int32}]}}]}}];
-get(offset_for_leader_epoch, rsp, 0) ->
-  [{topics,{array,[{topic,string},
-                   {partitions,{array,[{error_code,int16},
-                                       {partition,int32},
-                                       {end_offset,int64}]}}]}}];
 get(add_partitions_to_txn, req, 0) ->
   [{transactional_id,string},
    {producer_id,int64},
@@ -730,24 +576,6 @@ get(end_txn, req, 0) ->
    {transaction_result,boolean}];
 get(end_txn, rsp, 0) ->
   [{throttle_time_ms,int32},{error_code,int16}];
-get(write_txn_markers, req, 0) ->
-  [{transaction_markers,
-       {array,
-           [{producer_id,int64},
-            {producer_epoch,int16},
-            {transaction_result,boolean},
-            {topics,{array,[{topic,string},{partitions,{array,int32}}]}},
-            {coordinator_epoch,int32}]}}];
-get(write_txn_markers, rsp, 0) ->
-  [{transaction_markers,
-       {array,
-           [{producer_id,int64},
-            {topics,
-                {array,
-                    [{topic,string},
-                     {partitions,
-                         {array,
-                             [{partition,int32},{error_code,int16}]}}]}}]}}];
 get(txn_offset_commit, req, 0) ->
   [{transactional_id,string},
    {group_id,string},
@@ -896,7 +724,6 @@ add_partitions_to_txn,
 alter_configs,
 alter_replica_log_dirs,
 api_versions,
-controlled_shutdown,
 create_acls,
 create_partitions,
 create_topics,
@@ -913,31 +740,22 @@ find_coordinator,
 heartbeat,
 init_producer_id,
 join_group,
-leader_and_isr,
 leave_group,
 list_groups,
 list_offsets,
 metadata,
 offset_commit,
 offset_fetch,
-offset_for_leader_epoch,
 produce,
 sasl_authenticate,
 sasl_handshake,
-stop_replica,
 sync_group,
-txn_offset_commit,
-update_metadata,
-write_txn_markers].
+txn_offset_commit].
 
 vsn_range(produce) -> {0, 5};
 vsn_range(fetch) -> {0, 6};
 vsn_range(list_offsets) -> {0, 2};
 vsn_range(metadata) -> {0, 5};
-vsn_range(leader_and_isr) -> {0, 1};
-vsn_range(stop_replica) -> {0, 0};
-vsn_range(update_metadata) -> {0, 4};
-vsn_range(controlled_shutdown) -> {0, 1};
 vsn_range(offset_commit) -> {0, 3};
 vsn_range(offset_fetch) -> {0, 3};
 vsn_range(find_coordinator) -> {0, 1};
@@ -953,11 +771,9 @@ vsn_range(create_topics) -> {0, 2};
 vsn_range(delete_topics) -> {0, 1};
 vsn_range(delete_records) -> {0, 0};
 vsn_range(init_producer_id) -> {0, 0};
-vsn_range(offset_for_leader_epoch) -> {0, 0};
 vsn_range(add_partitions_to_txn) -> {0, 0};
 vsn_range(add_offsets_to_txn) -> {0, 0};
 vsn_range(end_txn) -> {0, 0};
-vsn_range(write_txn_markers) -> {0, 0};
 vsn_range(txn_offset_commit) -> {0, 0};
 vsn_range(describe_acls) -> {0, 0};
 vsn_range(create_acls) -> {0, 0};
@@ -969,3 +785,67 @@ vsn_range(describe_log_dirs) -> {0, 0};
 vsn_range(sasl_authenticate) -> {0, 0};
 vsn_range(create_partitions) -> {0, 0}.
 
+api_key(produce) -> 0;
+api_key(0) -> produce;
+api_key(fetch) -> 1;
+api_key(1) -> fetch;
+api_key(list_offsets) -> 2;
+api_key(2) -> list_offsets;
+api_key(metadata) -> 3;
+api_key(3) -> metadata;
+api_key(offset_commit) -> 8;
+api_key(8) -> offset_commit;
+api_key(offset_fetch) -> 9;
+api_key(9) -> offset_fetch;
+api_key(find_coordinator) -> 10;
+api_key(10) -> find_coordinator;
+api_key(join_group) -> 11;
+api_key(11) -> join_group;
+api_key(heartbeat) -> 12;
+api_key(12) -> heartbeat;
+api_key(leave_group) -> 13;
+api_key(13) -> leave_group;
+api_key(sync_group) -> 14;
+api_key(14) -> sync_group;
+api_key(describe_groups) -> 15;
+api_key(15) -> describe_groups;
+api_key(list_groups) -> 16;
+api_key(16) -> list_groups;
+api_key(sasl_handshake) -> 17;
+api_key(17) -> sasl_handshake;
+api_key(api_versions) -> 18;
+api_key(18) -> api_versions;
+api_key(create_topics) -> 19;
+api_key(19) -> create_topics;
+api_key(delete_topics) -> 20;
+api_key(20) -> delete_topics;
+api_key(delete_records) -> 21;
+api_key(21) -> delete_records;
+api_key(init_producer_id) -> 22;
+api_key(22) -> init_producer_id;
+api_key(add_partitions_to_txn) -> 24;
+api_key(24) -> add_partitions_to_txn;
+api_key(add_offsets_to_txn) -> 25;
+api_key(25) -> add_offsets_to_txn;
+api_key(end_txn) -> 26;
+api_key(26) -> end_txn;
+api_key(txn_offset_commit) -> 28;
+api_key(28) -> txn_offset_commit;
+api_key(describe_acls) -> 29;
+api_key(29) -> describe_acls;
+api_key(create_acls) -> 30;
+api_key(30) -> create_acls;
+api_key(delete_acls) -> 31;
+api_key(31) -> delete_acls;
+api_key(describe_configs) -> 32;
+api_key(32) -> describe_configs;
+api_key(alter_configs) -> 33;
+api_key(33) -> alter_configs;
+api_key(alter_replica_log_dirs) -> 34;
+api_key(34) -> alter_replica_log_dirs;
+api_key(describe_log_dirs) -> 35;
+api_key(35) -> describe_log_dirs;
+api_key(sasl_authenticate) -> 36;
+api_key(36) -> sasl_authenticate;
+api_key(create_partitions) -> 37;
+api_key(37) -> create_partitions.

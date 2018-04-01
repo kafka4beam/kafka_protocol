@@ -225,7 +225,14 @@ query_api_versions(Sock, Mod, ClientId, Timeout) ->
           API = find(api_key, V),
           MinVsn = find(min_version, V),
           MaxVsn = find(max_version, V),
-          Acc#{API => {MinVsn, MaxVsn}}
+          case is_atom(API) of
+            true ->
+              %% known API for client
+              Acc#{API => {MinVsn, MaxVsn}};
+            false ->
+              %% a broker-only (ClusterAction) API
+              Acc
+          end
       end,
       lists:foldl(F, #{}, Versions)
   end.

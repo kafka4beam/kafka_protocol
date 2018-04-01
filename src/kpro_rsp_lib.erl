@@ -149,7 +149,13 @@ dec_array_elements(N, Schema, Stack, Bin, Acc) ->
 
 %% Translate error codes; Dig up embedded bytes. etc.
 translate([api_key | _], ApiKey) ->
-  ?API_KEY_ATOM(ApiKey);
+  try
+    kpro_schema:api_key(ApiKey)
+  catch
+    error : function_clause ->
+      %% Not supported, perhaps a broker-only API, discard
+      ApiKey
+  end;
 translate([error_code | _], ErrorCode) ->
   kpro_error_code:decode(ErrorCode);
 translate([member_metadata | _] = Stack, Bin) ->

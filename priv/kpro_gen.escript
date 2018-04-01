@@ -38,7 +38,7 @@ main(_Args) ->
 
 -define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
 -module(kpro_schema).
--export([get/3, all_apis/0, vsn_range/1]).
+-export([get/3, all_apis/0, vsn_range/1, api_key/1]).
 ").
 
 generate_schema_module(GrouppedTypes) ->
@@ -50,11 +50,19 @@ generate_schema_module(GrouppedTypes) ->
      infix(Clauses, ";\n"),
      ".\n",
      generate_all_apis_fun(GrouppedTypes),
-     "\n",
      generate_version_rage_clauses(GrouppedTypes),
-     "\n"
+     generate_api_key_clauses()
     ],
   file:write_file(Filename, IoData).
+
+generate_api_key_clauses() ->
+  {ok, Apis} = file:consult("api-keys.eterm"),
+  Clauses =
+    [ ["api_key(", atom_to_list(Name), ") -> ", integer_to_list(Id), ";\n",
+       "api_key(", integer_to_list(Id), ") -> ", atom_to_list(Name)
+      ] || {Name, Id} <- Apis
+    ],
+  [infix(Clauses, ";\n"), ".\n"].
 
 generate_all_apis_fun(GrouppedTypes) ->
   F = fun({Name, _}) ->
@@ -62,7 +70,7 @@ generate_all_apis_fun(GrouppedTypes) ->
           API
       end,
   APIs = lists:usort(lists:map(F, GrouppedTypes)),
-  ["all_apis() ->\n[", infix(APIs, ",\n"), "].\n"].
+  ["all_apis() ->\n[", infix(APIs, ",\n"), "].\n\n"].
 
 generate_version_rage_clauses(GrouppedTypes) ->
   F = fun({Name, VersionedFields}, Acc) ->
@@ -78,7 +86,7 @@ generate_version_rage_clauses(GrouppedTypes) ->
           end
       end,
   Clauses = lists:foldr(F, [], GrouppedTypes),
-  [infix(Clauses, ";\n"), ".\n"].
+  [infix(Clauses, ";\n"), ".\n\n"].
 
 generate_schema_clauses({Name, VersionedFields0}) ->
   VersionedFields = lists:keysort(1, VersionedFields0),
