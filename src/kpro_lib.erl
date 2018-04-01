@@ -13,6 +13,7 @@
         , ok_pipe/1
         , ok_pipe/2
         , parse_endpoints/2
+        , struct_to_map/1
         , with_timeout/2
         ]).
 
@@ -25,6 +26,19 @@
 -type count() :: non_neg_integer().
 
 %%%_* APIs =====================================================================
+
+%% @doc Ensure `kpro:struct()' is a `map()'.
+struct_to_map([]) -> [];
+struct_to_map([{_, _} | _] = Struct) ->
+  maps:from_list(
+    lists:map(
+      fun({Name, Value}) ->
+          {Name, struct_to_map(Value)}
+      end, Struct));
+struct_to_map(Array) when is_list(Array) ->
+  [struct_to_map(Item) || Item <- Array];
+struct_to_map(Value) ->
+  Value.
 
 %% @doc Function pipeline. The fist function takes no args, all succeeding
 %% functions take one arg. All functions should retrun either

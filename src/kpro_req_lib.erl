@@ -138,8 +138,9 @@ produce(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout) ->
 -spec produce(kpro:vsn(), kpro:topic(), kpro:partition(), kpro:batch_input(),
               kpro:required_acks(), kpro:wait(), kpro:compress_option()) ->
         kpro:req().
-produce(Vsn, Topic, Partition, Batch, RequiredAcks,
+produce(Vsn, Topic, Partition, Batch, RequiredAcks0,
         AckTimeout, CompressOption) ->
+  RequiredAcks = required_acks(RequiredAcks0),
   Messages = kpro_batch:encode(Batch, CompressOption),
   Fields =
     [{transactional_id, ?kpro_null},
@@ -179,6 +180,11 @@ encode(ClientName, CorrId, Req) ->
   [encode(int32, Size), IoData].
 
 %%%_* Internal functions =======================================================
+
+required_acks(all_isr) -> -1;
+required_acks(none) -> 0;
+required_acks(leader_only) -> 1;
+required_acks(I) when I >= -1 andalso I =< 1 -> I.
 
 encode_struct(_API, _Vsn, Bin) when is_binary(Bin) -> Bin;
 encode_struct(API, Vsn, Fields) ->
