@@ -168,7 +168,7 @@ make(API, Vsn, Fields) ->
 -spec encode(kpro:client_id(), kpro:corr_id(), kpro:req()) -> iodata().
 encode(ClientName, CorrId, Req) ->
   #kpro_req{api = API, vsn = Vsn, msg = Msg} = Req,
-  ApiKey = ?API_KEY_INTEGER(API),
+  ApiKey = kpro_schema:api_key(API),
   IoData =
     [ encode(int16, ApiKey)
     , encode(int16, Vsn)

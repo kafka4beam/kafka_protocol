@@ -1,5 +1,6 @@
 # generated code, do not edit!
 
+#ApiKey: Produce, 0
 ProduceRequestV0 => acks timeout [topic_data]
   acks => INT16
   timeout => INT32
@@ -194,6 +195,7 @@ ProduceResponseV5 => [responses] throttle_time_ms
 # throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
 
 
+#ApiKey: Fetch, 1
 FetchRequestV0 => replica_id max_wait_time min_bytes [topics]
   replica_id => INT32
   max_wait_time => INT32
@@ -515,6 +517,7 @@ FetchResponseV6 => throttle_time_ms [responses]
 # first_offset: The first offset in the aborted transaction
 
 
+#ApiKey: ListOffsets, 2
 ListOffsetsRequestV0 => replica_id [topics]
   replica_id => INT32
   topics => topic [partitions]
@@ -615,6 +618,7 @@ ListOffsetsResponseV2 => throttle_time_ms [responses]
 # offset: offset found
 
 
+#ApiKey: Metadata, 3
 MetadataRequestV0 => [topics]
   topics => STRING
 
@@ -875,376 +879,7 @@ MetadataResponseV5 => throttle_time_ms [brokers] cluster_id controller_id [topic
 # offline_replicas: The set of offline replicas of this partition.
 
 
-LeaderAndIsrRequestV0 => controller_id controller_epoch [partition_states] [live_leaders]
-  controller_id => INT32
-  controller_epoch => INT32
-  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas]
-    topic => STRING
-    partition => INT32
-    controller_epoch => INT32
-    leader => INT32
-    leader_epoch => INT32
-    isr => INT32
-    zk_version => INT32
-    replicas => INT32
-  live_leaders => id host port
-    id => INT32
-    host => STRING
-    port => INT32
-
-# controller_id: The controller id.
-# controller_epoch: The controller epoch.
-# topic: Name of topic
-# partition: Topic partition id
-# controller_epoch: The controller epoch.
-# leader: The broker id for the leader.
-# leader_epoch: The leader epoch.
-# isr: The in sync replica ids.
-# zk_version: The ZK version.
-# replicas: The replica ids.
-# id: The broker id.
-# host: The hostname of the broker.
-# port: The port on which the broker accepts requests.
-
-
-LeaderAndIsrRequestV1 => controller_id controller_epoch [partition_states] [live_leaders]
-  controller_id => INT32
-  controller_epoch => INT32
-  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas] is_new
-    topic => STRING
-    partition => INT32
-    controller_epoch => INT32
-    leader => INT32
-    leader_epoch => INT32
-    isr => INT32
-    zk_version => INT32
-    replicas => INT32
-    is_new => BOOLEAN
-  live_leaders => id host port
-    id => INT32
-    host => STRING
-    port => INT32
-
-# controller_id: The controller id.
-# controller_epoch: The controller epoch.
-# topic: Name of topic
-# partition: Topic partition id
-# controller_epoch: The controller epoch.
-# leader: The broker id for the leader.
-# leader_epoch: The leader epoch.
-# isr: The in sync replica ids.
-# zk_version: The ZK version.
-# replicas: The replica ids.
-# is_new: Whether the replica should have existed on the broker or not
-# id: The broker id.
-# host: The hostname of the broker.
-# port: The port on which the broker accepts requests.
-
-
-LeaderAndIsrResponseV0 => error_code [partitions]
-  error_code => INT16
-  partitions => topic partition error_code
-    topic => STRING
-    partition => INT32
-    error_code => INT16
-
-# error_code: Response error code
-# topic: Name of topic
-# partition: Topic partition id
-# error_code: Response error code
-
-
-LeaderAndIsrResponseV1 => error_code [partitions]
-  error_code => INT16
-  partitions => topic partition error_code
-    topic => STRING
-    partition => INT32
-    error_code => INT16
-
-# error_code: Response error code
-# topic: Name of topic
-# partition: Topic partition id
-# error_code: Response error code
-
-
-StopReplicaRequestV0 => controller_id controller_epoch delete_partitions [partitions]
-  controller_id => INT32
-  controller_epoch => INT32
-  delete_partitions => BOOLEAN
-  partitions => topic partition
-    topic => STRING
-    partition => INT32
-
-# controller_id: The controller id.
-# controller_epoch: The controller epoch.
-# delete_partitions: Boolean which indicates if replica's partitions must be deleted.
-# topic: Name of topic
-# partition: Topic partition id
-
-
-StopReplicaResponseV0 => error_code [partitions]
-  error_code => INT16
-  partitions => topic partition error_code
-    topic => STRING
-    partition => INT32
-    error_code => INT16
-
-# error_code: Response error code
-# topic: Name of topic
-# partition: Topic partition id
-# error_code: Response error code
-
-
-UpdateMetadataRequestV0 => controller_id controller_epoch [partition_states] [live_brokers]
-  controller_id => INT32
-  controller_epoch => INT32
-  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas]
-    topic => STRING
-    partition => INT32
-    controller_epoch => INT32
-    leader => INT32
-    leader_epoch => INT32
-    isr => INT32
-    zk_version => INT32
-    replicas => INT32
-  live_brokers => id host port
-    id => INT32
-    host => STRING
-    port => INT32
-
-# controller_id: The controller id.
-# controller_epoch: The controller epoch.
-# topic: Name of topic
-# partition: Topic partition id
-# controller_epoch: The controller epoch.
-# leader: The broker id for the leader.
-# leader_epoch: The leader epoch.
-# isr: The in sync replica ids.
-# zk_version: The ZK version.
-# replicas: The replica ids.
-# id: The broker id.
-# host: The hostname of the broker.
-# port: The port on which the broker accepts requests.
-
-
-UpdateMetadataRequestV1 => controller_id controller_epoch [partition_states] [live_brokers]
-  controller_id => INT32
-  controller_epoch => INT32
-  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas]
-    topic => STRING
-    partition => INT32
-    controller_epoch => INT32
-    leader => INT32
-    leader_epoch => INT32
-    isr => INT32
-    zk_version => INT32
-    replicas => INT32
-  live_brokers => id [end_points]
-    id => INT32
-    end_points => port host security_protocol_type
-      port => INT32
-      host => STRING
-      security_protocol_type => INT16
-
-# controller_id: The controller id.
-# controller_epoch: The controller epoch.
-# topic: Name of topic
-# partition: Topic partition id
-# controller_epoch: The controller epoch.
-# leader: The broker id for the leader.
-# leader_epoch: The leader epoch.
-# isr: The in sync replica ids.
-# zk_version: The ZK version.
-# replicas: The replica ids.
-# id: The broker id.
-# port: The port on which the broker accepts requests.
-# host: The hostname of the broker.
-# security_protocol_type: The security protocol type.
-
-
-UpdateMetadataRequestV2 => controller_id controller_epoch [partition_states] [live_brokers]
-  controller_id => INT32
-  controller_epoch => INT32
-  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas]
-    topic => STRING
-    partition => INT32
-    controller_epoch => INT32
-    leader => INT32
-    leader_epoch => INT32
-    isr => INT32
-    zk_version => INT32
-    replicas => INT32
-  live_brokers => id [end_points] rack
-    id => INT32
-    end_points => port host security_protocol_type
-      port => INT32
-      host => STRING
-      security_protocol_type => INT16
-    rack => NULLABLE_STRING
-
-# controller_id: The controller id.
-# controller_epoch: The controller epoch.
-# topic: Name of topic
-# partition: Topic partition id
-# controller_epoch: The controller epoch.
-# leader: The broker id for the leader.
-# leader_epoch: The leader epoch.
-# isr: The in sync replica ids.
-# zk_version: The ZK version.
-# replicas: The replica ids.
-# id: The broker id.
-# port: The port on which the broker accepts requests.
-# host: The hostname of the broker.
-# security_protocol_type: The security protocol type.
-# rack: The rack
-
-
-UpdateMetadataRequestV3 => controller_id controller_epoch [partition_states] [live_brokers]
-  controller_id => INT32
-  controller_epoch => INT32
-  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas]
-    topic => STRING
-    partition => INT32
-    controller_epoch => INT32
-    leader => INT32
-    leader_epoch => INT32
-    isr => INT32
-    zk_version => INT32
-    replicas => INT32
-  live_brokers => id [end_points] rack
-    id => INT32
-    end_points => port host listener_name security_protocol_type
-      port => INT32
-      host => STRING
-      listener_name => STRING
-      security_protocol_type => INT16
-    rack => NULLABLE_STRING
-
-# controller_id: The controller id.
-# controller_epoch: The controller epoch.
-# topic: Name of topic
-# partition: Topic partition id
-# controller_epoch: The controller epoch.
-# leader: The broker id for the leader.
-# leader_epoch: The leader epoch.
-# isr: The in sync replica ids.
-# zk_version: The ZK version.
-# replicas: The replica ids.
-# id: The broker id.
-# port: The port on which the broker accepts requests.
-# host: The hostname of the broker.
-# listener_name: The listener name.
-# security_protocol_type: The security protocol type.
-# rack: The rack
-
-
-UpdateMetadataRequestV4 => controller_id controller_epoch [partition_states] [live_brokers]
-  controller_id => INT32
-  controller_epoch => INT32
-  partition_states => topic partition controller_epoch leader leader_epoch [isr] zk_version [replicas] [offline_replicas]
-    topic => STRING
-    partition => INT32
-    controller_epoch => INT32
-    leader => INT32
-    leader_epoch => INT32
-    isr => INT32
-    zk_version => INT32
-    replicas => INT32
-    offline_replicas => INT32
-  live_brokers => id [end_points] rack
-    id => INT32
-    end_points => port host listener_name security_protocol_type
-      port => INT32
-      host => STRING
-      listener_name => STRING
-      security_protocol_type => INT16
-    rack => NULLABLE_STRING
-
-# controller_id: The controller id.
-# controller_epoch: The controller epoch.
-# topic: Name of topic
-# partition: Topic partition id
-# controller_epoch: The controller epoch.
-# leader: The broker id for the leader.
-# leader_epoch: The leader epoch.
-# isr: The in sync replica ids.
-# zk_version: The ZK version.
-# replicas: The replica ids.
-# offline_replicas: The offline replica ids
-# id: The broker id.
-# port: The port on which the broker accepts requests.
-# host: The hostname of the broker.
-# listener_name: The listener name.
-# security_protocol_type: The security protocol type.
-# rack: The rack
-
-
-UpdateMetadataResponseV0 => error_code
-  error_code => INT16
-
-# error_code: Response error code
-
-
-UpdateMetadataResponseV1 => error_code
-  error_code => INT16
-
-# error_code: Response error code
-
-
-UpdateMetadataResponseV2 => error_code
-  error_code => INT16
-
-# error_code: Response error code
-
-
-UpdateMetadataResponseV3 => error_code
-  error_code => INT16
-
-# error_code: Response error code
-
-
-UpdateMetadataResponseV4 => error_code
-  error_code => INT16
-
-# error_code: Response error code
-
-
-ControlledShutdownRequestV0 => broker_id
-  broker_id => INT32
-
-# broker_id: The id of the broker for which controlled shutdown has been requested.
-
-
-ControlledShutdownRequestV1 => broker_id
-  broker_id => INT32
-
-# broker_id: The id of the broker for which controlled shutdown has been requested.
-
-
-ControlledShutdownResponseV0 => error_code [partitions_remaining]
-  error_code => INT16
-  partitions_remaining => topic partition
-    topic => STRING
-    partition => INT32
-
-# error_code: Response error code
-# partitions_remaining: The partitions that the broker still leads.
-# topic: Name of topic
-# partition: Topic partition id
-
-
-ControlledShutdownResponseV1 => error_code [partitions_remaining]
-  error_code => INT16
-  partitions_remaining => topic partition
-    topic => STRING
-    partition => INT32
-
-# error_code: Response error code
-# partitions_remaining: The partitions that the broker still leads.
-# topic: Name of topic
-# partition: Topic partition id
-
-
+#ApiKey: OffsetCommit, 8
 OffsetCommitRequestV0 => group_id [topics]
   group_id => STRING
   topics => topic [partitions]
@@ -1385,6 +1020,7 @@ OffsetCommitResponseV3 => throttle_time_ms [responses]
 # error_code: Response error code
 
 
+#ApiKey: OffsetFetch, 9
 OffsetFetchRequestV0 => group_id [topics]
   group_id => STRING
   topics => topic [partitions]
@@ -1511,6 +1147,7 @@ OffsetFetchResponseV3 => throttle_time_ms [responses] error_code
 # error_code: Response error code
 
 
+#ApiKey: FindCoordinator, 10
 FindCoordinatorRequestV0 => group_id
   group_id => STRING
 
@@ -1557,6 +1194,7 @@ FindCoordinatorResponseV1 => throttle_time_ms error_code error_message coordinat
 # port: The port on which the broker accepts requests.
 
 
+#ApiKey: JoinGroup, 11
 JoinGroupRequestV0 => group_id session_timeout member_id protocol_type [group_protocols]
   group_id => STRING
   session_timeout => INT32
@@ -1665,6 +1303,7 @@ JoinGroupResponseV2 => throttle_time_ms error_code generation_id group_protocol 
 # member_id: The member id assigned by the group coordinator or null if joining for the first time.
 
 
+#ApiKey: Heartbeat, 12
 HeartbeatRequestV0 => group_id generation_id member_id
   group_id => STRING
   generation_id => INT32
@@ -1699,6 +1338,7 @@ HeartbeatResponseV1 => throttle_time_ms error_code
 # error_code: Response error code
 
 
+#ApiKey: LeaveGroup, 13
 LeaveGroupRequestV0 => group_id member_id
   group_id => STRING
   member_id => STRING
@@ -1729,6 +1369,7 @@ LeaveGroupResponseV1 => throttle_time_ms error_code
 # error_code: Response error code
 
 
+#ApiKey: SyncGroup, 14
 SyncGroupRequestV0 => group_id generation_id member_id [group_assignment]
   group_id => STRING
   generation_id => INT32
@@ -1773,6 +1414,7 @@ SyncGroupResponseV1 => throttle_time_ms error_code member_assignment
 # error_code: Response error code
 
 
+#ApiKey: DescribeGroups, 15
 DescribeGroupsRequestV0 => [group_ids]
   group_ids => STRING
 
@@ -1841,6 +1483,7 @@ DescribeGroupsResponseV1 => throttle_time_ms [groups]
 # member_assignment: The current assignment provided by the group leader (will only be present if the group is stable).
 
 
+#ApiKey: ListGroups, 16
 ListGroupsRequestV0 => 
 
 
@@ -1871,6 +1514,7 @@ ListGroupsResponseV1 => throttle_time_ms error_code [groups]
 # group_id: The unique group identifier
 
 
+#ApiKey: SaslHandshake, 17
 SaslHandshakeRequestV0 => mechanism
   mechanism => STRING
 
@@ -1899,6 +1543,7 @@ SaslHandshakeResponseV1 => error_code [enabled_mechanisms]
 # enabled_mechanisms: Array of mechanisms enabled in the server.
 
 
+#ApiKey: ApiVersions, 18
 ApiVersionsRequestV0 => 
 
 
@@ -1937,6 +1582,7 @@ ApiVersionsResponseV1 => error_code [api_versions] throttle_time_ms
 # throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
 
 
+#ApiKey: CreateTopics, 19
 CreateTopicsRequestV0 => [create_topic_requests] timeout
   create_topic_requests => topic num_partitions replication_factor [replica_assignment] [config_entries]
     topic => STRING
@@ -2055,6 +1701,7 @@ CreateTopicsResponseV2 => throttle_time_ms [topic_errors]
 # error_message: Response error message
 
 
+#ApiKey: DeleteTopics, 20
 DeleteTopicsRequestV0 => [topics] timeout
   topics => STRING
   timeout => INT32
@@ -2093,6 +1740,7 @@ DeleteTopicsResponseV1 => throttle_time_ms [topic_error_codes]
 # error_code: Response error code
 
 
+#ApiKey: DeleteRecords, 21
 DeleteRecordsRequestV0 => [topics] timeout
   topics => topic [partitions]
     topic => STRING
@@ -2123,6 +1771,7 @@ DeleteRecordsResponseV0 => throttle_time_ms [topics]
 # error_code: Response error code
 
 
+#ApiKey: InitProducerId, 22
 InitProducerIdRequestV0 => transactional_id transaction_timeout_ms
   transactional_id => NULLABLE_STRING
   transaction_timeout_ms => INT32
@@ -2143,34 +1792,7 @@ InitProducerIdResponseV0 => throttle_time_ms error_code producer_id producer_epo
 # producer_epoch: Current epoch associated with the producer id.
 
 
-OffsetForLeaderEpochRequestV0 => [topics]
-  topics => topic [partitions]
-    topic => STRING
-    partitions => partition leader_epoch
-      partition => INT32
-      leader_epoch => INT32
-
-# topics: An array of topics to get epochs for
-# topic: Name of topic
-# partition: Topic partition id
-# leader_epoch: The epoch
-
-
-OffsetForLeaderEpochResponseV0 => [topics]
-  topics => topic [partitions]
-    topic => STRING
-    partitions => error_code partition end_offset
-      error_code => INT16
-      partition => INT32
-      end_offset => INT64
-
-# topics: An array of topics for which we have leader offsets for some requested Partition Leader Epoch
-# topic: Name of topic
-# error_code: Response error code
-# partition: Topic partition id
-# end_offset: The end offset
-
-
+#ApiKey: AddPartitionsToTxn, 24
 AddPartitionsToTxnRequestV0 => transactional_id producer_id producer_epoch [topics]
   transactional_id => STRING
   producer_id => INT64
@@ -2200,6 +1822,7 @@ AddPartitionsToTxnResponseV0 => throttle_time_ms [errors]
 # error_code: Response error code
 
 
+#ApiKey: AddOffsetsToTxn, 25
 AddOffsetsToTxnRequestV0 => transactional_id producer_id producer_epoch group_id
   transactional_id => STRING
   producer_id => INT64
@@ -2220,6 +1843,7 @@ AddOffsetsToTxnResponseV0 => throttle_time_ms error_code
 # error_code: Response error code
 
 
+#ApiKey: EndTxn, 26
 EndTxnRequestV0 => transactional_id producer_id producer_epoch transaction_result
   transactional_id => STRING
   producer_id => INT64
@@ -2240,42 +1864,7 @@ EndTxnResponseV0 => throttle_time_ms error_code
 # error_code: Response error code
 
 
-WriteTxnMarkersRequestV0 => [transaction_markers]
-  transaction_markers => producer_id producer_epoch transaction_result [topics] coordinator_epoch
-    producer_id => INT64
-    producer_epoch => INT16
-    transaction_result => BOOLEAN
-    topics => topic [partitions]
-      topic => STRING
-      partitions => INT32
-    coordinator_epoch => INT32
-
-# transaction_markers: The transaction markers to be written.
-# producer_id: Current producer id in use by the transactional id.
-# producer_epoch: Current epoch associated with the producer id.
-# transaction_result: The result of the transaction to write to the partitions (false = ABORT, true = COMMIT).
-# topics: The partitions to write markers for.
-# topic: Name of topic
-# coordinator_epoch: Epoch associated with the transaction state partition hosted by this transaction coordinator
-
-
-WriteTxnMarkersResponseV0 => [transaction_markers]
-  transaction_markers => producer_id [topics]
-    producer_id => INT64
-    topics => topic [partitions]
-      topic => STRING
-      partitions => partition error_code
-        partition => INT32
-        error_code => INT16
-
-# transaction_markers: Errors per partition from writing markers.
-# producer_id: Current producer id in use by the transactional id.
-# topics: Errors per partition from writing markers.
-# topic: Name of topic
-# partition: Topic partition id
-# error_code: Response error code
-
-
+#ApiKey: TxnOffsetCommit, 28
 TxnOffsetCommitRequestV0 => transactional_id group_id producer_id producer_epoch [topics]
   transactional_id => STRING
   group_id => STRING
@@ -2312,6 +1901,7 @@ TxnOffsetCommitResponseV0 => throttle_time_ms [topics]
 # error_code: Response error code
 
 
+#ApiKey: DescribeAcls, 29
 DescribeAclsRequestV0 => resource_type resource_name principal host operation permission_type
   resource_type => INT8
   resource_name => NULLABLE_STRING
@@ -2353,6 +1943,7 @@ DescribeAclsResponseV0 => throttle_time_ms error_code error_message [resources]
 # permission_type: The ACL permission type
 
 
+#ApiKey: CreateAcls, 30
 CreateAclsRequestV0 => [creations]
   creations => resource_type resource_name principal host operation permission_type
     resource_type => INT8
@@ -2381,6 +1972,7 @@ CreateAclsResponseV0 => throttle_time_ms [creation_responses]
 # error_message: Response error message
 
 
+#ApiKey: DeleteAcls, 31
 DeleteAclsRequestV0 => [filters]
   filters => resource_type resource_name principal host operation permission_type
     resource_type => INT8
@@ -2427,6 +2019,7 @@ DeleteAclsResponseV0 => throttle_time_ms [filter_responses]
 # permission_type: The ACL permission type
 
 
+#ApiKey: DescribeConfigs, 32
 DescribeConfigsRequestV0 => [resources]
   resources => resource_type resource_name [config_names]
     resource_type => INT8
@@ -2455,6 +2048,7 @@ DescribeConfigsResponseV0 => throttle_time_ms [resources]
 # error_message: Response error message
 
 
+#ApiKey: AlterConfigs, 33
 AlterConfigsRequestV0 => [resources] validate_only
   resources => resource_type resource_name [config_entries]
     resource_type => INT8
@@ -2482,6 +2076,7 @@ AlterConfigsResponseV0 => throttle_time_ms [resources]
 # error_message: Response error message
 
 
+#ApiKey: AlterReplicaLogDirs, 34
 AlterReplicaLogDirsRequestV0 => [log_dirs]
   log_dirs => log_dir [topics]
     log_dir => STRING
@@ -2508,6 +2103,7 @@ AlterReplicaLogDirsResponseV0 => throttle_time_ms [topics]
 # error_code: Response error code
 
 
+#ApiKey: DescribeLogDirs, 35
 DescribeLogDirsRequestV0 => [topics]
   topics => topic [partitions]
     topic => STRING
@@ -2540,6 +2136,7 @@ DescribeLogDirsResponseV0 => throttle_time_ms [log_dirs]
 # is_future: True if this log is created by AlterReplicaLogDirsRequest and will replace the current log of the replica in the future.
 
 
+#ApiKey: SaslAuthenticate, 36
 SaslAuthenticateRequestV0 => sasl_auth_bytes
   sasl_auth_bytes => BYTES
 
@@ -2556,6 +2153,7 @@ SaslAuthenticateResponseV0 => error_code error_message sasl_auth_bytes
 # sasl_auth_bytes: SASL authentication bytes from server as defined by the SASL mechanism.
 
 
+#ApiKey: CreatePartitions, 37
 CreatePartitionsRequestV0 => [topic_partitions] timeout validate_only
   topic_partitions => topic new_partitions
     topic => STRING
