@@ -17,6 +17,7 @@
 
 -export([ encode_request/3
         , make_request/3
+        , parse_response/1
         ]).
 
 -export([ decode_batches/1
@@ -155,7 +156,7 @@
 -type vsn() :: non_neg_integer().
 -type count() :: non_neg_integer().
 -type wait() :: non_neg_integer().
--type required_acks() :: -1..1.
+-type required_acks() :: -1..1 | all_isr | none | leader_only.
 -type primitive() :: integer() | string() | binary() | atom().
 -type field_name() :: atom().
 -type field_value() :: primitive() | struct() | [struct()].
@@ -222,6 +223,13 @@ parse_endpoints(Protocol, String) ->
 -spec make_request(api(), vsn(), struct()) -> req().
 make_request(Api, Vsn, Fields) ->
   kpro_req_lib:make(Api, Vsn, Fields).
+
+%% @doc Help function to translate `#kpro_rsp{}' into a simpler term.
+%% NOTE: This function is implemented with assumptions like:
+%% topic-partition requests (list_offsets, produce, fetch etc.) are always sent
+%% against only ONE topic-partition.
+-spec parse_response(rsp()) -> term().
+parse_response(Rsp) -> kpro_rsp_lib:parse(Rsp).
 
 %% @doc Encode request to byte stream.
 -spec encode_request(client_id(), corr_id(), req()) -> iodata().

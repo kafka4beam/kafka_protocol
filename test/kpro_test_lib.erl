@@ -11,6 +11,9 @@
         , sasl_config/1
         ]).
 
+-export([ ssl_options/0
+        ]).
+
 -export([ with_connection/1
         , with_connection/2
         , with_connection/3
@@ -66,7 +69,32 @@ with_connection(Endpoints, Config, ConnectFun, WithConnFun) ->
   {ok, Pid} = ConnectFun(Endpoints, Config),
   with_connection_pid(Pid, WithConnFun).
 
+ssl_options() ->
+  case osenv("KPRO_TEST_SSL_TRUE") of
+    "TRUE" -> true;
+    "true" -> true;
+    "1" -> true;
+    _ ->
+      case osenv("KPRO_TEST_SSL_CA_CERT_FILE") of
+        undefined ->
+          default_ssl_options();
+        CaCertFile ->
+          [ {cacertfile, CaCertFile}
+          , {keyfile,    osenv("KPRO_TEST_SSL_KEY_FILE")}
+          , {certfile,   osenv("KPRO_TEST_SSL_CERT_FILE")}
+          ]
+      end
+  end.
+
 %%%_* Internal functions =======================================================
+
+default_ssl_options() ->
+  PrivDir = code:priv_dir(?APPLICATION),
+  Fname = fun(Name) -> filename:join([PrivDir, ssl, Name]) end,
+  [ {cacertfile, Fname("ca.crt")}
+  , {keyfile,    Fname("client.key")}
+  , {certfile,   Fname("client.crt")}
+  ].
 
 osenv(Name) ->
   case os:getenv(Name) of

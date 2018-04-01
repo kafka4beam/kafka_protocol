@@ -19,6 +19,9 @@
         , decode_body/3
         ]).
 
+-export([ parse/1
+        ]).
+
 -include("kpro_private.hrl").
 
 -define(IS_STRUCT_SCHEMA(Schema), is_list(Schema)).
@@ -50,7 +53,37 @@ decode_body(API, Vsn, Body) ->
            , msg = Message
            }.
 
+-spec parse(kpro:rsp()) -> {ok, kpro:offset()} | {error, any()}.
+parse(#kpro_rsp{ api = list_offsets
+               , msg = Msg
+               }) ->
+  case kpro_lib:struct_to_map(get_partition_rsp(Msg)) of
+    #{offsets := [Offset]} = M -> M#{offset => Offset};
+    #{offset := _} = M -> M
+  end;
+parse(#kpro_rsp{ api = produce
+               , msg = Msg
+               }) ->
+  kpro_lib:struct_to_map(get_partition_rsp(Msg));
+parse(#kpro_rsp{ api = fetch
+               , msg = Msg
+               }) ->
+  PartitionRsp = get_partition_rsp(Msg),
+  Header = kpro:find(partition_header, PartitionRsp),
+  Records = kpro:find(record_set, PartitionRsp),
+  #{ header => kpro_lib:struct_to_map(Header)
+   , batches => kpro:decode_batches(Records)
+   };
+parse(Rsp) ->
+  %% Not supported yet
+  Rsp.
+
 %%%_* Internal functions =======================================================
+
+get_partition_rsp(Struct) ->
+  [TopicRsp] = kpro:find(responses, Struct),
+  [PartitionRsp] = kpro:find(partition_responses, TopicRsp),
+  PartitionRsp.
 
 %% Decode prmitives.
 dec(Type, Bin) -> kpro_lib:decode(Type, Bin).

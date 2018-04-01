@@ -11,7 +11,7 @@ list_offsets_test_() ->
   {Min, Max} = get_api_vsn_rage(),
   [ make_test_case(Vsn, Ts) ||
     Vsn <- lists:seq(Min, Max),
-    Ts <- ['earliest', 'latest', kpro_lib:now_ts()]
+    Ts <- [earliest, latest, kpro_lib:now_ts()]
   ].
 
 make_test_case(Vsn, Ts) ->
@@ -20,7 +20,7 @@ make_test_case(Vsn, Ts) ->
       Req = kpro_req_lib:list_offsets(Vsn, ?TOPIC, ?PARTI, Ts),
       Test = fun(Pid) ->
                  {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
-                 assert_no_error(Rsp)
+                 assert_no_error(kpro:parse_response(Rsp))
              end,
       ConnFun = fun(Endpoints, Config) ->
                     kpro:connect_partition_leader(Endpoints, ?TOPIC, ?PARTI,
@@ -29,19 +29,10 @@ make_test_case(Vsn, Ts) ->
       kpro_test_lib:with_connection(ConnFun, Test)
   end}.
 
-assert_no_error(#kpro_rsp{vsn = Vsn, msg = Msg}) ->
-  [TopicRsp] = kpro:find(responses, Msg),
-  [ {topic, ?TOPIC}
-  , {partition_responses, [PartitionRsp]}
-  ] = TopicRsp,
-  [ {partition, ?PARTI}
-  , {error_code, no_error}
-  | Rest
-  ] = PartitionRsp,
-  case Vsn of
-    0 -> ?assertMatch([{offsets, [_]}], Rest);
-    _ -> ?assertMatch([{timestamp, _}, {offset, _}], Rest)
-  end.
+assert_no_error(Rsp) ->
+  ?assertMatch(#{ error_code := no_error
+                , offset := _
+                }, Rsp).
 
 get_api_vsn_rage() ->
   F = fun(Pid) -> kpro:get_api_versions(Pid) end,

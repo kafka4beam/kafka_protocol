@@ -1,30 +1,18 @@
 -module(kpro_produce_tests).
 
 -include_lib("eunit/include/eunit.hrl").
--include("kpro.hrl").
+-include("kpro_private.hrl").
 
 -define(PARTI, 0).
 -define(TIMEOUT, 5000).
--define(MIN_MAGIC_2_VSN, 3).
+
+-define(MIN_MAGIC_2_PRODUCE_REQ_VSN, 3).
 
 -define(ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp),
-        begin
-          #kpro_rsp{ api = produce
-                   , vsn = Vsn
-                   , msg = [ {responses, [Response]}
-                           | _
-                           ]
-                   } = Rsp,
-          [ {topic, _}
-          , {partition_responses, [PartitionRsp]}
-          | _
-          ] = Response,
-          ?assertMatch([ {partition, ?PARTI}
-                       , {error_code, no_error}
-                       , {base_offset, _}
-                       | _
-                       ], PartitionRsp)
-        end).
+        ?assertMatch(#{ partition := ?PARTI
+                      , error_code := no_error
+                      , base_offset := _
+                      }, kpro:parse_response(Rsp))).
 
 magic_v0_basic_test_() ->
   {Min, Max} = get_api_vsn_range(),
@@ -49,7 +37,7 @@ magic_v0_basic_test_() ->
 %% Timestamp within batch may not have to be monotonic.
 non_monotoic_ts_in_batch_test() ->
   {_, Vsn} = get_api_vsn_range(),
-  case Vsn < ?MIN_MAGIC_2_VSN of
+  case Vsn < ?MIN_MAGIC_2_PRODUCE_REQ_VSN of
     true ->
       %% Nothing to test for kafka < 0.11
       ok;
@@ -98,7 +86,7 @@ with_connection(Config, Fun) ->
 % contain record batches with magic v2
 % magic 0-1 have tuple list as batch input
 % magic 2 has map list as batch input
-make_batch(Vsn) when Vsn < ?MIN_MAGIC_2_VSN ->
+make_batch(Vsn) when Vsn < ?MIN_MAGIC_2_PRODUCE_REQ_VSN ->
   [ {<<"key1">>, make_value(Vsn)}
   , {<<"key2">>, make_value(Vsn)}
   ];

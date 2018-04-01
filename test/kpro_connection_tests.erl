@@ -3,10 +3,9 @@
 -include_lib("eunit/include/eunit.hrl").
 
 ssl_test() ->
-  ok.
-  % Config = #{ssl => ssl_options()},
-  % {ok, Pid} = connect(Config),
-  % ok = kpro_connection:stop(Pid).
+  Config = #{ssl => ssl_options()},
+  {ok, Pid} = connect(Config),
+  ok = kpro_connection:stop(Pid).
 
 sasl_test() ->
   Config = #{ ssl => ssl_options()
@@ -34,12 +33,7 @@ connect(Config) ->
   kpro_connection:start(Host, Port, Config).
 
 ssl_options() ->
-  PrivDir = code:priv_dir(?APPLICATION),
-  Fname = fun(Name) -> filename:join([PrivDir, ssl, Name]) end,
-  [ {cacertfile, Fname("ca.crt")}
-  , {keyfile,    Fname("client.key")}
-  , {certfile,   Fname("client.crt")}
-  ].
+  kpro_test_lib:ssl_options().
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
