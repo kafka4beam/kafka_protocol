@@ -56,11 +56,11 @@ with_connection(Endpoints, Config, Fun) ->
   end.
 
 %% @doc Connect to partition leader.
--spec connect_partition_leader([endpoint()], topic(), partition(),
-                               config(), timeout()) ->
+-spec connect_partition_leader([endpoint()], config(),
+                               topic(), partition(), timeout()) ->
         {ok, connection()} | {error, any()}.
-connect_partition_leader(BootstrapEndpoints, Topic, Partition,
-                         Config, Timeout) ->
+connect_partition_leader(BootstrapEndpoints, Config,
+                         Topic, Partition, Timeout) ->
   %% Connect without linking to the connection pid
   NolinkConfig = Config#{nolink => true},
   DiscoverLeader =
@@ -108,9 +108,14 @@ api_vsn_range_intersection(undefined) ->
   %% always use minimum supported version in this case
   lists:foldl(
     fun(API, Acc) ->
-        {Min, _Max} = api_vsn_ranges:range(API),
-        Acc#{API => {Min, Min}}
-    end, kpro_schema:all_apis());
+        try kpro_api_vsn:kafka_09_range(API) of
+          {Min, _Max} ->
+            Acc#{API => {Min, Min}}
+        catch
+          error : function_clause ->
+            Acc
+        end
+    end, #{}, kpro_schema:all_apis());
 api_vsn_range_intersection(Vsns) ->
   maps:fold(
     fun(API, {Min, Max}, Acc) ->
@@ -147,6 +152,10 @@ connect_any([{Host, Port} | Rest], Config, Errors) ->
       connect_any(Rest, Config, [{{Host, Port}, Error} | Errors])
   end.
 
+%% Can not get dialyzer working for this call: kpro_req_lib:metadata(Vsn, [Topic])
+-dialyzer([{nowarn_function, [discover_partition_leader/4]}]).
+-spec discover_partition_leader(connection(), topic(), partition(), timeout()) ->
+        {ok, endpoint()} | {error, any()}.
 discover_partition_leader(Connection, Topic, Partition, Timeout) ->
   FL =
     [ fun() -> get_max_api_version(Connection, metadata) end

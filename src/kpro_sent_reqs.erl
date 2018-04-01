@@ -63,7 +63,7 @@ new() -> #requests{}.
 add(#requests{ corr_id = CorrId
              , sent    = Sent
              } = Requests, Caller, Ref, API, Vsn) ->
-  Req = ?REQ(Caller, Ref, API, Vsn, os:system_time(millisecond)),
+  Req = ?REQ(Caller, Ref, API, Vsn, now_ts()),
   NewSent = maps:put(CorrId, Req, Sent),
   NewRequests = Requests#requests{ corr_id = next_corr_id(CorrId)
                                  , sent    = NewSent
@@ -100,13 +100,16 @@ increment_corr_id(#requests{corr_id = CorrId} = Requests) ->
 %% 0 is returned if there is no pending response.
 -spec scan_for_max_age(requests()) -> timeout().
 scan_for_max_age(#requests{sent = Sent}) ->
-  Now = os:system_time(millisecond),
+  Now = now_ts(),
   MinTs = maps:fold(fun(_CorrId, ?REQ(_Caller, _Ref, _API, _Vsn, Ts), Min) ->
                           erlang:min(Ts, Min)
                     end, Now, Sent),
   Now - MinTs.
 
 next_corr_id(N) -> (N + 1) rem (1 bsl 31).
+
+%% os:system_time('millisecond') is since otp-19
+now_ts() -> os:system_time(1000).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

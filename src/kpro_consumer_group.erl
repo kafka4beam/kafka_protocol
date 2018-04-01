@@ -157,7 +157,7 @@ group_member_metadata_schema(_Version = 1) ->
 
 %% @private
 nullable_bytes(Bin, BytesDecoder) ->
-  case kpro:decode(bytes, Bin) of
+  case kpro_lib:decode(bytes, Bin) of
     {<<>>, Rest} ->
       {?kpro_null, Rest};
     {Bytes, Rest} ->
@@ -172,23 +172,17 @@ assignment(Bytes) -> nullable_bytes(Bytes, fun decode_assignment/1).
 
 %% @private
 decode_subscription(Bytes) ->
-  Module = kpro_prelude_schema,
-  Tag = cg_protocol_metadata,
-  Vsn = 0,
-  {R, <<>>} = kpro:decode_struct(Module, Tag, Vsn, Bytes),
-  R.
+  Schema = kpro_prelude_schema:get(cg_protocol_metadata, 0),
+  dec(Schema, Bytes).
 
 %% @private
 decode_assignment(Bytes) ->
-  Module = kpro_prelude_schema,
-  Tag = cg_memeber_assignment,
-  Vsn = 0,
-  {Assignment, <<>>} = kpro:decode_struct(Module, Tag, Vsn, Bytes),
-  Assignment.
+  Schema = kpro_prelude_schema:get(cg_memeber_assignment, 0),
+  dec(Schema, Bytes).
 
 %% @private
 dec(Schema, Bin) ->
-  {R, <<>>} = kpro:dec_struct(Schema, [], [], Bin),
+  {R, <<>>} = kpro_rsp_lib:dec_struct(Schema, [], [], Bin),
   R.
 
 %%%_* Emacs ====================================================================

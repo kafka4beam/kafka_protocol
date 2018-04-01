@@ -2,24 +2,37 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+plaintext_test() ->
+  Config = kpro_test_lib:connection_config(plaintext),
+  {ok, Pid} = connect(Config),
+  ok = kpro_connection:stop(Pid).
+
 ssl_test() ->
-  Config = #{ssl => ssl_options()},
+  Config = kpro_test_lib:connection_config(ssl),
   {ok, Pid} = connect(Config),
   ok = kpro_connection:stop(Pid).
 
 sasl_test() ->
-  Config = #{ ssl => ssl_options()
-            , sasl => kpro_test_lib:sasl_config()
-            },
-  {ok, Pid} = connect(Config),
-  ok = kpro_connection:stop(Pid).
+  case kpro_test_lib:is_kafka_09() of
+    true ->
+      ok;
+    false ->
+      Config0 = kpro_test_lib:connection_config(ssl),
+      Config = Config0#{sasl => kpro_test_lib:sasl_config()},
+      {ok, Pid} = connect(Config),
+      ok = kpro_connection:stop(Pid)
+  end.
 
 sasl_file_test() ->
-  Config = #{ ssl => ssl_options()
-            , sasl => kpro_test_lib:sasl_config(file)
-            },
-  {ok, Pid} = connect(Config),
-  ok = kpro_connection:stop(Pid).
+  case kpro_test_lib:is_kafka_09() of
+    true ->
+      ok;
+    false ->
+      Config0 = kpro_test_lib:connection_config(ssl),
+      Config = Config0#{sasl => kpro_test_lib:sasl_config(file)},
+      {ok, Pid} = connect(Config),
+      ok = kpro_connection:stop(Pid)
+  end.
 
 no_api_version_query_test() ->
   Config = #{query_api_versions => false},
@@ -31,9 +44,6 @@ connect(Config) ->
   Protocol = kpro_test_lib:guess_protocol(Config),
   [{Host, Port} | _] = kpro_test_lib:get_endpoints(Protocol),
   kpro_connection:start(Host, Port, Config).
-
-ssl_options() ->
-  kpro_test_lib:ssl_options().
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

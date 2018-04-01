@@ -77,8 +77,6 @@
 
 -define(SCHEMA_MODULE, kpro_schema).
 
--define(PRELUDE, kpro_prelude_schema).
-
 -define(IS_STRUCT(S), (is_list(S) orelse is_map(S))).
 
 -endif.

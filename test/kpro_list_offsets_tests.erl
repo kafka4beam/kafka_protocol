@@ -23,8 +23,8 @@ make_test_case(Vsn, Ts) ->
                  assert_no_error(kpro:parse_response(Rsp))
              end,
       ConnFun = fun(Endpoints, Config) ->
-                    kpro:connect_partition_leader(Endpoints, ?TOPIC, ?PARTI,
-                                                  Config, 1000)
+                    kpro:connect_partition_leader(Endpoints, Config,
+                                                  ?TOPIC, ?PARTI, 1000)
                 end,
       kpro_test_lib:with_connection(ConnFun, Test)
   end}.

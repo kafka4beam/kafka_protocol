@@ -11,7 +11,7 @@
         , sasl_config/1
         ]).
 
--export([ ssl_options/0
+-export([ connection_config/1
         ]).
 
 -export([ with_connection/1
@@ -20,8 +20,26 @@
         , with_connection/4
         ]).
 
+-export([ is_kafka_09/0
+        ]).
+
 -type conn() :: kpro_connection:connection().
 -type config() :: kpro_connection:config().
+
+is_kafka_09() ->
+  case osenv("KPRO_TEST_KAFKA_09") of
+    "TRUE" -> true;
+    "true" -> true;
+    "1" -> true;
+    _ -> false
+  end.
+
+connection_config(Protocol) ->
+  C = do_connection_config(Protocol),
+  case is_kafka_09() of
+    true -> C#{query_api_versions => false};
+    false -> C
+  end.
 
 get_endpoints(Protocol) ->
   case osenv("KPRO_TEST_KAFKA_ENDPOINTS") of
@@ -59,7 +77,7 @@ with_connection(WithConnFun) ->
 -spec with_connection(fun(([kpro:endpoint()], config()) -> {ok, conn()}),
                       fun((conn()) -> any())) -> any().
 with_connection(ConnectFun, WithConnFun) ->
-  with_connection(_Config = #{}, ConnectFun, WithConnFun).
+  with_connection(connection_config(plaintext), ConnectFun, WithConnFun).
 
 with_connection(Config, ConnectFun, WithConnFun) ->
   Endpoints = get_endpoints(guess_protocol(Config)),
@@ -68,6 +86,8 @@ with_connection(Config, ConnectFun, WithConnFun) ->
 with_connection(Endpoints, Config, ConnectFun, WithConnFun) ->
   {ok, Pid} = ConnectFun(Endpoints, Config),
   with_connection_pid(Pid, WithConnFun).
+
+%%%_* Internal functions =======================================================
 
 ssl_options() ->
   case osenv("KPRO_TEST_SSL_TRUE") of
@@ -86,7 +106,14 @@ ssl_options() ->
       end
   end.
 
-%%%_* Internal functions =======================================================
+do_connection_config(plaintext) ->
+  #{};
+do_connection_config(ssl) ->
+  #{ssl => ssl_options()};
+do_connection_config(sasl_ssl) ->
+  #{ ssl => ssl_options()
+   , sasl => sasl_config()
+   }.
 
 default_ssl_options() ->
   PrivDir = code:priv_dir(?APPLICATION),

@@ -248,7 +248,7 @@ inactive_request_sync(#kpro_req{api = API, vsn = Vsn} = Req,
     {ok, RspBin} = Mod:recv(Sock, Len, Timeout),
     {[{CorrId, Rsp}], <<>>} =
       kpro_rsp_lib:decode_corr_id(<<Len:32, RspBin/binary>>),
-    kpro_rsp_lib:decode_body(API, Vsn, Rsp)
+    kpro_rsp_lib:decode_body(API, Vsn, Rsp, _IgnoredRef = make_ref())
   catch
     error : Reason ->
       Stack = erlang:get_stacktrace(),
@@ -382,8 +382,8 @@ handle_msg({_, Sock, Bin}, #state{ sock     = Sock
     lists:foldl(
       fun({CorrId, Body}, Reqs) ->
         {Caller, Ref, API, Vsn} = kpro_sent_reqs:get_req(Reqs, CorrId),
-        Rsp = kpro_rsp_lib:decode_body(API, Vsn, Body),
-        ok = cast(Caller, {msg, self(), Rsp#kpro_rsp{ref = Ref}}),
+        Rsp = kpro_rsp_lib:decode_body(API, Vsn, Body, Ref),
+        ok = cast(Caller, {msg, self(), Rsp}),
         kpro_sent_reqs:del(Reqs, CorrId)
       end, Requests, Responses),
   ?MODULE:loop(State#state{acc = Acc, requests = NewRequests}, Debug);

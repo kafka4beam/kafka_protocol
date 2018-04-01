@@ -1,3 +1,2 @@
 * Make {active, false} | {active, N} configurable in kpro_connection
-
-document query_api_versions connection config
+* Document query_api_versions connection config

@@ -125,22 +125,23 @@ fetch(Vsn, Topic, Partition, Offset, MaxWaitTime,
                  ]]}]]}],
   make(fetch, Vsn, Fields).
 
-%% @equiv produce(Vsn, Topic, Partition, KvList, RequiredAcks,
-%%                AckTimeout, ?no_compression)
+%% @doc Help function to construct a produce request for
+%% messages targeting one single topic-partition
+%% with default batch encoding option.
 -spec produce(kpro:vsn(), kpro:topic(), kpro:partition(), kpro:batch_input(),
               kpro:required_acks(), kpro:wait()) -> kpro:req().
 produce(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout) ->
-  produce(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout,
-          ?no_compression).
+  produce(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout, #{}).
 
 %% @doc Help function to construct a produce request for
 %% messages targeting one single topic-partition.
 -spec produce(kpro:vsn(), kpro:topic(), kpro:partition(), kpro:batch_input(),
-              kpro:required_acks(), kpro:wait(), kpro:compress_option()) ->
+              kpro:required_acks(), kpro:wait(), kpro:batch_enc_opts()) ->
         kpro:req().
 produce(Vsn, Topic, Partition, Batch, RequiredAcks0,
-        AckTimeout, CompressOption) ->
+        AckTimeout, Options) ->
   RequiredAcks = required_acks(RequiredAcks0),
+  CompressOption = maps:get(compression, Options, no_compression),
   Messages = kpro_batch:encode(Batch, CompressOption),
   Fields =
     [{transactional_id, ?kpro_null},
@@ -234,10 +235,10 @@ enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
 translate([isolation_level | _] , Value) ->
   ?ISOLATION_LEVEL_INTEGER(Value);
 translate([protocol_metadata | _] = Stack, Value) ->
-  Schema = kpro:get_prelude_schema(cg_protocol_metadata, 0),
+  Schema = kpro_prelude_schema:get(cg_protocol_metadata, 0),
   bin(enc_struct(Schema, Value, Stack));
 translate([member_assignment | _] = Stack, Value) ->
-  Schema = kpro:get_prelude_schema(cg_memeber_assignment, 0),
+  Schema = kpro_prelude_schema:get(cg_memeber_assignment, 0),
   bin(enc_struct(Schema, Value, Stack));
 translate(_Stack, Value) -> Value.
 
