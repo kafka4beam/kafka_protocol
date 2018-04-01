@@ -49,13 +49,15 @@ which can be another `struct`, an `array` or a `primitive`.
 
 ## Test (`make eunit`)
 
-To make a testbed localy (requires docker) execut `make testbed`
+To make a kakfa-1.0.0 testbed localy (requires docker) run `make testbed`
+To test against other kafka-version (e.g. 0.9.0.0) run `make KAFKA_VERSION=0.9 testbed`
 To test with a existing kafka cluster set below os variables:
 
+- `KPRO_TEST_KAFKA_09`" Set to 'TRUE' or 'true' or '1' to test against a kafka 0.9 cluster.
 - `KPRO_TEST_KAFKA_ENDPOINTS`: Comma separated endpoints, e.g. `plaintext://localhost:9092,ssl://localhost:9093,sasl_ssl://localhost:9094`
 - `KPRO_TEST_KAFKA_TOPIC_NAME`: Topic name for message produce/fetch test.
 - `KPRO_TEST_KAFKA_SASL_PLAIN_USER_PASS_FILE`: A text file having two lines for username and password.
-- `KPRO_TEST_SSL_TRUE`: Set to "TRUE" or 'true' to use `ssl => true' in connection config (if kafka ca is trusted already)
+- `KPRO_TEST_SSL_TRUE`: Set to 'TRUE' or 'true' or '1' to use `ssl => true' in connection config (if kafka ca is trusted already)
 - `KPRO_TEST_SSL_CA_CERT_FILE`: Ca cert file
 - `KPRO_TEST_SSL_KEY_FILE`: Client private key file
 - `KPRO_TEST_SSL_CERT_FILE`: Client cert file

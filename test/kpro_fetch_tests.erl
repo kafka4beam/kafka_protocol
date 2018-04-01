@@ -82,15 +82,18 @@ produce_randomly(Connection, Count, Acc) ->
           true -> MinVsn;
           false -> MinVsn + rand_num(MaxVsn - MinVsn) - 1
         end,
-  Compression = rand_element([no_compression, gzip, snappy]),
+  BatchEncOpts = rand_batch_enc_opts(),
   Batch = make_random_batch(Vsn, rand_num(?RAND_BATCH_SIZE)),
   Req = kpro_req_lib:produce(Vsn, ?TOPIC, ?PARTI, Batch, all_isr,
-                             _AckTimeout = 1000, Compression),
+                             _AckTimeout = 1000, BatchEncOpts),
   {ok, Rsp} = kpro:request_sync(Connection, Req, ?TIMEOUT),
   #{ error_code := no_error
    , base_offset := Offset
    } = kpro:parse_response(Rsp),
   produce_randomly(Connection, Count - 1, [{Offset, Batch} | Acc]).
+
+rand_batch_enc_opts() ->
+  #{compression => rand_element([no_compression, gzip, snappy])}.
 
 rand_num(N) -> (os:system_time() rem N) + 1.
 
@@ -101,23 +104,27 @@ make_req(Vsn, Offset, MaxBytes) ->
                      ?kpro_read_committed).
 
 random_config() ->
-  Configs =
-    [ #{} %% plaintext
-    , #{ ssl => kpro_test_lib:ssl_options() } %% ssl
-    , #{ ssl => kpro_test_lib:ssl_options()
-       , sasl => kpro_test_lib:sasl_config(file) } %% sasl_ssl
+  Configs0 =
+    [ kpro_test_lib:connection_config(plaintext)
+    , kpro_test_lib:connection_config(ssl)
     ],
+  Configs = case kpro_test_lib:is_kafka_09() of
+              true -> Configs0;
+              false -> [kpro_test_lib:connection_config(sasl_ssl) | Configs0]
+            end,
   rand_element(Configs).
 
 get_api_vsn_range() ->
+  Config = kpro_test_lib:connection_config(plaintext),
   {ok, Versions} =
-    with_connection(#{}, fun(Pid) -> kpro:get_api_versions(Pid) end),
+    with_connection(Config, fun(Pid) -> kpro:get_api_versions(Pid) end),
   maps:get(fetch, Versions).
 
 with_connection(Config, Fun) ->
   ConnFun =
     fun(Endpoints, Cfg) ->
-        kpro:connect_partition_leader(Endpoints, ?TOPIC, ?PARTI, Cfg, 1000)
+        % io:format(user, "connecting to ~p with config ~p", [Endpoints, Cfg]),
+        kpro:connect_partition_leader(Endpoints, Cfg, ?TOPIC, ?PARTI, 1000)
     end,
   kpro_test_lib:with_connection(Config, ConnFun, Fun).
 

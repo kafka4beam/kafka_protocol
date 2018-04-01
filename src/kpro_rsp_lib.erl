@@ -16,7 +16,8 @@
 -module(kpro_rsp_lib).
 
 -export([ decode_corr_id/1
-        , decode_body/3
+        , decode_body/4
+        , dec_struct/4
         ]).
 
 -export([ parse/1
@@ -35,8 +36,8 @@ decode_corr_id(Bin) ->
   decode_corr_id(Bin, []).
 
 %% @doc Decode body binary.
--spec decode_body(kpro:api(), kpro:vsn(), binary()) -> kpro:rsp().
-decode_body(API, Vsn, Body) ->
+-spec decode_body(kpro:api(), kpro:vsn(), binary(), reference()) -> kpro:rsp().
+decode_body(API, Vsn, Body, Ref) ->
   {Message, <<>>} =
     try
       decode_struct(API, Vsn, Body)
@@ -48,7 +49,8 @@ decode_body(API, Vsn, Body) ->
       Trace = erlang:get_stacktrace(),
       erlang:raise(error, {E, Context}, Trace)
     end,
-  #kpro_rsp{ api = API
+  #kpro_rsp{ ref = Ref
+           , api = API
            , vsn = Vsn
            , msg = Message
            }.
@@ -78,6 +80,15 @@ parse(Rsp) ->
   %% Not supported yet
   Rsp.
 
+%% @doc Decode struct.
+dec_struct([], Fields, _Stack, Bin) ->
+  {lists:reverse(Fields), Bin};
+dec_struct([{Name, FieldSc} | Schema], Fields, Stack, Bin) ->
+  NewStack = [Name | Stack],
+  {Value0, Rest} = dec_struct_field(FieldSc, NewStack, Bin),
+  Value = translate(NewStack, Value0),
+  dec_struct(Schema, [{Name, Value} | Fields], Stack, Rest).
+
 %%%_* Internal functions =======================================================
 
 get_partition_rsp(Struct) ->
@@ -87,15 +98,6 @@ get_partition_rsp(Struct) ->
 
 %% Decode prmitives.
 dec(Type, Bin) -> kpro_lib:decode(Type, Bin).
-
-%% ecode struct.
-dec_struct([], Fields, _Stack, Bin) ->
-  {lists:reverse(Fields), Bin};
-dec_struct([{Name, FieldSc} | Schema], Fields, Stack, Bin) ->
-  NewStack = [Name | Stack],
-  {Value0, Rest} = dec_struct_field(FieldSc, NewStack, Bin),
-  Value = translate(NewStack, Value0),
-  dec_struct(Schema, [{Name, Value} | Fields], Stack, Rest).
 
 decode_struct(API, Vsn, Bin) ->
   Schema = kpro_lib:get_rsp_schema(API, Vsn),
@@ -159,7 +161,7 @@ translate([api_key | _], ApiKey) ->
 translate([error_code | _], ErrorCode) ->
   kpro_error_code:decode(ErrorCode);
 translate([member_metadata | _] = Stack, Bin) ->
-  Schema = kpro:get_schema(?PRELUDE, cg_member_metadata, 0),
+  Schema = kpro_prelude_schema:get(cg_member_metadata, 0),
   case Bin =:= <<>> of
     true  -> ?kpro_cg_no_member_metadata;
     false -> dec_struct_clean(Schema, [{cg_member_metadata, 0} | Stack], Bin)
@@ -167,7 +169,7 @@ translate([member_metadata | _] = Stack, Bin) ->
 translate([member_assignment | _], <<>>) ->
   ?kpro_cg_no_assignment; %% no assignment for this member
 translate([member_assignment | _] = Stack, Bin) ->
-  Schema = kpro:get_schema(?PRELUDE, cg_memeber_assignment, 0),
+  Schema = kpro_prelude_schema:get(cg_memeber_assignment, 0),
   dec_struct_clean(Schema, [{cg_memeber_assignment, 0} | Stack], Bin);
 translate([isolation_level | _], Integer) ->
   ?ISOLATION_LEVEL_ATOM(Integer);

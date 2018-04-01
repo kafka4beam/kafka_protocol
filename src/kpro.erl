@@ -38,6 +38,7 @@
 
 -export_type([ api/0
              , api_vsn_ranges/0
+             , batch_enc_opts/0
              , batch_decode_result/0
              , batch_input/0
              , batch_meta/0
@@ -126,6 +127,8 @@
 %            | {ts_type, kpro:timestamp_type()}
 %            | is_transaction | {is_transaction, boolean()}
 %            | is_control | {is_control, boolean()}.
+
+-type batch_enc_opts() :: #{atom() => term()}.
 -type batch_attributes() :: proplists:proplist().
 -type batch_meta_val() :: batch_attributes() | integer().
 
@@ -141,7 +144,7 @@
 -type tkv() :: {msg_ts(), key(), value_mabye_nested()}. % magic 1
 -type msg_input() :: #{msg_key() => msg_val()}. % magic 2
 
--type meta_input() :: #{}.
+-type meta_input() :: #{atom() => term()}.
 -type batch_input() :: [kv()] % magic 0
                      | [tkv()] % magic 1
                      | [msg_input()]. % magic 2 non-transactional
@@ -280,8 +283,8 @@ connect_any(Endpoints, ConnConfig) ->
 %% query metata to discover leader node, then connect to leader.
 %% NOTE: Connection process is linked to caller unless `nolink => true'
 %%       is set in connection connection config.
--spec connect_partition_leader([endpoint()], topic(), partition(),
-                               conn_config(), timeout()) ->
+-spec connect_partition_leader([endpoint()], conn_config(),
+                               topic(), partition(), timeout()) ->
         {ok, kpro_connection:connection()} | {error, any()}.
 connect_partition_leader(BootstrapEndpoints, ConnConfig,
                          Topic, Partition, Timeout) ->

@@ -60,5 +60,5 @@ hex-publish: distclean
 
 .PHONY: testbed
 testbed:
-	@$(verbose) ./scripts/setup-testbed.sh
+	@$(verbose) ./scripts/setup-testbed.sh ${KAFKA_VERSION}
 
