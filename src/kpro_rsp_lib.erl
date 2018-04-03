@@ -55,7 +55,7 @@ decode_body(API, Vsn, Body, Ref) ->
            , msg = Message
            }.
 
--spec parse(kpro:rsp()) -> {ok, kpro:offset()} | {error, any()}.
+-spec parse(kpro:rsp()) -> term().
 parse(#kpro_rsp{ api = list_offsets
                , msg = Msg
                }) ->

@@ -124,7 +124,8 @@ with_connection(Config, Fun) ->
   ConnFun =
     fun(Endpoints, Cfg) ->
         % io:format(user, "connecting to ~p with config ~p", [Endpoints, Cfg]),
-        kpro:connect_partition_leader(Endpoints, Cfg, ?TOPIC, ?PARTI, 1000)
+        Args = #{topic => ?TOPIC, partition => ?PARTI, timeout => 1000},
+        kpro:connect_partition_leader(Endpoints, Cfg, Args)
     end,
   kpro_test_lib:with_connection(Config, ConnFun, Fun).
 

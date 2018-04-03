@@ -32,7 +32,8 @@
         ]).
 
 -export([ connect_any/2
-        , connect_partition_leader/5
+        , connect_coordinator/3
+        , connect_partition_leader/3
         , get_api_versions/1
         ]).
 
@@ -45,6 +46,8 @@
              , bytes/0
              , client_id/0
              , compress_option/0
+             , connection/0
+             , conn_config/0
              , corr_id/0
              , count/0
              , endpoint/0
@@ -191,6 +194,7 @@
                 | decode_fun(). %% caller defined decoder
 -type stack() :: [{api(), vsn()} | field_name()]. %% encode / decode stack
 -type isolation_level() :: read_committed | read_uncommitted.
+-type connection() :: kpro_connection:connection().
 -type conn_config() :: kpro_connection:config().
 -type api_vsn_ranges() :: #{api() => {vsn(), vsn()}}.
 -type protocol() :: plaintext | ssl | sasl_plaintext | sasl_ssl.
@@ -274,30 +278,43 @@ request_async(ConnectionPid, Request) ->
 %% NOTE: Connection process is linked to caller unless `nolink => true'
 %%       is set in connection config
 -spec connect_any([endpoint()], conn_config()) ->
-        {ok, kpro_connection:connection()} | {error, any()}.
+        {ok, connection()} | {error, any()}.
 connect_any(Endpoints, ConnConfig) ->
-  kpro_connection_lib:connect_any(Endpoints, ConnConfig).
+  kpro_brokers:connect_any(Endpoints, ConnConfig).
 
-%% @doc Connect to partition leader.
-%% It first tries to connect to any of the bootstraping nodes,
-%% query metata to discover leader node, then connect to leader.
+%% @doc Connect partition leader.
+%% If the fist arg is not an already established metadata connection
+%% but a bootstraping endpoint list, this function will first try to
+%% establish a temp connection to any of the bootstraping endpoints.
+%% Then send metadata request to discover partition leader broker
+%% Finally connect to the leader broker.
 %% NOTE: Connection process is linked to caller unless `nolink => true'
 %%       is set in connection connection config.
--spec connect_partition_leader([endpoint()], conn_config(),
-                               topic(), partition(), timeout()) ->
-        {ok, kpro_connection:connection()} | {error, any()}.
-connect_partition_leader(BootstrapEndpoints, ConnConfig,
-                         Topic, Partition, Timeout) ->
-  kpro_connection_lib:connect_partition_leader(BootstrapEndpoints,
-                                               ConnConfig,
-                                               Topic, Partition,
-                                               Timeout).
+-spec connect_partition_leader(connection() | [endpoint()], conn_config(),
+                               #{ topic := topic()
+                                , partition := partition()
+                                , timeout := timeout()
+                                }) -> {ok, connection()} | {error, any()}.
+connect_partition_leader(Bootstrap, ConnConfig, Args) ->
+  kpro_brokers:connect_partition_leader(Bootstrap, ConnConfig, Args).
+
+%% @doc Connect group or transaction coordinator.
+%% If the first arg is not a connection pid but a list of bootstraping
+%% endpoints, it will frist try to connect to any of the nodes
+%% NOTE: 'txn' type only applicable to kafka 0.11 or later
+-spec connect_coordinator(connection() | [endpoint()], conn_config(),
+                          #{ type => group | txn
+                           , id => binary()
+                           , timeout => timeout()
+                           }) -> {ok, connection()} | {error, any()}.
+connect_coordinator(Bootstrap, ConnConfig, Args) ->
+  kpro_brokers:connect_coordinator(Bootstrap, ConnConfig, Args).
 
 %% @doc Qury API versions using the given `kpro_connection' pid.
 -spec get_api_versions(pid()) ->
         {ok, api_vsn_ranges()} | {error, any()}.
 get_api_versions(Pid) ->
-  kpro_connection_lib:get_api_versions(Pid).
+  kpro_brokers:get_api_versions(Pid).
 
 %% @doc Find field value in a struct, raise an 'error' exception if not found.
 -spec find(field_name(), struct()) -> field_value().
