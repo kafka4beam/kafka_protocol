@@ -77,7 +77,9 @@ with_connection(Fun) ->
 with_connection(Config, Fun) ->
   ConnFun =
     fun(Endpoints, Cfg) ->
-        kpro:connect_partition_leader(Endpoints, Cfg, topic(), ?PARTI, 1000)
+        kpro:connect_partition_leader(Endpoints, Cfg, #{ topic => topic()
+                                                       , partition => ?PARTI
+                                                       , timeout => 1000})
     end,
   kpro_test_lib:with_connection(Config, ConnFun, Fun).
 

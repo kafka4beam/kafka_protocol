@@ -22,10 +22,11 @@ make_test_case(Vsn, Ts) ->
                  {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
                  assert_no_error(kpro:parse_response(Rsp))
              end,
-      ConnFun = fun(Endpoints, Config) ->
-                    kpro:connect_partition_leader(Endpoints, Config,
-                                                  ?TOPIC, ?PARTI, 1000)
-                end,
+      ConnFun =
+        fun(Endpoints, Config) ->
+            Args = #{topic => ?TOPIC, partition => ?PARTI, timeout => 1000},
+            kpro:connect_partition_leader(Endpoints, Config, Args)
+        end,
       kpro_test_lib:with_connection(ConnFun, Test)
   end}.
 

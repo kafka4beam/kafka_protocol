@@ -13,10 +13,11 @@
 %%%   limitations under the License.
 %%%
 
--module(kpro_connection_lib).
+-module(kpro_brokers).
 
 -export([ connect_any/2
-        , connect_partition_leader/5
+        , connect_coordinator/3
+        , connect_partition_leader/3
         , get_api_versions/1
         , get_max_api_version/2
         , with_connection/3
@@ -30,10 +31,13 @@
 -type config() :: kpro_connection:config().
 -type connection() :: kpro_connection:connection().
 
+-define(DEFAULT_TIMEOUT, 5000).
+
 %% @doc Connect to any of the endpoints in the given list.
 -spec connect_any([endpoint()], config()) ->
         {ok, connection()} | {error, any()}.
-connect_any(Endpoints, Config) ->
+connect_any(Endpoints0, Config) ->
+  Endpoints = random_order(Endpoints0),
   connect_any(Endpoints, Config, []).
 
 %% @doc Evaluate give function with a connection to any of the nodes in
@@ -55,34 +59,79 @@ with_connection(Endpoints, Config, Fun) ->
     kpro_connection:stop(Connection)
   end.
 
-%% @doc Connect to partition leader.
--spec connect_partition_leader([endpoint()], config(),
-                               topic(), partition(), timeout()) ->
+%% @doc Connect partition leader.
+%% If the fist arg is not an already established metadata connection
+%% but a bootstraping endpoint list, this function will first try to
+%% establish a temp connection to any of the bootstraping endpoints.
+%% Then send metadata request to discover partition leader broker
+%% Finally connect to the leader broker.
+-spec connect_partition_leader(connection() | [endpoint()], config(),
+                               #{ topic => topic()
+                                , partition => partition()
+                                , timeout => timeout()
+                                }) ->
         {ok, connection()} | {error, any()}.
-connect_partition_leader(BootstrapEndpoints, Config,
-                         Topic, Partition, Timeout) ->
+connect_partition_leader(C, Config, #{ topic := Topic
+                                     , partition := Partition
+                                     } = Args) when is_pid(C) ->
+  Timeout = maps:get(timeout, Args, ?DEFAULT_TIMEOUT),
+  FL =
+    [ fun() -> discover_partition_leader(C, Topic, Partition, Timeout) end
+    , fun(LeaderEndpoint) -> connect_any([LeaderEndpoint], Config) end
+    ],
+  kpro_lib:ok_pipe(FL, Timeout);
+connect_partition_leader(Bootstrap, Config, #{ topic := Topic
+                                             , partition := Partition
+                                             } = Args) ->
   %% Connect without linking to the connection pid
   NolinkConfig = Config#{nolink => true},
-  DiscoverLeader =
-    fun(Connection) ->
-        try
-          discover_partition_leader(Connection, Topic, Partition, Timeout)
-        after
-          kpro_connection:stop(Connection)
-        end
-    end,
+  Timeout = maps:get(timeout, Args, ?DEFAULT_TIMEOUT),
   FL =
-    [ fun() -> connect_any(BootstrapEndpoints, NolinkConfig) end
-    , DiscoverLeader
+    [ fun() -> connect_any(Bootstrap, NolinkConfig) end
+    , fun(Connection) ->
+        try discover_partition_leader(Connection, Topic, Partition, Timeout)
+        after kpro_connection:stop(Connection) end end
     , fun(LeaderEndpoint) -> connect_any([LeaderEndpoint], Config) end
+    ],
+  kpro_lib:ok_pipe(FL, Timeout).
+
+%% @doc Connect group or transaction coordinator.
+%% If the first arg is not a connection pid but a list of bootstraping
+%% endpoints, it will frist try to connect to any of the nodes
+%% NOTE: 'txn' type only applicable to kafka 0.11 or later
+-spec connect_coordinator(connection() | [endpoint()], config(),
+                          #{ type => group | txn
+                           , id => binary()
+                           , timeout => timeout()
+                           }) -> {ok, connection()} | {error, any()}.
+connect_coordinator(C, Config, #{ type := Type
+                                , id := Id
+                                } = Args) when is_pid(C) ->
+  Timeout = maps:get(timeout, Args, ?DEFAULT_TIMEOUT),
+  FL =
+    [ fun() -> discover_coordinator(C, Type, Id, Timeout) end
+    , fun(CoordinatorEp) -> connect_any([CoordinatorEp], Config) end
+    ],
+  kpro_lib:ok_pipe(FL, Timeout);
+connect_coordinator(Bootstrap, Config, #{ type := Type
+                                        , id := Id
+                                        } = Args) ->
+  Timeout = maps:get(timeout, Args, ?DEFAULT_TIMEOUT),
+  NoLinkConfig = Config#{nolink => true},
+  FL =
+    [ fun() -> connect_any(Bootstrap, NoLinkConfig) end
+    , fun(Connection) ->
+        try discover_coordinator(Connection, Type, Id, Timeout)
+        after kpro_connection:stop(Connection) end end
+    , fun(CoordinatorEp) -> connect_any([CoordinatorEp], Config) end
     ],
   kpro_lib:ok_pipe(FL, Timeout).
 
 %% @doc Qury API version ranges using the given `kpro_connection' pid.
 -spec get_api_versions(connection()) ->
         {ok, kpro:api_vsn_ranges()} | {error, any()}.
-get_api_versions(Pid) ->
-  case kpro_connection:get_api_vsns(Pid) of
+get_api_versions(Connection) ->
+  case kpro_connection:get_api_vsns(Connection) of
     {ok, Vsns} ->
       {ok, api_vsn_range_intersection(Vsns)};
     {error, Reason} ->
@@ -92,8 +141,8 @@ get_api_versions(Pid) ->
 %% @doc Qury highest supported version for the given API.
 -spec get_max_api_version(connection(), kpro:api_key()) ->
         {ok, kpro:vsn()} | {error, any()}.
-get_max_api_version(Pid, API) ->
-  case get_api_versions(Pid) of
+get_max_api_version(Connection, API) ->
+  case get_api_versions(Connection) of
     {ok, Versions} ->
       {_Min, Max} = maps:get(API, Versions),
       {ok, Max};
@@ -102,6 +151,39 @@ get_max_api_version(Pid, API) ->
   end.
 
 %%%_* Internal functions =======================================================
+
+discover_coordinator(Connection, Type, Id, Timeout) ->
+  FL =
+    [ fun() -> get_max_api_version(Connection, find_coordinator) end
+    , fun(0) when Type =:= group ->
+          {ok, kpro:make_request(find_coordinator, 0, [{group_id, Id}])};
+         (0) when Type =:= txn ->
+          {error, {bad_vsn, [{api, find_coordinator}, {type, txn}]}};
+         (V) ->
+          TypeBin = atom_to_binary(Type, utf8),
+          Fields = [ {coordinator_key, Id}, {coordinator_type, TypeBin}],
+          {ok, kpro:make_request(find_coordinator, V, Fields)}
+      end
+    , fun(Req) -> kpro_connection:request_sync(Connection, Req, Timeout) end
+    , fun(#kpro_rsp{msg = Rsp}) ->
+          ErrorCode = kpro:find(error_code, Rsp),
+          ErrMsg = kpro:find(error_message, Rsp, ?kpro_null),
+          case kpro_error_code:is_error(ErrorCode) of
+            true when ErrMsg =:= ?kpro_null ->
+              %% v0
+              {error, ErrorCode};
+            true ->
+              %% v1
+              {error, [{error_code, ErrorCode}, {error_msg, ErrMsg}]};
+            false ->
+              CoorInfo = kpro:find(coordinator, Rsp),
+              Host = kpro:find(host, CoorInfo),
+              Port = kpro:find(port, CoorInfo),
+              {ok, {Host, Port}}
+          end
+      end
+    ],
+  kpro_lib:ok_pipe(FL, Timeout).
 
 api_vsn_range_intersection(undefined) ->
   %% kpro_connection is configured not to query api versions (kafka-0.9)
@@ -204,6 +286,12 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
       end
     ],
   kpro_lib:ok_pipe(FL).
+
+%% Avoid always pounding the first endpoint in bootstraping list.
+random_order(L) ->
+  RandL = [rand:uniform(1000) || _ <- L],
+  RI = lists:sort(lists:zip(RandL, L)),
+  [I || {_R, I} <- RI].
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
