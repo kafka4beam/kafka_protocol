@@ -140,12 +140,12 @@ default_endpoints(plaintext) -> [{"localhost", 9092}];
 default_endpoints(ssl) -> [{"localhost", 9093}];
 default_endpoints(sasl_ssl) -> [{"localhost", 9094}].
 
-with_connection_pid(Pid, Fun) ->
+with_connection_pid(Conn, Fun) ->
   try
-    Fun(Pid)
+    Fun(Conn)
   after
-    unlink(Pid),
-    kpro_connection:stop(Pid)
+    unlink(Conn),
+    kpro:close_connection(Conn)
   end.
 
 %%%_* Emacs ====================================================================

@@ -83,7 +83,7 @@
                , sock        :: ?undef | port()
                , mod         :: ?undef | gen_tcp | ssl
                , req_timeout :: ?undef | timeout()
-               , api_vsns    :: ?undef | kpro:api_vsn_ranges()
+               , api_vsns    :: ?undef | kpro:vsn_ranges()
                , acc = <<>>  :: acc()
                , requests    :: ?undef | requests()
                }).
@@ -135,7 +135,7 @@ stop(_) ->
   ok.
 
 -spec get_api_vsns(pid()) ->
-        {ok, ?undef | kpro:api_vsn_ranges()} | {error, any()}.
+        {ok, ?undef | kpro:vsn_ranges()} | {error, any()}.
 get_api_vsns(Pid) ->
   call(Pid, get_api_vsns).
 
@@ -620,7 +620,7 @@ host(Host) when is_list(Host) -> Host.
 
 %% Ensure binary client id
 get_client_id(Config) ->
-  ClientId = maps:get(client_id, Config, <<"kpro_default">>),
+  ClientId = maps:get(client_id, Config, <<"kpro-client">>),
   case is_atom(ClientId) of
     true -> atom_to_binary(ClientId, utf8);
     false -> ClientId

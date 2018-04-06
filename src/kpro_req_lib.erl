@@ -240,6 +240,13 @@ translate([protocol_metadata | _] = Stack, Value) ->
 translate([member_assignment | _] = Stack, Value) ->
   Schema = kpro_prelude_schema:get(cg_memeber_assignment, 0),
   bin(enc_struct(Schema, Value, Stack));
+translate([coordinator_type | _], Value) ->
+  case Value of
+    group -> 0;
+    txn -> 1;
+    0 -> 0;
+    1 -> 1
+  end;
 translate(_Stack, Value) -> Value.
 
 %% Encode prmitives.

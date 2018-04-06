@@ -9,4 +9,4 @@ CWD="$(dirname $0)"
 
 erl -pa $CWD/../_build/test/lib/*/ebin \
     -pa $CWD/../_build/test/lib/*/test \
-    -eval "eunit:test($1, [verbose])"
+    -eval "eunit:test($1, [verbose]), halt(0)"

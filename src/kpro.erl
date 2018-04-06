@@ -31,14 +31,15 @@
         , request_async/2
         ]).
 
--export([ connect_any/2
+-export([ close_connection/1
+        , connect_any/2
         , connect_coordinator/3
         , connect_partition_leader/3
         , get_api_versions/1
+        , get_api_vsn_range/2
         ]).
 
 -export_type([ api/0
-             , api_vsn_ranges/0
              , batch_enc_opts/0
              , batch_decode_result/0
              , batch_input/0
@@ -88,6 +89,8 @@
              , topic/0
              , value/0
              , vsn/0
+             , vsn_range/0
+             , vsn_ranges/0
              , wait/0
              ]).
 
@@ -196,7 +199,8 @@
 -type isolation_level() :: read_committed | read_uncommitted.
 -type connection() :: kpro_connection:connection().
 -type conn_config() :: kpro_connection:config().
--type api_vsn_ranges() :: #{api() => {vsn(), vsn()}}.
+-type vsn_range() :: {vsn(), vsn()}.
+-type vsn_ranges() :: #{api() => vsn_range()}.
 -type protocol() :: plaintext | ssl | sasl_plaintext | sasl_ssl.
 
 %% All versions of kafka messages (records) share the same header:
@@ -282,6 +286,11 @@ request_async(ConnectionPid, Request) ->
 connect_any(Endpoints, ConnConfig) ->
   kpro_brokers:connect_any(Endpoints, ConnConfig).
 
+%% @doc Sotp connection process.
+-spec close_connection(connection()) -> ok.
+close_connection(Connection) ->
+  kpro_connection:stop(Connection).
+
 %% @doc Connect partition leader.
 %% If the fist arg is not an already established metadata connection
 %% but a bootstraping endpoint list, this function will first try to
@@ -291,9 +300,9 @@ connect_any(Endpoints, ConnConfig) ->
 %% NOTE: Connection process is linked to caller unless `nolink => true'
 %%       is set in connection connection config.
 -spec connect_partition_leader(connection() | [endpoint()], conn_config(),
-                               #{ topic := topic()
-                                , partition := partition()
-                                , timeout := timeout()
+                               #{ topic => topic()
+                                , partition => partition()
+                                , timeout => timeout()
                                 }) -> {ok, connection()} | {error, any()}.
 connect_partition_leader(Bootstrap, ConnConfig, Args) ->
   kpro_brokers:connect_partition_leader(Bootstrap, ConnConfig, Args).
@@ -311,10 +320,16 @@ connect_coordinator(Bootstrap, ConnConfig, Args) ->
   kpro_brokers:connect_coordinator(Bootstrap, ConnConfig, Args).
 
 %% @doc Qury API versions using the given `kpro_connection' pid.
--spec get_api_versions(pid()) ->
-        {ok, api_vsn_ranges()} | {error, any()}.
-get_api_versions(Pid) ->
-  kpro_brokers:get_api_versions(Pid).
+-spec get_api_versions(connection()) ->
+        {ok, vsn_ranges()} | {error, any()}.
+get_api_versions(Connection) ->
+  kpro_brokers:get_api_versions(Connection).
+
+%% @doc Get version range for the given API.
+-spec get_api_vsn_range(connection(), api()) ->
+        {ok, vsn_range()} | {error, any()}.
+get_api_vsn_range(Connection, API) ->
+  kpro_brokers:get_api_vsn_range(Connection, API).
 
 %% @doc Find field value in a struct, raise an 'error' exception if not found.
 -spec find(field_name(), struct()) -> field_value().
