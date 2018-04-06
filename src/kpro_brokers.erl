@@ -19,7 +19,7 @@
         , connect_coordinator/3
         , connect_partition_leader/3
         , get_api_versions/1
-        , get_max_api_version/2
+        , get_api_vsn_range/2
         , with_connection/3
         ]).
 
@@ -129,23 +129,23 @@ connect_coordinator(Bootstrap, Config, #{ type := Type
 
 %% @doc Qury API version ranges using the given `kpro_connection' pid.
 -spec get_api_versions(connection()) ->
-        {ok, kpro:api_vsn_ranges()} | {error, any()}.
+        {ok, kpro:vsn_ranges()} | {error, any()}.
 get_api_versions(Connection) ->
   case kpro_connection:get_api_vsns(Connection) of
-    {ok, Vsns} ->
-      {ok, api_vsn_range_intersection(Vsns)};
-    {error, Reason} ->
-      {error, Reason}
+    {ok, Vsns}      -> {ok, api_vsn_range_intersection(Vsns)};
+    {error, Reason} -> {error, Reason}
   end.
 
-%% @doc Qury highest supported version for the given API.
--spec get_max_api_version(connection(), kpro:api_key()) ->
-        {ok, kpro:vsn()} | {error, any()}.
-get_max_api_version(Connection, API) ->
+%% @doc Get API version range.
+-spec get_api_vsn_range(connection(), kpro:api()) ->
+        {ok, kpro:vsn_range()} | {error, any()}.
+get_api_vsn_range(Connection, API) ->
   case get_api_versions(Connection) of
     {ok, Versions} ->
-      {_Min, Max} = maps:get(API, Versions),
-      {ok, Max};
+      case maps:get(API, Versions, false) of
+        {Min, Max} -> {ok, {Min, Max}};
+        false      -> {error, not_supported}
+      end;
     {error, Reason} ->
       {error, Reason}
   end.
@@ -154,14 +154,13 @@ get_max_api_version(Connection, API) ->
 
 discover_coordinator(Connection, Type, Id, Timeout) ->
   FL =
-    [ fun() -> get_max_api_version(Connection, find_coordinator) end
-    , fun(0) when Type =:= group ->
+    [ fun() -> get_api_vsn_range(Connection, find_coordinator) end
+    , fun({_, 0}) when Type =:= group ->
           {ok, kpro:make_request(find_coordinator, 0, [{group_id, Id}])};
-         (0) when Type =:= txn ->
+         ({_, 0}) when Type =:= txn ->
           {error, {bad_vsn, [{api, find_coordinator}, {type, txn}]}};
-         (V) ->
-          TypeBin = atom_to_binary(Type, utf8),
-          Fields = [ {coordinator_key, Id}, {coordinator_type, TypeBin}],
+         ({_, V}) ->
+          Fields = [ {coordinator_key, Id}, {coordinator_type, Type}],
           {ok, kpro:make_request(find_coordinator, V, Fields)}
       end
     , fun(Req) -> kpro_connection:request_sync(Connection, Req, Timeout) end
@@ -240,8 +239,8 @@ connect_any([{Host, Port} | Rest], Config, Errors) ->
         {ok, endpoint()} | {error, any()}.
 discover_partition_leader(Connection, Topic, Partition, Timeout) ->
   FL =
-    [ fun() -> get_max_api_version(Connection, metadata) end
-    , fun(Vsn) ->
+    [ fun() -> get_api_vsn_range(Connection, metadata) end
+    , fun({_, Vsn}) ->
           Req = kpro_req_lib:metadata(Vsn, [Topic]),
           kpro_connection:request_sync(Connection, Req, Timeout)
       end

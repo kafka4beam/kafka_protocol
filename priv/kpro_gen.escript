@@ -65,11 +65,18 @@ generate_api_key_clauses() ->
   [infix(Clauses, ";\n"), ".\n"].
 
 generate_all_apis_fun(GrouppedTypes) ->
-  F = fun({Name, _}) ->
-          {API, _} = split_name(Name),
-          API
+  F = fun({Name, _}, Acc) ->
+          case split_name(Name) of
+            {API, "req"} ->
+              case lists:member(API, Acc) of
+                true -> Acc;
+                false -> [API | Acc]
+              end;
+            _ ->
+              Acc
+          end
       end,
-  APIs = lists:usort(lists:map(F, GrouppedTypes)),
+  APIs = lists:foldr(F, [], GrouppedTypes),
   ["all_apis() ->\n[", infix(APIs, ",\n"), "].\n\n"].
 
 generate_version_rage_clauses(GrouppedTypes) ->
