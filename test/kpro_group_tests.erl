@@ -37,9 +37,8 @@ full_flow_test() ->
   ok = sync_group(Connection, GroupId, MemberId, Generation),
   % send hartbeats, there should be a generation_id in heartbeat requests,
   % generation bumps whenever there is a group re-balance, however since
-  % we are testing with only one group member, hence we do not expect any
-  % group rebalancing, generation_id should not bump so we can always send
-  % the same generation_id
+  % we are testing with only one group member, we do not expect any group
+  % rebalancing, hence generation_id should not change (alwyas send the same)
   F = fun() -> heartbeat(Connection, GroupId, MemberId, Generation) end,
   {HeartbeatPid, Mref} = erlang:spawn_monitor(F),
   ok = describe_groups(Connection, GroupId),
@@ -171,6 +170,7 @@ str(Atom) -> atom_to_list(Atom).
 bin(I) when is_integer(I) -> integer_to_binary(I);
 bin(Str) -> iolist_to_binary(Str).
 
+%% Make a random group ID, so test cases would not interfere each other.
 make_group_id(Case) ->
   bin([str(?MODULE), "-", str(Case), "-", bin(rand()), "-cg"]).
 

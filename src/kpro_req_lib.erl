@@ -235,10 +235,10 @@ enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
 translate([isolation_level | _] , Value) ->
   ?ISOLATION_LEVEL_INTEGER(Value);
 translate([protocol_metadata | _] = Stack, Value) ->
-  Schema = kpro_prelude_schema:get(cg_protocol_metadata, 0),
+  Schema = kpro_lib:get_prelude_schema(cg_protocol_metadata, 0),
   bin(enc_struct(Schema, Value, Stack));
 translate([member_assignment | _] = Stack, Value) ->
-  Schema = kpro_prelude_schema:get(cg_memeber_assignment, 0),
+  Schema = kpro_lib:get_prelude_schema(cg_memeber_assignment, 0),
   bin(enc_struct(Schema, Value, Stack));
 translate([coordinator_type | _], Value) ->
   case Value of

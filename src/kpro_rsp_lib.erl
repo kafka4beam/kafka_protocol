@@ -161,7 +161,7 @@ translate([api_key | _], ApiKey) ->
 translate([error_code | _], ErrorCode) ->
   kpro_error_code:decode(ErrorCode);
 translate([member_metadata | _] = Stack, Bin) ->
-  Schema = kpro_prelude_schema:get(cg_member_metadata, 0),
+  Schema = kpro_lib:get_prelude_schema(cg_member_metadata, 0),
   case Bin =:= <<>> of
     true  -> ?kpro_cg_no_member_metadata;
     false -> dec_struct_clean(Schema, [{cg_member_metadata, 0} | Stack], Bin)
@@ -169,7 +169,7 @@ translate([member_metadata | _] = Stack, Bin) ->
 translate([member_assignment | _], <<>>) ->
   ?kpro_cg_no_assignment; %% no assignment for this member
 translate([member_assignment | _] = Stack, Bin) ->
-  Schema = kpro_prelude_schema:get(cg_memeber_assignment, 0),
+  Schema = kpro_lib:get_prelude_schema(cg_memeber_assignment, 0),
   dec_struct_clean(Schema, [{cg_memeber_assignment, 0} | Stack], Bin);
 translate([isolation_level | _], Integer) ->
   ?ISOLATION_LEVEL_ATOM(Integer);
