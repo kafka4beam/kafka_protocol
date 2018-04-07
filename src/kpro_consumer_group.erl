@@ -172,12 +172,12 @@ assignment(Bytes) -> nullable_bytes(Bytes, fun decode_assignment/1).
 
 %% @private
 decode_subscription(Bytes) ->
-  Schema = kpro_prelude_schema:get(cg_protocol_metadata, 0),
+  Schema = kpro_lib:get_prelude_schema(cg_protocol_metadata, 0),
   dec(Schema, Bytes).
 
 %% @private
 decode_assignment(Bytes) ->
-  Schema = kpro_prelude_schema:get(cg_memeber_assignment, 0),
+  Schema = kpro_lib:get_prelude_schema(cg_memeber_assignment, 0),
   dec(Schema, Bytes).
 
 %% @private

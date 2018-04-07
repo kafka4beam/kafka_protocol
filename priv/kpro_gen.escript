@@ -38,22 +38,31 @@ main(_Args) ->
 
 -define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
 -module(kpro_schema).
--export([get/3, all_apis/0, vsn_range/1, api_key/1]).
+-export([all_apis/0, vsn_range/1, api_key/1, req/2, rsp/2]).
 ").
 
 generate_schema_module(GrouppedTypes) ->
   Filename = filename:join(["..", "src", "kpro_schema.erl"]),
-  Clauses = lists:flatmap(fun generate_schema_clauses/1, GrouppedTypes),
   IoData =
-    [?SCHEMA_MODULE_HEADER,
-     "\n",
-     infix(Clauses, ";\n"),
-     ".\n",
+    [?SCHEMA_MODULE_HEADER, "\n",
      generate_all_apis_fun(GrouppedTypes),
      generate_version_rage_clauses(GrouppedTypes),
-     generate_api_key_clauses()
+     generate_api_key_clauses(),
+     generate_req_rsp_clauses(GrouppedTypes)
     ],
   file:write_file(Filename, IoData).
+
+generate_req_rsp_clauses(GrouppedTypes0) ->
+  GrouppedTypes =
+    lists:map(fun({N, Types0}) ->
+                  Types = lists:keysort(1, Types0),
+                  {N, merge_versions(Types)}
+              end, GrouppedTypes0),
+  ReqClauses = lists:flatmap(fun generate_req_clauses/1, GrouppedTypes),
+  RspClauses = lists:flatmap(fun generate_rsp_clauses/1, GrouppedTypes),
+  [infix(ReqClauses, ";\n"), ".\n\n",
+   infix(RspClauses, ";\n"), ".\n"
+  ].
 
 generate_api_key_clauses() ->
   {ok, Apis} = file:consult("api-keys.eterm"),
@@ -62,7 +71,7 @@ generate_api_key_clauses() ->
        "api_key(", integer_to_list(Id), ") -> ", atom_to_list(Name)
       ] || {Name, Id} <- Apis
     ],
-  [infix(Clauses, ";\n"), ".\n"].
+  [infix(Clauses, ";\n"), ".\n\n"].
 
 generate_all_apis_fun(GrouppedTypes) ->
   F = fun({Name, _}, Acc) ->
@@ -95,26 +104,32 @@ generate_version_rage_clauses(GrouppedTypes) ->
   Clauses = lists:foldr(F, [], GrouppedTypes),
   [infix(Clauses, ";\n"), ".\n\n"].
 
-generate_schema_clauses({Name, VersionedFields0}) ->
-  VersionedFields = lists:keysort(1, VersionedFields0),
-  {API, ReqOrRsp} = split_name(Name),
-  generate_schema_clauses(API, ReqOrRsp, merge_versions(VersionedFields)).
+generate_req_clauses(PerNameTypes) ->
+  generate_schema_clauses(PerNameTypes, "req").
 
-generate_schema_clauses(_API, _ReqOrRsp, []) -> [];
-generate_schema_clauses(API, ReqOrRsp, [{Versions, Fields} | Rest]) ->
+generate_rsp_clauses(PerNameTypes) ->
+  generate_schema_clauses(PerNameTypes, "rsp").
+
+generate_schema_clauses({Name, VersionedFields}, ReqOrRsp) ->
+  case split_name(Name) of
+    {API, ReqOrRsp} -> generate_schema_clauses(ReqOrRsp ,API, VersionedFields);
+    {_, _} -> []
+  end.
+
+generate_schema_clauses(_ReqOrRsp, _API, []) -> [];
+generate_schema_clauses(ReqOrRsp, API, [{Versions, Fields} | Rest]) ->
   Head =
     case Versions of
       V when is_integer(V) ->
-        ["get(", API, ", ", ReqOrRsp, ", ", integer_to_list(V), ") ->"];
+        [ReqOrRsp, "(", API, ", ",integer_to_list(V), ") ->"];
       [V | Vs] ->
-        MinV = integer_to_list(V),
-        MaxV = integer_to_list(lists:last(Vs)),
-        ["get(", API, ", ", ReqOrRsp, ", V) ",
-         "when V >= ", MinV, ", V =< ", MaxV, " ->"]
+        Min = integer_to_list(V),
+        Max = integer_to_list(lists:last(Vs)),
+        [ReqOrRsp, "(", API, ", V) ", "when V >= ", Min, ", V =< ", Max, " ->"]
     end,
   Body = io_lib:format("  ~p", [Fields]),
   [ iolist_to_binary([Head, "\n", Body])
-  | generate_schema_clauses(API, ReqOrRsp, Rest)
+  | generate_schema_clauses(ReqOrRsp, API, Rest)
   ].
 
 group_per_name([], Acc) -> Acc;

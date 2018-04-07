@@ -150,12 +150,12 @@ now_ts() -> os:system_time() div 1000000.
 
 -spec get_req_schema(kpro:api(), kpro:vsn()) -> kpro:struct_schema().
 get_req_schema(Api, Vsn) ->
-  F = fun() -> kpro_schema:get(Api, req, Vsn) end,
+  F = fun() -> kpro_schema:req(Api, Vsn) end,
   get_schema(F, {Api, req, Vsn}).
 
 -spec get_rsp_schema(kpro:api(), kpro:vsn()) -> kpro:struct_schema().
 get_rsp_schema(Api, Vsn) ->
-  F = fun() -> kpro_schema:get(Api, rsp, Vsn) end,
+  F = fun() -> kpro_schema:rsp(Api, Vsn) end,
   get_schema(F, {Api, rsp, Vsn}).
 
 -spec get_prelude_schema(atom(), kpro:vsn()) -> kpro:struct_schema().
