@@ -182,7 +182,7 @@ decode_assignment(Bytes) ->
 
 %% @private
 dec(Schema, Bin) ->
-  {R, <<>>} = kpro_rsp_lib:dec_struct(Schema, [], [], Bin),
+  {R, <<>>} = kpro_rsp_lib:dec_struct(Schema, #{}, [], Bin),
   R.
 
 %%%_* Emacs ====================================================================

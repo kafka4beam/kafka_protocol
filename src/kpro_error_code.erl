@@ -48,8 +48,8 @@ decode(11) -> ?EC_STALE_CONTROLLER_EPOCH;
 decode(12) -> ?EC_OFFSET_METADATA_TOO_LARGE;
 decode(13) -> ?EC_NETWORK_EXCEPTION;
 decode(14) -> ?EC_GROUP_LOAD_IN_PROGRESS;
-decode(15) -> ?EC_GROUP_COORDINATOR_NOT_AVAILABLE;
-decode(16) -> ?EC_NOT_COORDINATOR_FOR_GROUP;
+decode(15) -> ?EC_COORDINATOR_NOT_AVAILABLE;
+decode(16) -> ?EC_NOT_COORDINATOR;
 decode(17) -> ?EC_INVALID_TOPIC_EXCEPTION;
 decode(18) -> ?EC_MESSAGE_LIST_TOO_LARGE;
 decode(19) -> ?EC_NOT_ENOUGH_REPLICAS;
@@ -124,10 +124,10 @@ do_desc(?EC_NETWORK_EXCEPTION) ->
 do_desc(?EC_GROUP_LOAD_IN_PROGRESS) ->
   <<"The coordinator is loading and hence can't process "
     "requests for this group.">>;
-do_desc(?EC_GROUP_COORDINATOR_NOT_AVAILABLE) ->
-  <<"The group coordinator is not available.">>;
-do_desc(?EC_NOT_COORDINATOR_FOR_GROUP) ->
-  <<"This is not the correct coordinator for this group.">>;
+do_desc(?EC_COORDINATOR_NOT_AVAILABLE) ->
+  <<"The group / transactional coordinator is not available.">>;
+do_desc(?EC_NOT_COORDINATOR) ->
+  <<"This is not the correct coordinator.">>;
 do_desc(?EC_INVALID_TOPIC_EXCEPTION) ->
   <<"The request attempted to perform an operation on an invalid topic.">>;
 do_desc(?EC_MESSAGE_LIST_TOO_LARGE) ->

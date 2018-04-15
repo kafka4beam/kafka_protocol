@@ -1,7 +1,7 @@
 % This eunit module tests below APIs:
 % offset_commit
 % offset_fetch
-% find_coordinator
+% find_coordinator (group)
 % join_group
 % heartbeat
 % leave_group
@@ -25,11 +25,8 @@
 %% 5. leave_group
 full_flow_test() ->
   GroupId = make_group_id(full_flow_test),
-  Cluster = kpro_test_lib:get_endpoints(plaintext),
-  ConnCfg = kpro_test_lib:connection_config(plaintext),
-  Args = #{type => group, id => GroupId},
-  % find_coordinator
-  {ok, Connection} = kpro:connect_coordinator(Cluster, ConnCfg, Args),
+  % find_coordinator (group)
+  {ok, Connection} = connect_coordinator(GroupId),
   % join_group
   #{ member_id := MemberId
    , generation_id := Generation
@@ -53,6 +50,12 @@ full_flow_test() ->
   ok.
 
 %%%_* Helpers ==================================================================
+
+connect_coordinator(GroupId) ->
+  Cluster = kpro_test_lib:get_endpoints(plaintext),
+  ConnCfg = kpro_test_lib:connection_config(plaintext),
+  Args = #{type => group, id => GroupId},
+  kpro:connect_coordinator(Cluster, ConnCfg, Args).
 
 join_group(Connection, GroupId) ->
   Meta = #{ version => 0
@@ -163,7 +166,7 @@ rand_vsn_request_sync(Connection, API, Body) ->
   Vsn = rand(Min, Max),
   Req = kpro:make_request(API, Vsn, Body),
   {ok, #kpro_rsp{msg = Rsp}} = kpro:request_sync(Connection, Req, ?TIMEOUT),
-  kpro_lib:struct_to_map(Rsp).
+  Rsp.
 
 str(Atom) -> atom_to_list(Atom).
 
