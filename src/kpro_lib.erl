@@ -13,7 +13,7 @@
         , ok_pipe/1
         , ok_pipe/2
         , parse_endpoints/2
-        , struct_to_map/1
+        , update_map/4
         , with_timeout/2
         ]).
 
@@ -27,24 +27,12 @@
 
 %%%_* APIs =====================================================================
 
-%% @doc Ensure `kpro:struct()' is a `map()'.
-struct_to_map([]) -> [];
-struct_to_map([{_, _} | _] = Struct) ->
-  maps:from_list(
-    lists:map(
-      fun({Name, Value}) ->
-          {Name, struct_to_map(Value)}
-      end, Struct));
-struct_to_map(Array) when is_list(Array) ->
-  [struct_to_map(Item) || Item <- Array];
-struct_to_map(Value) ->
-  Value.
-
 %% @doc Function pipeline. The fist function takes no args, all succeeding
 %% functions take one arg. All functions should retrun either
-%% `{ok, Result}' or `{error, Reason}'. `Result' is the input arg of the next
-%% function (or the result of pipeline). Any `{error, Reason}' return value
-%% would cause the pipeline to abort.
+%% `ok' | `{ok, Result}' | `{error, Reason}'. `Result' is the input arg of
+%% the next function (or the result of pipeline).
+%% NOTE: If a funcition returns `ok' the next should be an arity-0 fun.
+%% Any `{error, Reason}' return value would cause the pipeline to abort.
 %% NOTE: The pipe funcions are delegated to an agent process to evaluate
 %%       only exceptions and process links are propagated back to caller
 %%       other side-effects like monitor references are not handled.
@@ -217,7 +205,14 @@ get_schema(F, Context) ->
       erlang:error({unknown_type, Context})
   end.
 
-%% delegate function evaluation to a agent process
+%% @doc Equivalent to `maps:update_with/4' (since otp 19).
+update_map(Key, Fun, Init, Map) ->
+  case Map of
+    #{Key := Value} -> Map#{Key := Fun(Value)};
+    _ -> Map#{Key => Init}
+  end.
+
+%% @doc delegate function evaluation to a agent process
 %% abort if it does not finish in time.
 %% exceptions and linked processes are caught in agent process
 %% adn propagated to parent process
@@ -273,6 +268,8 @@ do_ok_pipe([Fun | FunList]) ->
   do_ok_pipe(FunList, Fun()).
 
 do_ok_pipe([], Result) -> Result;
+do_ok_pipe([Fun | FunList], ok) ->
+  do_ok_pipe(FunList, Fun());
 do_ok_pipe([Fun | FunList], {ok, LastOkResult}) ->
   do_ok_pipe(FunList, Fun(LastOkResult));
 do_ok_pipe(_FunList, {error, Reason}) ->

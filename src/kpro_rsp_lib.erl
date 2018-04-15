@@ -59,21 +59,21 @@ decode_body(API, Vsn, Body, Ref) ->
 parse(#kpro_rsp{ api = list_offsets
                , msg = Msg
                }) ->
-  case kpro_lib:struct_to_map(get_partition_rsp(Msg)) of
+  case get_partition_rsp(Msg) of
     #{offsets := [Offset]} = M -> M#{offset => Offset};
     #{offset := _} = M -> M
   end;
 parse(#kpro_rsp{ api = produce
                , msg = Msg
                }) ->
-  kpro_lib:struct_to_map(get_partition_rsp(Msg));
+  get_partition_rsp(Msg);
 parse(#kpro_rsp{ api = fetch
                , msg = Msg
                }) ->
   PartitionRsp = get_partition_rsp(Msg),
   Header = kpro:find(partition_header, PartitionRsp),
   Records = kpro:find(record_set, PartitionRsp),
-  #{ header => kpro_lib:struct_to_map(Header)
+  #{ header => Header
    , batches => kpro:decode_batches(Records)
    };
 parse(Rsp) ->
@@ -82,12 +82,12 @@ parse(Rsp) ->
 
 %% @doc Decode struct.
 dec_struct([], Fields, _Stack, Bin) ->
-  {lists:reverse(Fields), Bin};
+  {Fields, Bin};
 dec_struct([{Name, FieldSc} | Schema], Fields, Stack, Bin) ->
   NewStack = [Name | Stack],
   {Value0, Rest} = dec_struct_field(FieldSc, NewStack, Bin),
   Value = translate(NewStack, Value0),
-  dec_struct(Schema, [{Name, Value} | Fields], Stack, Rest).
+  dec_struct(Schema, Fields#{Name => Value}, Stack, Rest).
 
 %%%_* Internal functions =======================================================
 
@@ -101,7 +101,7 @@ dec(Type, Bin) -> kpro_lib:decode(Type, Bin).
 
 decode_struct(API, Vsn, Bin) ->
   Schema = kpro_lib:get_rsp_schema(API, Vsn),
-  dec_struct(Schema, _Fields = [], _Stack = [{API, Vsn}], Bin).
+  dec_struct(Schema, #{}, _Stack = [{API, Vsn}], Bin).
 
 decode_corr_id(Bin, Acc) ->
   case do_decode_corr_id(Bin) of
@@ -131,7 +131,7 @@ dec_struct_field({array, Schema}, Stack, Bin0) ->
     false -> dec_array_elements(Count, Schema, Stack, Bin, [])
   end;
 dec_struct_field(Schema, Stack, Bin) when ?IS_STRUCT_SCHEMA(Schema) ->
-  dec_struct(Schema, [], Stack, Bin);
+  dec_struct(Schema, #{}, Stack, Bin);
 dec_struct_field(F, _Stack, Bin) when is_function(F) ->
   %% Caller provided decoder
   F(Bin);
@@ -178,7 +178,7 @@ translate(_Stack, Value) ->
 
 %% Decode struct, assume no tail bytes.
 dec_struct_clean(Schema, Stack, Bin) ->
-  {Fields, <<>>} = dec_struct(Schema, [], Stack, Bin),
+  {Fields, <<>>} = dec_struct(Schema, #{}, Stack, Bin),
   Fields.
 
 %%%_* Emacs ====================================================================

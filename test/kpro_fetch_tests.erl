@@ -16,15 +16,15 @@ fetch_test_() ->
   [{"version " ++ integer_to_list(V),
     fun() -> with_vsn(V) end} || V <- lists:seq(Min, Max)].
 
-fetch_and_validate(_Connection, _Vsn, _BeginOffset, []) -> ok;
-fetch_and_validate(Connection, Vsn, BeginOffset, Messages) ->
+fetch_and_verify(_Connection, _Vsn, _BeginOffset, []) -> ok;
+fetch_and_verify(Connection, Vsn, BeginOffset, Messages) ->
   Batch0 = do_fetch(Connection, Vsn, BeginOffset, rand_num(1000)),
   Batch = drop_older_offsets(BeginOffset, Batch0),
   [#kafka_message{offset = FirstOffset} | _] = Batch,
   ?assertEqual(FirstOffset, BeginOffset),
   Rest = validate_messages(Batch, Messages),
   #kafka_message{offset = NextBeginOffset} = lists:last(Batch),
-  fetch_and_validate(Connection, Vsn, NextBeginOffset + 1, Rest).
+  fetch_and_verify(Connection, Vsn, NextBeginOffset + 1, Rest).
 
 %% kafka 0.9 may return messages having offset less than rquested
 %% in case the requested offset is in the middle of a compressed batch
@@ -66,7 +66,7 @@ with_vsn(Vsn) ->
     random_config(),
     fun(Connection) ->
         {BaseOffset, Messages} = produce_randomly(Connection),
-        fetch_and_validate(Connection, Vsn, BaseOffset, Messages)
+        fetch_and_verify(Connection, Vsn, BaseOffset, Messages)
     end).
 
 produce_randomly(Connection) ->
@@ -82,18 +82,19 @@ produce_randomly(Connection, Count, Acc) ->
           true -> MinVsn;
           false -> MinVsn + rand_num(MaxVsn - MinVsn) - 1
         end,
-  BatchEncOpts = rand_batch_enc_opts(),
+  Opts = rand_produce_opts(),
   Batch = make_random_batch(Vsn, rand_num(?RAND_BATCH_SIZE)),
-  Req = kpro_req_lib:produce(Vsn, ?TOPIC, ?PARTI, Batch, all_isr,
-                             _AckTimeout = 1000, BatchEncOpts),
+  Req = kpro_req_lib:produce(Vsn, ?TOPIC, ?PARTI, Batch, Opts),
   {ok, Rsp} = kpro:request_sync(Connection, Req, ?TIMEOUT),
   #{ error_code := no_error
    , base_offset := Offset
    } = kpro:parse_response(Rsp),
   produce_randomly(Connection, Count - 1, [{Offset, Batch} | Acc]).
 
-rand_batch_enc_opts() ->
-  #{compression => rand_element([no_compression, gzip, snappy])}.
+rand_produce_opts() ->
+  #{ compression => rand_element([no_compression, gzip, snappy])
+   , required_acks => rand_element([leader_only, all_isr, 1, -1])
+   }.
 
 rand_num(N) -> (os:system_time() rem N) + 1.
 
@@ -123,9 +124,7 @@ get_api_vsn_range() ->
 with_connection(Config, Fun) ->
   ConnFun =
     fun(Endpoints, Cfg) ->
-        % io:format(user, "connecting to ~p with config ~p", [Endpoints, Cfg]),
-        Args = #{topic => ?TOPIC, partition => ?PARTI, timeout => 1000},
-        kpro:connect_partition_leader(Endpoints, Cfg, Args)
+        kpro:connect_partition_leader(Endpoints, Cfg, ?TOPIC, ?PARTI)
     end,
   kpro_test_lib:with_connection(Config, ConnFun, Fun).
 

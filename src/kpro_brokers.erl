@@ -17,7 +17,9 @@
 
 -export([ connect_any/2
         , connect_coordinator/3
-        , connect_partition_leader/3
+        , connect_partition_leader/5
+        , discover_coordinator/4
+        , discover_partition_leader/4
         , get_api_versions/1
         , get_api_vsn_range/2
         , with_connection/3
@@ -29,9 +31,12 @@
 -type topic() :: kpro:topic().
 -type partition() :: kpro:partition().
 -type config() :: kpro_connection:config().
--type connection() :: kpro_connection:connection().
+-type connection() :: kpro:connection().
+-type coordinator_type() :: kpro:coordinator_type().
+-type group_id() :: kpro:group_id().
+-type transactional_id() :: kpro:transactional_id().
 
--define(DEFAULT_TIMEOUT, 5000).
+-define(DEFAULT_TIMEOUT, timer:seconds(5)).
 
 %% @doc Connect to any of the endpoints in the given list.
 -spec connect_any([endpoint()], config()) ->
@@ -66,26 +71,19 @@ with_connection(Endpoints, Config, Fun) ->
 %% Then send metadata request to discover partition leader broker
 %% Finally connect to the leader broker.
 -spec connect_partition_leader(connection() | [endpoint()], config(),
-                               #{ topic => topic()
-                                , partition => partition()
-                                , timeout => timeout()
-                                }) ->
+                               topic(), partition(), #{timeout => timeout()}) ->
         {ok, connection()} | {error, any()}.
-connect_partition_leader(C, Config, #{ topic := Topic
-                                     , partition := Partition
-                                     } = Args) when is_pid(C) ->
-  Timeout = maps:get(timeout, Args, ?DEFAULT_TIMEOUT),
+connect_partition_leader(C, Config, Topic, Partition, Opts) when is_pid(C) ->
+  Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
   FL =
     [ fun() -> discover_partition_leader(C, Topic, Partition, Timeout) end
     , fun(LeaderEndpoint) -> connect_any([LeaderEndpoint], Config) end
     ],
   kpro_lib:ok_pipe(FL, Timeout);
-connect_partition_leader(Bootstrap, Config, #{ topic := Topic
-                                             , partition := Partition
-                                             } = Args) ->
+connect_partition_leader(Bootstrap, Config, Topic, Partition, Opts) ->
   %% Connect without linking to the connection pid
   NolinkConfig = Config#{nolink => true},
-  Timeout = maps:get(timeout, Args, ?DEFAULT_TIMEOUT),
+  Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
   FL =
     [ fun() -> connect_any(Bootstrap, NolinkConfig) end
     , fun(Connection) ->
@@ -100,7 +98,7 @@ connect_partition_leader(Bootstrap, Config, #{ topic := Topic
 %% endpoints, it will frist try to connect to any of the nodes
 %% NOTE: 'txn' type only applicable to kafka 0.11 or later
 -spec connect_coordinator(connection() | [endpoint()], config(),
-                          #{ type => group | txn
+                          #{ type => kpro:coordinator_type()
                            , id => binary()
                            , timeout => timeout()
                            }) -> {ok, connection()} | {error, any()}.
@@ -150,8 +148,66 @@ get_api_vsn_range(Connection, API) ->
       {error, Reason}
   end.
 
-%%%_* Internal functions =======================================================
+%% @doc Discover partition leader endpoint.
+%% @end
+%% Can not get dialyzer working for this call:
+%% kpro_req_lib:metadata(Vsn, [Topic])
+-dialyzer([{nowarn_function, [discover_partition_leader/4]}]).
+-spec discover_partition_leader(connection(), topic(),partition(),
+                                timeout()) -> {ok, endpoint()} | {error, any()}.
+discover_partition_leader(Connection, Topic, Partition, Timeout) ->
+  FL =
+    [ fun() -> get_api_vsn_range(Connection, metadata) end
+    , fun({_, Vsn}) ->
+          Req = kpro_req_lib:metadata(Vsn, [Topic]),
+          kpro_connection:request_sync(Connection, Req, Timeout)
+      end
+    , fun(#kpro_rsp{msg = Meta}) ->
+          Brokers = kpro:find(brokers, Meta),
+          [TopicMeta] = kpro:find(topic_metadata, Meta),
+          ErrorCode = kpro:find(error_code, TopicMeta),
+          case kpro_error_code:is_error(ErrorCode) of
+            true ->
+              {error, ErrorCode};
+            false ->
+              {ok, {Brokers, TopicMeta}}
+          end
+      end
+    , fun({Brokers, TopicMeta}) ->
+          Partitions = kpro:find(partition_metadata, TopicMeta),
+          Pred = fun(P_Meta) -> kpro:find(partition, P_Meta) =:= Partition end,
+          case lists:filter(Pred, Partitions) of
+            [] ->
+              %% Partition number is out of range
+              {error, ?EC_UNKNOWN_TOPIC_OR_PARTITION};
+            [PartitionMeta] ->
+              {ok, {Brokers, PartitionMeta}}
+          end
+      end
+    , fun({Brokers, PartitionMeta}) ->
+          ErrorCode = kpro:find(error_code, PartitionMeta),
+          case kpro_error_code:is_error(ErrorCode) of
+            true -> {error, ErrorCode};
+            false -> {ok, {Brokers, PartitionMeta}}
+          end
+      end
+    , fun({Brokers, PartitionMeta}) ->
+          LeaderBrokerId = kpro:find(leader, PartitionMeta),
+          Pred = fun(BrokerMeta) ->
+                     kpro:find(node_id, BrokerMeta) =:= LeaderBrokerId
+                 end,
+          [Broker] = lists:filter(Pred, Brokers),
+          Host = kpro:find(host, Broker),
+          Port = kpro:find(port, Broker),
+          {ok, {Host, Port}}
+      end
+    ],
+  kpro_lib:ok_pipe(FL).
 
+%% @doc Discover group or transactional coordinator.
+-spec discover_coordinator(connection(), coordinator_type(),
+                           group_id() | transactional_id(), timeout()) ->
+        {ok, endpoint()} | {error, any()}.
 discover_coordinator(Connection, Type, Id, Timeout) ->
   FL =
     [ fun() -> get_api_vsn_range(Connection, find_coordinator) end
@@ -183,6 +239,8 @@ discover_coordinator(Connection, Type, Id, Timeout) ->
       end
     ],
   kpro_lib:ok_pipe(FL, Timeout).
+
+%%%_* Internal functions =======================================================
 
 api_vsn_range_intersection(undefined) ->
   %% kpro_connection is configured not to query api versions (kafka-0.9)
@@ -232,59 +290,6 @@ connect_any([{Host, Port} | Rest], Config, Errors) ->
     {error, Error} ->
       connect_any(Rest, Config, [{{Host, Port}, Error} | Errors])
   end.
-
-%% Can not get dialyzer working for this call: kpro_req_lib:metadata(Vsn, [Topic])
--dialyzer([{nowarn_function, [discover_partition_leader/4]}]).
--spec discover_partition_leader(connection(), topic(), partition(), timeout()) ->
-        {ok, endpoint()} | {error, any()}.
-discover_partition_leader(Connection, Topic, Partition, Timeout) ->
-  FL =
-    [ fun() -> get_api_vsn_range(Connection, metadata) end
-    , fun({_, Vsn}) ->
-          Req = kpro_req_lib:metadata(Vsn, [Topic]),
-          kpro_connection:request_sync(Connection, Req, Timeout)
-      end
-    , fun(#kpro_rsp{msg = Meta}) ->
-          Brokers = kpro:find(brokers, Meta),
-          [TopicMeta] = kpro:find(topic_metadata, Meta),
-          ErrorCode = kpro:find(error_code, TopicMeta),
-          case kpro_error_code:is_error(ErrorCode) of
-            true ->
-              {error, ErrorCode};
-            false ->
-              {ok, {Brokers, TopicMeta}}
-          end
-      end
-    , fun({Brokers, TopicMeta}) ->
-          Partitions = kpro:find(partition_metadata, TopicMeta),
-          Pred = fun(P_Meta) -> kpro:find(partition, P_Meta) =:= Partition end,
-          case lists:filter(Pred, Partitions) of
-            [] ->
-              %% Partition number is out of range
-              {error, ?EC_UNKNOWN_TOPIC_OR_PARTITION};
-            [PartitionMeta] ->
-              {ok, {Brokers, PartitionMeta}}
-          end
-      end
-    , fun({Brokers, PartitionMeta}) ->
-          ErrorCode = kpro:find(error_code, PartitionMeta),
-          case kpro_error_code:is_error(ErrorCode) of
-            true -> {error, ErrorCode};
-            false -> {ok, {Brokers, PartitionMeta}}
-          end
-      end
-    , fun({Brokers, PartitionMeta}) ->
-          LeaderBrokerId = kpro:find(leader, PartitionMeta),
-          Pred = fun(BrokerMeta) ->
-                     kpro:find(node_id, BrokerMeta) =:= LeaderBrokerId
-                 end,
-          [Broker] = lists:filter(Pred, Brokers),
-          Host = kpro:find(host, Broker),
-          Port = kpro:find(port, Broker),
-          {ok, {Host, Port}}
-      end
-    ],
-  kpro_lib:ok_pipe(FL).
 
 %% Avoid always pounding the first endpoint in bootstraping list.
 random_order(L) ->

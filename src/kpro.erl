@@ -15,11 +15,45 @@
 
 -module(kpro).
 
+%% Connection
+-export([ close_connection/1
+        , connect_any/2
+        , connect_coordinator/3
+        , connect_partition_leader/4
+        , connect_partition_leader/5
+        ]).
+
+%% Broker properties
+-export([ discover_coordinator/4
+        , discover_partition_leader/4
+        , get_api_versions/1
+        , get_api_vsn_range/2
+        ]).
+
+%% Primitive RPCs
+-export([ request_sync/3
+        , request_async/2
+        ]).
+
+%% Transactional RPCs
+-export([ abort_txn/1
+        , abort_txn/2
+        , commit_txn/1
+        , commit_txn/2
+        , init_txn_ctx/2
+        , init_txn_ctx/3
+        , send_txn_partitions/2
+        , send_txn_partitions/3
+        ]).
+
+%% request makers/response parsers
+%% there are more in `kpro_req_lib'
 -export([ encode_request/3
         , make_request/3
         , parse_response/1
         ]).
 
+%% misc
 -export([ decode_batches/1
         , find/2
         , find/3
@@ -27,20 +61,7 @@
         , parse_endpoints/2
         ]).
 
--export([ request_sync/3
-        , request_async/2
-        ]).
-
--export([ close_connection/1
-        , connect_any/2
-        , connect_coordinator/3
-        , connect_partition_leader/3
-        , get_api_versions/1
-        , get_api_vsn_range/2
-        ]).
-
 -export_type([ api/0
-             , batch_enc_opts/0
              , batch_decode_result/0
              , batch_input/0
              , batch_meta/0
@@ -49,12 +70,14 @@
              , compress_option/0
              , connection/0
              , conn_config/0
+             , coordinator_type/0
              , corr_id/0
              , count/0
              , endpoint/0
              , error_code/0
              , field_name/0
              , field_value/0
+             , group_id/0
              , headers/0
              , header_key/0
              , header_val/0
@@ -69,23 +92,27 @@
              , kv_list/0
              , magic/0
              , message/0
-             , meta_input/0
              , msg_ts/0
              , offset/0
              , partition/0
              , portnum/0
              , primitive/0
              , primitive_type/0
+             , produce_opts/0
+             , producer_epoch/0
              , producer_id/0
              , protocol/0
              , req/0
              , required_acks/0
              , rsp/0
              , schema/0
+             , seqno/0
              , stack/0
              , str/0
              , struct/0
              , timestamp_type/0
+             , transactional_id/0
+             , txn_ctx/0
              , topic/0
              , value/0
              , vsn/0
@@ -129,12 +156,20 @@
                         | producer_id
                         | producer_epoch
                         | first_sequence.
-% Attribute :: {compression, kpro:compress_option()}
-%            | {ts_type, kpro:timestamp_type()}
+
+-type seqno() :: non_neg_integer().
+%% optional args to make produce request
+-type produce_opts() :: #{ compression => compress_option() % common
+                         , required_acks => required_acks() % common
+                         , ack_timeout => wait() % common
+                         , txn_ctx => txn_ctx() % txn only
+                         , first_seqno => seqno() % txn only
+                         }.
+
+% Attribute :: {compression, compress_option()}
+%            | {ts_type, timestamp_type()}
 %            | is_transaction | {is_transaction, boolean()}
 %            | is_control | {is_control, boolean()}.
-
--type batch_enc_opts() :: #{atom() => term()}.
 -type batch_attributes() :: proplists:proplist().
 -type batch_meta_val() :: batch_attributes() | integer().
 
@@ -150,7 +185,6 @@
 -type tkv() :: {msg_ts(), key(), value_mabye_nested()}. % magic 1
 -type msg_input() :: #{msg_key() => msg_val()}. % magic 2
 
--type meta_input() :: #{atom() => term()}.
 -type batch_input() :: [kv()] % magic 0
                      | [tkv()] % magic 1
                      | [msg_input()]. % magic 2 non-transactional
@@ -202,6 +236,15 @@
 -type vsn_range() :: {vsn(), vsn()}.
 -type vsn_ranges() :: #{api() => vsn_range()}.
 -type protocol() :: plaintext | ssl | sasl_plaintext | sasl_ssl.
+-type coordinator_type() :: group | txn.
+-type group_id() :: binary().
+-type transactional_id() :: binary().
+-type producer_epoch() :: int16().
+-type txn_ctx() :: #{ connection => connection()
+                    , transactional_id => transactional_id()
+                    , producer_id => producer_id()
+                    , producer_epoch => producer_id()
+                    }.
 
 %% All versions of kafka messages (records) share the same header:
 %% Offset => int64
@@ -300,24 +343,49 @@ close_connection(Connection) ->
 %% NOTE: Connection process is linked to caller unless `nolink => true'
 %%       is set in connection connection config.
 -spec connect_partition_leader(connection() | [endpoint()], conn_config(),
-                               #{ topic => topic()
-                                , partition => partition()
-                                , timeout => timeout()
-                                }) -> {ok, connection()} | {error, any()}.
-connect_partition_leader(Bootstrap, ConnConfig, Args) ->
-  kpro_brokers:connect_partition_leader(Bootstrap, ConnConfig, Args).
+                               topic(), partition()) ->
+        {ok, connection()} | {error, any()}.
+connect_partition_leader(Bootstrap, ConnConfig, Topic, Partition) ->
+  connect_partition_leader(Bootstrap, ConnConfig, Topic, Partition, #{}).
+
+%% @doc Connect partition leader.
+-spec connect_partition_leader(connection() | [endpoint()], conn_config(),
+                               topic(), partition(), #{timeout => timeout()}) ->
+        {ok, connection()} | {error, any()}.
+connect_partition_leader(Bootstrap, ConnConfig, Topic, Partition, Opts) ->
+  kpro_brokers:connect_partition_leader(Bootstrap, ConnConfig,
+                                        Topic, Partition, Opts).
+
+%% @doc Discover partition leader broker endpoint.
+%% An implicit step performed in `connect_partition_leader'.
+%% This is useful when the caller wants to re-use already established
+%% towards the discovered endpoint.
+-spec discover_partition_leader(connection(), topic(),partition(),
+                                timeout()) -> {ok, endpoint()} | {error, any()}.
+discover_partition_leader(Connection, Topic, Partition, Timeout) ->
+  kpro_brokers:discover_partition_leader(Connection, Topic, Partition, Timeout).
 
 %% @doc Connect group or transaction coordinator.
 %% If the first arg is not a connection pid but a list of bootstraping
 %% endpoints, it will frist try to connect to any of the nodes
 %% NOTE: 'txn' type only applicable to kafka 0.11 or later
 -spec connect_coordinator(connection() | [endpoint()], conn_config(),
-                          #{ type => group | txn
+                          #{ type => coordinator_type()
                            , id => binary()
                            , timeout => timeout()
                            }) -> {ok, connection()} | {error, any()}.
 connect_coordinator(Bootstrap, ConnConfig, Args) ->
   kpro_brokers:connect_coordinator(Bootstrap, ConnConfig, Args).
+
+%% @doc Discover group or transactional coordinator.
+%% An implicit step performed in `connect_coordinator'.
+%% This is useful when the caller wants to re-use already established
+%% towards the discovered endpoint.
+-spec discover_coordinator(connection(), coordinator_type(),
+                           group_id() | transactional_id(), timeout()) ->
+        {ok, endpoint()} | {error, any()}.
+discover_coordinator(Connection, Type, Id, Timeout) ->
+  kpro_brokers:discover_coordinator(Connection, Type, Id, Timeout).
 
 %% @doc Qury API versions using the given `kpro_connection' pid.
 -spec get_api_versions(connection()) ->
@@ -345,6 +413,62 @@ find(Field, Struct, Default) ->
     error : {no_such_field, _} ->
       Default
   end.
+
+%%%_* Transactional APIs =======================================================
+
+%% @doc Initialize a transaction context, the connection should be established
+%% towards transactional coordinator broker.
+%% By default the request timeout `timeout' is 5 seconds. This is is for client
+%% to abort waitting for response and consider it an error `{error, timeout}'.
+%% Transaction timeout `txn_timeout' is `-1' by default, which means use kafka
+%% broker setting. The default timeout in kafka broker is 1 minute.
+%% `txn_timeout' is for kafka transaction coordinator to abort transaction if
+%% a transaction did not end (commit or abort) in time.
+-spec init_txn_ctx(connection(), transactional_id()) ->
+        {ok, txn_ctx()} | {error, any()}.
+init_txn_ctx(Connection, TxnId) ->
+  init_txn_ctx(Connection, TxnId, #{}).
+
+%% @doc Initialize a transaction context, the connection should be established
+%% towards transactional coordinator broker.
+-spec init_txn_ctx(connection(), transactional_id(),
+                   #{ timeout => timeout()
+                    , txn_timeout => pos_integer()
+                    }) -> {ok, txn_ctx()} | {error, any()}.
+init_txn_ctx(Connection, TxnId, Opts) ->
+  kpro_txn_lib:init_txn_ctx(Connection, TxnId, Opts).
+
+%% @doc Abort transaction.
+-spec abort_txn(txn_ctx()) -> ok | {errory, any()}.
+abort_txn(TxnCtx) ->
+  abort_txn(TxnCtx, #{}).
+
+%% @doc Abort transaction.
+-spec abort_txn(txn_ctx(), #{timeout => timeout()}) -> ok | {error, any()}.
+abort_txn(TxnCtx, Opts) ->
+  kpro_txn_lib:end_txn(TxnCtx, abort, Opts).
+
+%% @doc Add partitions to transaction.
+-spec send_txn_partitions(txn_ctx(), [{topic(), partition()}]) ->
+        ok | {error, any()}.
+send_txn_partitions(TxnCtx, TPL) ->
+  send_txn_partitions(TxnCtx, TPL, #{}).
+
+%% @doc Add partitions to transaction.
+-spec send_txn_partitions(txn_ctx(), [{topic(), partition()}],
+                          #{timeout => timeout()}) -> ok | {error, any()}.
+send_txn_partitions(TxnCtx, TPL, Opts) ->
+  kpro_txn_lib:add_partitions_to_txn(TxnCtx, TPL, Opts).
+
+%% @doc Commit transaction.
+-spec commit_txn(txn_ctx()) -> ok | {error, any()}.
+commit_txn(TxnCtx) ->
+  commit_txn(TxnCtx, #{}).
+
+%% @doc Commit transaction.
+-spec commit_txn(txn_ctx(), #{timeout => timeout()}) -> ok | {error, any()}.
+commit_txn(TxnCtx, Opts) ->
+  kpro_txn_lib:end_txn(TxnCtx, commit, Opts).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

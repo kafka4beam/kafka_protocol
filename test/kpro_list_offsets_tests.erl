@@ -24,8 +24,7 @@ make_test_case(Vsn, Ts) ->
              end,
       ConnFun =
         fun(Endpoints, Config) ->
-            Args = #{topic => ?TOPIC, partition => ?PARTI, timeout => 1000},
-            kpro:connect_partition_leader(Endpoints, Config, Args)
+            kpro:connect_partition_leader(Endpoints, Config, ?TOPIC, ?PARTI)
         end,
       kpro_test_lib:with_connection(ConnFun, Test)
   end}.

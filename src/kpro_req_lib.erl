@@ -25,12 +25,16 @@
         , fetch/8
         ]).
 
--export([ produce/6
-        , produce/7
+-export([ produce/4
+        , produce/5
         ]).
 
 -export([ metadata/2
         , metadata/3
+        ]).
+
+-export([ add_partitions_to_txn/2
+        , end_txn/2
         ]).
 
 -export([ encode/3
@@ -38,14 +42,32 @@
         ]).
 
 -include("kpro_private.hrl").
+-define(DEFAULT_ACK_TIMEOUT, 10000).
+
+-type vsn() :: kpro:vsn().
+-type topic() :: kpro:topic().
+-type req() :: kpro:req().
+-type msg_ts() :: kpro:msg_ts().
+-type isolation_level() :: kpro:isolation_level().
+-type count() :: kpro:count().
+-type batch_input() :: kpro:batch_input().
+-type produce_opts() :: kpro:produce_opts().
+-type txn_ctx() :: kpro:txn_ctx().
+-type client_id() :: kpro:client_id().
+-type corr_id() :: kpro:corr_id().
+-type api() :: kpro:api().
+-type struct() :: kpro:struct().
+-type offset() :: kpro:offset().
+-type wait() :: kpro:wait().
+-type partition() :: kpro:partition().
 
 %% @doc Make a `metadata' request
--spec metadata(kpro:vsn(), all | [kpro:topic()]) -> kpro:req().
+-spec metadata(vsn(), all | [topic()]) -> req().
 metadata(Vsn, Topics) ->
   metadata(Vsn, Topics, _IsAutoCreateAllowed = false).
 
 %% @doc Make a `metadata' request
--spec metadata(kpro:vsn(), all | [kpro:topic()], boolean()) -> kpro:req().
+-spec metadata(vsn(), all | [topic()], boolean()) -> req().
 metadata(Vsn, [], IsAutoCreateAllowed) ->
   metadata(Vsn, all, IsAutoCreateAllowed);
 metadata(Vsn, Topics0, IsAutoCreateAllowed) ->
@@ -59,17 +81,16 @@ metadata(Vsn, Topics0, IsAutoCreateAllowed) ->
 
 %% @doc Help function to contruct a `list_offset' request
 %% against one single topic-partition.
--spec list_offsets(kpro:vsn(), kpro:topic(), kpro:partition(),
-                   kpro:msg_ts()) -> kpro:req().
+-spec list_offsets(vsn(), topic(), partition(), msg_ts()) -> req().
 list_offsets(Vsn, Topic, Partition, Time) ->
   list_offsets(Vsn, Topic, Partition, Time, ?kpro_read_committed).
 
 %% @doc Help function to contruct a `list_offset' request against one single
 %% topic-partition. In transactional mode,
 %% set `IsolationLevel = ?kpro_read_uncommitted' to list uncommited offsets.
--spec list_offsets(kpro:vsn(), kpro:topic(), kpro:partition(),
-                   latest | earliest | kpro:msg_ts(),
-                   kpro:isolation_level()) -> kpro:req().
+-spec list_offsets(vsn(), topic(), partition(),
+                   latest | earliest | msg_ts(),
+                   isolation_level()) -> req().
 list_offsets(Vsn, Topic, Partition, latest, IsolationLevel) ->
   list_offsets(Vsn, Topic, Partition, -1, IsolationLevel);
 list_offsets(Vsn, Topic, Partition, earliest, IsolationLevel) ->
@@ -105,9 +126,8 @@ fetch(Vsn, Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
 %% @doc Help function to construct a `fetch' request
 %% against one single topic-partition. In transactional mode, set
 %% `IsolationLevel = kpro_read_uncommitted' to fetch uncommitted messages.
--spec fetch(kpro:vsn(), kpro:topic(), kpro:partition(), kpro:offset(),
-            kpro:wait(), kpro:count(), kpro:count(),
-            kpro:isolation_level()) -> kpro:req().
+-spec fetch(vsn(), topic(), partition(), offset(), wait(), count(), count(),
+            isolation_level()) -> req().
 fetch(Vsn, Topic, Partition, Offset, MaxWaitTime,
       MinBytes, MaxBytes, IsolationLevel) ->
   Fields =
@@ -125,39 +145,83 @@ fetch(Vsn, Topic, Partition, Offset, MaxWaitTime,
                  ]]}]]}],
   make(fetch, Vsn, Fields).
 
-%% @doc Help function to construct a produce request for
-%% messages targeting one single topic-partition
-%% with default batch encoding option.
--spec produce(kpro:vsn(), kpro:topic(), kpro:partition(), kpro:batch_input(),
-              kpro:required_acks(), kpro:wait()) -> kpro:req().
-produce(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout) ->
-  produce(Vsn, Topic, Partition, Batch, RequiredAcks, AckTimeout, #{}).
 
-%% @doc Help function to construct a produce request for
-%% messages targeting one single topic-partition.
--spec produce(kpro:vsn(), kpro:topic(), kpro:partition(), kpro:batch_input(),
-              kpro:required_acks(), kpro:wait(), kpro:batch_enc_opts()) ->
-        kpro:req().
-produce(Vsn, Topic, Partition, Batch, RequiredAcks0,
-        AckTimeout, Options) ->
-  RequiredAcks = required_acks(RequiredAcks0),
-  CompressOption = maps:get(compression, Options, no_compression),
-  Messages = kpro_batch:encode(Batch, CompressOption),
+%% @doc Help function to construct a produce request.
+produce(Vsn, Topic, Partition, Batch) ->
+  produce(Vsn, Topic, Partition, Batch, #{}).
+
+%% @doc Help function to construct a produce request.
+%% By default, it constructs a non-transactional produce request.
+%% For transactional produce requests, below conditions should be met.
+%% 1. `Batch' arg must be be a `[map()]' to indicate magic v2,
+%%     for example: `[#{key => Key, value => Value, ts => Ts}]'.
+%%     Current system time will be taken if `ts' is missing in batch input.
+%% 2. `first_sequence' must exist in `Opts'.
+%%     It should be the sequence number for the fist message in batch.
+%%     Maintained by producr, sequence numbers should start from zero and be
+%%     monotonically increasing, with one sequence number per topic-partition.
+%% 3. `txn_ctx' (which is of spec `kpro:txn_ctx()') must exist in `Opts'
+-spec produce(vsn(), topic(), partition(),
+              batch_input(), produce_opts()) -> req().
+produce(Vsn, Topic, Partition, Batch, Opts) ->
+  RequiredAcks = required_acks(maps:get(required_acks, Opts, all_isr)),
+  Compression = maps:get(compression, Opts, ?no_compression),
+  AckTimeout = maps:get(ack_timeout, Opts, ?DEFAULT_ACK_TIMEOUT),
+  TxnCtx = maps:get(txn_ctx, Opts, false),
+  FirstSequence = maps:get(first_sequence, Opts, -1),
+  EncodedBatch =
+    case TxnCtx of
+      false ->
+        kpro_batch:encode(Batch, Compression);
+      TxnCtx ->
+        true = FirstSequence >= 0, %% assert
+        kpro_batch:encode_tx(Batch, Compression, FirstSequence, TxnCtx)
+    end,
   Fields =
-    [{transactional_id, ?kpro_null},
+    [{transactional_id, transactional_id(TxnCtx)},
      {acks, RequiredAcks},
      {timeout, AckTimeout},
      {topic_data, [[{topic, Topic},
                     {data, [[{partition, Partition},
-                             {record_set, Messages}
+                             {record_set, EncodedBatch}
                             ]]}
                    ]]}
     ],
   Req = make(produce, Vsn, Fields),
   Req#kpro_req{no_ack = RequiredAcks =:= 0}.
 
+%% @doc Make `end_txn' request.
+-spec end_txn(txn_ctx(), commit | abort) -> req().
+end_txn(TxnCtx, CommitOrAbort) ->
+  Result = case CommitOrAbort of
+             commit -> true;
+             abort -> false
+           end,
+  Body = TxnCtx#{transaction_result => Result},
+  make(end_txn, _Vsn = 0, Body).
+
+%% @doc Make `add_partitions_to_txn' request.
+-spec add_partitions_to_txn(txn_ctx(), [{topic(), partition()}]) -> req().
+add_partitions_to_txn(TxnCtx, TopicPartitionList) ->
+  Groupped =
+  lists:foldl(
+    fun({Topic, Partition}, Acc) ->
+        kpro_lib:update_map(
+          Topic, fun(PL) -> [Partition | PL] end,
+          [Partition], Acc)
+    end, #{}, TopicPartitionList),
+  Topics =
+  maps:fold(
+    fun(Topic, Partitions, Acc) ->
+        [#{ topic => Topic
+          , partitions => Partitions
+          } | Acc]
+    end, [], Groupped),
+  Body = TxnCtx#{topics => Topics},
+  make(add_partitions_to_txn, _Vsn = 0, Body).
+
 %% @doc Help function to make a request body.
--spec make(kpro:api(), kpro:vsn(), kpro:struct()) -> kpro:req().
+-spec make(api(), vsn(), struct()) -> req().
 make(API, Vsn, Fields) ->
   ok = assert_known_api_and_vsn(API, Vsn),
   #kpro_req{ api = API
@@ -166,7 +230,7 @@ make(API, Vsn, Fields) ->
            }.
 
 %% @doc Encode a request to bytes that can be sent on wire.
--spec encode(kpro:client_id(), kpro:corr_id(), kpro:req()) -> iodata().
+-spec encode(client_id(), corr_id(), req()) -> iodata().
 encode(ClientName, CorrId, Req) ->
   #kpro_req{api = API, vsn = Vsn, msg = Msg} = Req,
   ApiKey = kpro_schema:api_key(API),
@@ -182,9 +246,9 @@ encode(ClientName, CorrId, Req) ->
 
 %%%_* Internal functions =======================================================
 
-required_acks(all_isr) -> -1;
 required_acks(none) -> 0;
 required_acks(leader_only) -> 1;
+required_acks(all_isr) -> -1;
 required_acks(I) when I >= -1 andalso I =< 1 -> I.
 
 encode_struct(_API, _Vsn, Bin) when is_binary(Bin) -> Bin;
@@ -270,6 +334,9 @@ assert_known_api_and_vsn(API, Vsn) ->
                                  , {known_vsn_range, {Min, Max}}
                                  ]})
   end.
+
+transactional_id(false) -> ?kpro_null;
+transactional_id(#{transactional_id := TxnId}) -> TxnId.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

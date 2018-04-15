@@ -35,9 +35,8 @@
 -define(EC_OFFSET_METADATA_TOO_LARGE,    'OffsetMetadataTooLarge').         % 12
 -define(EC_NETWORK_EXCEPTION,            'NetworkException').               % 13
 -define(EC_GROUP_LOAD_IN_PROGRESS,       'GroupLoadInProgress').            % 14
--define(EC_GROUP_COORDINATOR_NOT_AVAILABLE,
-        'GroupCoordinatorNotAvailable').                                    % 15
--define(EC_NOT_COORDINATOR_FOR_GROUP,    'NotCoordinatorForGroup').         % 16
+-define(EC_COORDINATOR_NOT_AVAILABLE,    'CoordinatorNotAvailable').        % 15
+-define(EC_NOT_COORDINATOR,              'NotCoordinator').                 % 16
 -define(EC_INVALID_TOPIC_EXCEPTION,      'InvalidTopicException').          % 17
 -define(EC_MESSAGE_LIST_TOO_LARGE,       'MessageListTooLargeException').   % 18
 -define(EC_NOT_ENOUGH_REPLICAS,          'NotEnoughReplicasException').     % 19
