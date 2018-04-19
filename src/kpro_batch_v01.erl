@@ -66,7 +66,7 @@ encode(KvList, Compression) ->
   end.
 
 %% @doc Decode one message or a compressed batch.
-%% Messages are returned in reversed order, so it's cheaper for caller
+%% NOTE: Messages are returned in reversed order, so it's cheaper for caller
 %% to concatenate (++) a short header to a long tail.
 %% @end
 %% Comment is copied from:
@@ -92,7 +92,8 @@ encode(KvList, Compression) ->
 %% 7. 4 byte payload length, containing length V
 %% 8. V byte payload
 -spec decode(offset(), binary()) -> [message()].
-decode(Offset, <<Crc:32/unsigned-integer, Body/binary>>) ->
+decode(Offset, <<CRC:32/unsigned-integer, Body/binary>>) ->
+  CRC = erlang:crc32(Body), %% assert
   {MagicByte, Rest0} = dec(int8, Body),
   {Attributes, Rest1} = dec(int8, Rest0),
   Compression = kpro_compress:codec_to_method(Attributes),
@@ -111,9 +112,6 @@ decode(Offset, <<Crc:32/unsigned-integer, Body/binary>>) ->
                           , key = Key
                           , ts = Ts
                           , ts_type = TsType
-                          , crc = Crc
-                          , magic_byte = MagicByte
-                          , attributes = Attributes
                           },
       [Msg];
     false ->

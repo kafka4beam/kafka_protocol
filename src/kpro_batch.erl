@@ -26,6 +26,7 @@
 -export([ decode/1
         , encode/2
         , encode_tx/4
+        , is_control/1
         ]).
 
 -include("kpro_private.hrl").
@@ -38,10 +39,9 @@
 -type txn_ctx() :: kpro:txn_ctx().
 -type compress_option() :: kpro:compress_option().
 -type batch_input() :: kpro:batch_input().
--type batch_meta() :: kpro:batch_meta().
--type batch_attributes() :: kpro:batch_attributes().
 -type offset() :: kpro:offset().
 -type headers() :: kpro:headers().
+-type batch_meta() :: kpro:batch_meta().
 -define(NO_META, ?KPRO_NO_BATCH_META).
 
 %% @doc Encode a list of batch inputs into byte stream.
@@ -80,14 +80,14 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
           #{ producer_id := ProducerId
            , producer_epoch := ProducerEpoch
            }) ->
+  IsTxn = is_integer(ProducerId) andalso ProducerId > 0,
   FirstTimestamp =
     case maps:get(ts, FirstMsg, false) of
       false -> kpro_lib:now_ts();
       Ts -> Ts
     end,
-  Attributes = [{compression, Compression}, is_transaction],
-  EncodedBatch = encode_batch(Attributes, FirstTimestamp, Batch),
-  EncodedAttributes = encode_attributes(Attributes),
+  EncodedBatch = encode_batch(Compression, FirstTimestamp, Batch),
+  EncodedAttributes = encode_attributes(Compression, IsTxn),
   PartitionLeaderEpoch = -1, %% producer can set whatever
   FirstOffset = 0, %% always 0
   Magic = 2, %% always 2
@@ -125,35 +125,34 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
 decode(Bin) ->
   decode(Bin, _Acc = []).
 
+%% @doc Return true if it is a control batch.
+-spec is_control(batch_meta()) -> boolean().
+is_control(?NO_META) -> false;
+is_control(#{is_control := Is}) -> Is.
+
 %%%_* Internals ================================================================
 
 -spec decode(binary(), Acc) -> Acc when Acc :: [{batch_meta(), [message()]}].
 decode(<<Offset:64, L:32, Body:L/binary, Rest/binary>>, Acc) ->
   <<_:32, Magic:8, _:32, _/binary>> = Body,
-  Batch = case Magic < 2 of
-            true  -> {?NO_META, kpro_batch_v01:decode(Offset, Body)};
-            false -> do_decode(Offset, Body)
-          end,
-  NewAcc = add_batch(Batch, Acc),
+  {Meta, MsgsReversed} =
+    case Magic < 2 of
+      true  -> {?NO_META, kpro_batch_v01:decode(Offset, Body)};
+      false -> do_decode(Offset, Body)
+    end,
+  NewAcc =
+    case Acc of
+      [{?NO_META, MsgsReversed0} | Acc0] ->
+        %% merge magic v0 batches
+        [{?NO_META, MsgsReversed ++ MsgsReversed0} | Acc0];
+      _ ->
+        [{Meta, MsgsReversed} | Acc]
+    end,
   decode(Rest, NewAcc);
 decode(_IncompleteTail, Acc) ->
-  lists:reverse(reverse_hd_messages(Acc)).
-
-%% Prepend newly decoded batch to the batch collection.
-%% Since legacy batches (magic v0-1) have no batch meta info,
-%% merge it to the list-head batch if it is also a legacy batch
--spec add_batch(Batch, [Batch]) -> [Batch]
-        when Batch :: {batch_meta(), [message()]}.
-add_batch({?NO_META, New}, [{?NO_META, Old} | R]) ->
-  [{?NO_META, New ++ Old} | R];
-add_batch(Batch, Acc) ->
-  [Batch | reverse_hd_messages(Acc)].
-
--spec reverse_hd_messages([Batch]) -> [Batch]
-        when Batch :: {batch_meta(), [message()]}.
-reverse_hd_messages([]) -> [];
-reverse_hd_messages([{Meta, Messages} | R]) ->
-  [{Meta, lists:reverse(Messages)} | R].
+  lists:reverse(lists:map(fun({Meta, MsgsReversed}) ->
+                              {Meta, lists:reverse(MsgsReversed)}
+                          end, Acc)).
 
 -spec scan_max_ts(pos_integer(), msg_ts(), batch_input()) ->
         {pos_integer(), msg_ts()}.
@@ -164,9 +163,8 @@ scan_max_ts(Count, MaxTs0, [#{ts := Ts} | Rest]) ->
 scan_max_ts(Count, MaxTs, [#{} | Rest]) ->
   scan_max_ts(Count + 1, MaxTs, Rest).
 
--spec encode_batch(batch_attributes(), msg_ts(), [msg_input()]) -> iodata().
-encode_batch(Attributes, TsBase, Batch) ->
-  Compression = proplists:get_value(compression, Attributes, ?no_compression),
+-spec encode_batch(compress_option(), msg_ts(), [msg_input()]) -> iodata().
+encode_batch(Compression, TsBase, Batch) ->
   Encoded0 = enc_records(_Offset = 0, TsBase, Batch),
   Encoded = kpro_compress:compress(Compression, Encoded0),
   Encoded.
@@ -178,6 +176,7 @@ enc_records(Offset, TsBase, [Msg | Batch]) ->
   | enc_records(Offset + 1, TsBase, Batch)
   ].
 
+% NOTE Return {Meta, Batch :: [message()]} where Batch is a reversed
 % RecordBatch =>
 %   FirstOffset => int64
 %   Length => int32
@@ -203,24 +202,19 @@ do_decode(Offset, <<_PartitionLeaderEpoch:32,
   {FirstTimestamp,  T3} = dec(int64, T2),
   {MaxTimestamp,    T4} = dec(int64, T3),
   {ProducerId,      T5} = dec(int64, T4),
-  {ProducerEpoch,   T6} = dec(int16, T5),
-  {FirstSequence,   T7} = dec(int32, T6),
+  {_ProducerEpoch,  T6} = dec(int16, T5),
+  {_FirstSequence,  T7} = dec(int32, T6),
   {Count,           T8} = dec(int32, T7),
   Attributes = parse_attributes(Attributes0),
-  TsType = proplists:get_value(ts_type, Attributes),
-  Compression = proplists:get_value(compression, Attributes),
+  Compression = maps:get(compression, Attributes),
+  TsType = maps:get(ts_type, Attributes),
   RecordsBin = kpro_compress:decompress(Compression, T8),
   Messages = dec_records(Count, Offset, FirstTimestamp, TsType, RecordsBin),
-  Meta = #{ first_offset => Offset
-          , magic => 2
-          , crc => CRC
-          , attributes => Attributes
-          , last_offset_delta => LastOffsetDelta
-          , first_ts => FirstTimestamp
+  Meta = #{ is_transaction => maps:get(is_transaction, Attributes)
+          , is_control => maps:get(is_control, Attributes)
+          , last_offset => Offset + LastOffsetDelta
           , max_ts => MaxTimestamp
           , producer_id => ProducerId
-          , producer_epoch => ProducerEpoch
-          , first_sequence => FirstSequence
           },
   {Meta, Messages}.
 
@@ -253,15 +247,13 @@ dec_records(Count, Offset, Ts, TsType, Bin, Acc) ->
         {message(), binary()}.
 dec_record(Offset, Ts, TsType, Bin) ->
   {_Len,        T0} = dec(varint, Bin),
-  {Attr,        T1} = dec(int8, T0),
+  {_Attr,       T1} = dec(int8, T0),
   {TsDelta,     T2} = dec(varint, T1),
   {OffsetDelta, T3} = dec(varint, T2),
   {Key,         T4} = dec(bytes, T3),
   {Value,       T5} = dec(bytes, T4),
   {Headers,     T}  = dec_headers(T5),
   Msg = #kafka_message{ offset = Offset + OffsetDelta
-                      , magic_byte = 2
-                      , attributes = Attr
                       , key = Key
                       , value = Value
                       , ts_type = TsType
@@ -287,7 +279,7 @@ enc_record(Offset, TsBase, #{value := Value} = M) ->
   %% 'headers' is a non-nullable array
   %% do not encode 'undefined' -> -1
   Headers = maps:get(headers, M, []),
-  Body = [ enc(int8, 0) %% no per-message attributes in magic 2
+  Body = [ enc(int8, 0) %% no per-message attributes in magic v2
          , enc(varint, Ts - TsBase)
          , enc(varint, Offset)
          , enc(bytes, Key)
@@ -299,7 +291,6 @@ enc_record(Offset, TsBase, #{value := Value} = M) ->
 
 enc_headers(Headers) ->
   Count = length(Headers),
-  %% TODO: check int32 or varint
   [ enc(varint, Count)
   | [enc_header(Header) || Header <- Headers]
   ].
@@ -318,7 +309,6 @@ enc_header({Key, Val}) ->
 
 -spec dec_headers(binary()) -> {headers(), binary()}.
 dec_headers(Bin0) ->
-  %% TODO: check int32 or varint
   {Count, Bin} = dec(varint, Bin0),
   case Count =:= -1 of
     true -> {undefined, Bin};
@@ -367,23 +357,23 @@ enc(Primitive, Val) ->
 %   in Kafka and are generated by the broker.
 %   Clients should not return control batches (ie. those with this bit set)
 %   to applications. (since 0.11.0.0)
--spec parse_attributes(byte()) -> batch_attributes().
 parse_attributes(Attr) ->
-  [ {compression, kpro_compress:codec_to_method(Attr)}
-  , {ts_type, kpro_lib:get_ts_type(_MagicV = 2, Attr)}
-  , {is_transaction, (Attr band (1 bsl 4)) =/= 0}
-  , {is_control, (Attr band (1 bsl 5)) =/= 0}
-  ].
+  #{ compression => kpro_compress:codec_to_method(Attr)
+   , ts_type => kpro_lib:get_ts_type(_MagicV = 2, Attr)
+   , is_transaction => (Attr band (1 bsl 4)) =/= 0
+   , is_control => (Attr band (1 bsl 5)) =/= 0
+   }.
 
--spec encode_attributes(batch_attributes()) -> binary().
-encode_attributes(Attr) ->
-  Compression = proplists:get_value(compression, Attr, ?no_compression),
+-spec encode_attributes(compress_option(), boolean()) -> iolist().
+encode_attributes(Compression, IsTxn0) ->
   Codec = kpro_compress:method_to_codec(Compression),
   TsType = 0, %% producer always set 0
-  IsTxn = flag(proplists:get_bool(is_transaction, Attr), 1 bsl 4),
-  IsCtrl = flag(proplists:get_bool(is_control, Attr), 1 bsl 5),
+  IsTxn = flag(IsTxn0, 1 bsl 4),
+  IsCtrl = flag(false, 1 bsl 5),
   Result = Codec bor TsType bor IsTxn bor IsCtrl,
   %% yes, it's int16 for batch level attributes
+  %% message level attributes (int8) are currently unused in magic v2
+  %% and maybe get used in future magic versions
   enc(int16, Result).
 
 flag(false, _) -> 0;
