@@ -79,6 +79,9 @@
 
 -define(IS_STRUCT(S), (is_list(S) orelse is_map(S))).
 
+-define(MIN_MAGIC_2_PRODUCE_API_VSN, 3). %% since kafka 0.11
+-define(MIN_MAGIC_2_FETCH_API_VSN, 4). %% since kafka 0.11
+
 -endif.
 
 %%%_* Emacs ====================================================================

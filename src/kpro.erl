@@ -128,7 +128,7 @@
 -type int32()      :: -2147483648..2147483647.
 -type int64()      :: -9223372036854775808..9223372036854775807.
 -type str()        :: ?null | string() | binary().
--type bytes()      :: ?null | binary().
+-type bytes()      :: binary().
 -type error_code() :: int16() | atom().
 -type msg_ts() :: int64().
 -type producer_id() :: int64().
@@ -146,17 +146,6 @@
 -type header_key() :: binary().
 -type header_val() :: binary().
 -type headers() :: [{header_key(), header_val()}].
--type batch_meta_key() :: first_offset
-                        | magic
-                        | crc
-                        | attributes
-                        | last_offset_delta
-                        | first_ts
-                        | max_ts
-                        | producer_id
-                        | producer_epoch
-                        | first_sequence.
-
 -type seqno() :: non_neg_integer().
 %% optional args to make produce request
 -type produce_opts() :: #{ compression => compress_option() % common
@@ -165,13 +154,6 @@
                          , txn_ctx => txn_ctx() % txn only
                          , first_seqno => seqno() % txn only
                          }.
-
-% Attribute :: {compression, compress_option()}
-%            | {ts_type, timestamp_type()}
-%            | is_transaction | {is_transaction, boolean()}
-%            | is_control | {is_control, boolean()}.
--type batch_attributes() :: proplists:proplist().
--type batch_meta_val() :: batch_attributes() | integer().
 
 -type key() :: ?null | iodata().
 -type value() :: ?null | iodata().
@@ -191,11 +173,6 @@
 
 -type incomplete_batch() :: ?incomplete_batch(int32()).
 -type message() :: #kafka_message{}.
--type batch_meta() :: ?KPRO_NO_BATCH_META %% magic 0-1
-                    | #{batch_meta_key() => batch_meta_val()}.
--type batch_decode_result() :: ?incomplete_batch(int32())
-                             | {batch_meta(), [message()]}.
-
 -type vsn() :: non_neg_integer().
 -type count() :: non_neg_integer().
 -type wait() :: non_neg_integer().
@@ -245,6 +222,18 @@
                     , producer_id => producer_id()
                     , producer_epoch => producer_id()
                     }.
+-type batch_meta_key() ::
+        is_transaction % if this message was produced in a transaction
+      | is_control % for read_uncommitted clients
+      | last_offset % client wont have to do lists:last(Messages)
+      | max_ts % client don't have to scan the messages for max
+      | producer_id. % it can be referenced by a future fetch response in
+                     % its aborted_transactions field
+-type batch_meta_val() :: boolean() | atom() | integer().
+-type batch_meta() :: ?KPRO_NO_BATCH_META %% magic 0-1
+                    | #{batch_meta_key() => batch_meta_val()}.
+-type batch_decode_result() :: ?incomplete_batch(int32())
+                             | {batch_meta(), [message()]}.
 
 %% All versions of kafka messages (records) share the same header:
 %% Offset => int64
@@ -301,7 +290,6 @@ decode_batches(<<_:64/?INT, L:32, T/binary>> = Bin) when size(T) >= L ->
   kpro_batch:decode(Bin);
 decode_batches(<<_:64/?INT, L:32, _T/binary>>) ->
   %% not enough to decode one single message for magic v0-1
-  %% or a single batch for magic v2
   ?incomplete_batch(L + ?BATCH_LEADING_BYTES);
 decode_batches(_) ->
   %% not enough to even get the size header

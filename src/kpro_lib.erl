@@ -120,9 +120,9 @@ decode(records, Bin) ->
   decode(bytes, Bin).
 
 %% @doc Make a copy of the head instead of keeping referencing the original.
--spec copy_bytes(-1 | count(), binary()) -> {undefined | binary(), binary()}.
+-spec copy_bytes(-1 | count(), binary()) -> {binary(), binary()}.
 copy_bytes(-1, Bin) ->
-  {undefined, Bin};
+  {<<>>, Bin};
 copy_bytes(Size, Bin) ->
   <<Bytes:Size/binary, Rest/binary>> = Bin,
   {binary:copy(Bytes), Rest}.

@@ -68,13 +68,14 @@ parse(#kpro_rsp{ api = produce
                }) ->
   get_partition_rsp(Msg);
 parse(#kpro_rsp{ api = fetch
+               , vsn = Vsn
                , msg = Msg
                }) ->
   PartitionRsp = get_partition_rsp(Msg),
   Header = kpro:find(partition_header, PartitionRsp),
   Records = kpro:find(record_set, PartitionRsp),
   #{ header => Header
-   , batches => kpro:decode_batches(Records)
+   , batches => decode_batches(Vsn, Records)
    };
 parse(Rsp) ->
   %% Not supported yet
@@ -90,6 +91,12 @@ dec_struct([{Name, FieldSc} | Schema], Fields, Stack, Bin) ->
   dec_struct(Schema, Fields#{Name => Value}, Stack, Rest).
 
 %%%_* Internal functions =======================================================
+
+decode_batches(Vsn, <<>>) when Vsn >= ?MIN_MAGIC_2_FETCH_API_VSN ->
+  %% when it's magic v2, there is no incomplete batch
+  [];
+decode_batches(_Vsn, Bin) ->
+  kpro:decode_batches(Bin).
 
 get_partition_rsp(Struct) ->
   [TopicRsp] = kpro:find(responses, Struct),

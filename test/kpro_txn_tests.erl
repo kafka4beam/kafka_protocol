@@ -38,13 +38,16 @@ test_txn_producer(ProduceReqVsn, FetchVsn) ->
   % add_partitions_to_txn
   ok = kpro:send_txn_partitions(TxnCtx, [{Topic, Partition}]),
   % produce
-  Batches = produce_messages(ProduceReqVsn, TxnCtx),
+  [{BaseOffset, _} | _] = Batches = produce_messages(ProduceReqVsn, TxnCtx),
+  Messages = lists:append([Msgs || {_, Msgs} <- Batches]),
+  % fetch (with isolation_level = read_committed)
+  ok = fetch_and_verify(FetchReqFun, BaseOffset, [], read_committed),
   % fetch (with isolation_level = read_uncommitted)
-  ok = fetch_and_verify(FetchReqFun, Batches, read_uncommitted),
+  ok = fetch_and_verify(FetchReqFun, BaseOffset, Messages, read_uncommitted),
   % end_txn
   ok = kpro:commit_txn(TxnCtx),
   % fetch (with isolation_level = read_committed)
-  ok = fetch_and_verify(FetchReqFun, Batches, read_committed),
+  ok = fetch_and_verify(FetchReqFun, BaseOffset, Messages, read_committed),
   ok = kpro:close_connection(Conn),
   ok.
 
@@ -63,8 +66,7 @@ init_txn_ctx(Conn, TxnId) ->
       Other
   end.
 
-fetch_and_verify(FetchReqFun, [{Offset0, _} | _] = Batches, IsolationLevel) ->
-  ExpectedMessages = lists:append([Msgs || {_Offset, Msgs} <- Batches]),
+fetch_and_verify(FetchReqFun, BaseOffset, ExpectedMessages, IsolationLevel) ->
   with_connection_to_partition_leader(
     fun(Connection) ->
         FetchAndVerif =
@@ -72,10 +74,11 @@ fetch_and_verify(FetchReqFun, [{Offset0, _} | _] = Batches, IsolationLevel) ->
               Req = FetchReqFun(Offset, IsolationLevel),
               {ok, Rsp} = kpro:request_sync(Connection, Req, ?TIMEOUT),
               #{batches := Batches0} = kpro_rsp_lib:parse(Rsp),
-              Messages = lists:append([Msgs || {_Meta, Msgs} <- Batches0]),
+              Messages = lists:append([Msgs || {Meta, Msgs} <- Batches0,
+                                       not kpro_batch:is_control(Meta)]),
               verify_messages(Offset, Messages, Exp)
           end,
-        fetch_and_verify(FetchAndVerif, {Offset0, ExpectedMessages})
+        fetch_and_verify(FetchAndVerif, {BaseOffset, ExpectedMessages})
     end).
 
 fetch_and_verify(_FetchAndVerif, done) -> ok;
@@ -85,7 +88,7 @@ fetch_and_verify(FetchAndVerif, {Offset, ExpectedMessages}) ->
 
 %% returns 'done' when done verification
 %% otherwise return next offset and remaining expectations
-verify_messages(_Offset, _Messages, []) -> done;
+verify_messages(_Offset, [], []) -> done;
 verify_messages(Offset,
                 [#kafka_message{ offset = Offset
                                , key = Key
@@ -153,7 +156,17 @@ connect_coordinator(ProducerId) ->
   Cluster = kpro_test_lib:get_endpoints(ssl),
   ConnCfg = kpro_test_lib:connection_config(ssl),
   Args = #{type => txn, id => ProducerId},
-  kpro:connect_coordinator(Cluster, ConnCfg, Args).
+  case kpro:connect_coordinator(Cluster, ConnCfg, Args) of
+    {ok, Conn} ->
+      {ok, Conn};
+    {error, ?EC_COORDINATOR_NOT_AVAILABLE} ->
+      % kafka will have to create the internal topic for
+      % transaction state logs for the first time there is a
+      % find transactional coordinator request received.
+      % it may fail with a 'coordinator not available' error for this first
+      % request. herer we try again to ensure test deterministic
+      kpro:connect_coordinator(Cluster, ConnCfg, Args)
+  end.
 
 %% Make a random transactional id, so test cases would not interfere each other.
 make_transactional_id() ->

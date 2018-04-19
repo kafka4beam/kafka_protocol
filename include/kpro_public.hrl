@@ -17,18 +17,13 @@
 
 -record(kafka_message,
         { offset :: kpro:offset()
-        , magic_byte :: kpro:magic()
-        , attributes :: kpro:int8()
         , key :: kpro:bytes()
         , value :: kpro:bytes()
-        , crc :: non_neg_integer() %% not kpro:int32() because it's unsigned
-               | undefined %% since magic 2, there is no per-message crc
         , ts_type :: undefined %% magic 0
                    | kpro:timestamp_type()  %% since magic 1
         , ts :: undefined %% magic 0
               | kpro:int64() %% since magic 1
-        , headers :: undefined %% magic 0-1
-                   | kpro:headers() %% since magic 2
+        , headers = [] :: kpro:headers() %% since magic 2
         }).
 
 -endif.
