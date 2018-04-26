@@ -3,7 +3,7 @@
 cd $(dirname "$0")
 
 # test against 1.0.0 by default
-VERSION="${1:-1.0.0}"
+VERSION="${1:-1.1.0}"
 
 case $VERSION in
   0.9)
@@ -12,8 +12,8 @@ case $VERSION in
     VERSION="0.10.2.1";;
   0.11)
     VERSION="0.11.0.2";;
-  1.0)
-    VERSION="1.0.0";;
+  1.*)
+    VERSION="1.1.0";;
   *)
     true
 esac

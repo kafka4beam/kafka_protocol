@@ -13,16 +13,43 @@
 
 -define(TIMEOUT, 5000).
 
-txn_producer_test() ->
+%% this is just an attempt to warm-up kafka
+warm_up_test() ->
   {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
-  {Min, Max} = maps:get(produce, Versions),
-  {_, MaxFetchVsn} = maps:get(fetch, Versions),
-  case Max >= 3 of
-    true -> test_txn_producer(rand(Min, Max), MaxFetchVsn);
-    false -> io:format(user, "skipped (vsn = ~p)", [Max])
+  {_MinProduceVsn, MaxProduceVsn} = maps:get(produce, Versions),
+  case MaxProduceVsn >= ?MIN_MAGIC_2_PRODUCE_API_VSN of
+    true ->
+      TxnId = make_transactional_id(),
+      % find_coordinator (txn)
+      {ok, Conn} =
+        case connect_coordinator(TxnId) of
+          {ok, Success} -> {ok, Success};
+          {error, _Failure} ->
+            timer:sleep(2000),
+            % kafka will have to create the internal topic for
+            % transaction state logs for the first time there is a
+            % find transactional coordinator request received.
+            % it may fail with a 'CoordinatorNotAvailable' reason
+            % herer we try again to ensure test deterministic
+            connect_coordinator(TxnId)
+        end,
+      _ = txn_init_ctx(Conn, TxnId),
+      ok = kpro:close_connection(Conn);
+    false ->
+      io:format(user, " skipped (vsn = ~p)", [MaxProduceVsn])
   end.
 
-test_txn_producer(ProduceReqVsn, FetchVsn) ->
+%% basic test of begin -> write -> commit
+txn_produce_test() ->
+  {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
+  {MinProduceVsn, MaxProduceVsn} = maps:get(produce, Versions),
+  {_, FetchVsn} = maps:get(fetch, Versions),
+  case MaxProduceVsn >= ?MIN_MAGIC_2_PRODUCE_API_VSN of
+    true -> test_txn_produce(rand(MinProduceVsn, MaxProduceVsn), FetchVsn);
+    false -> io:format(user, " skipped (vsn = ~p)", [MaxProduceVsn])
+  end.
+
+test_txn_produce(ProduceVsn, FetchVsn) ->
   Topic = topic(),
   Partition = partition(),
   FetchReqFun =
@@ -34,37 +61,85 @@ test_txn_producer(ProduceReqVsn, FetchVsn) ->
   % find_coordinator (txn)
   {ok, Conn} = connect_coordinator(TxnId),
   % init_producer_id
-  {ok, TxnCtx} = init_txn_ctx(Conn, TxnId),
+  {ok, TxnCtx} = txn_init_ctx(Conn, TxnId),
   % add_partitions_to_txn
-  ok = kpro:send_txn_partitions(TxnCtx, [{Topic, Partition}]),
+  ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]),
   % produce
-  [{BaseOffset, _} | _] = Batches = produce_messages(ProduceReqVsn, TxnCtx),
+  [{BaseOffset, _} | _] = Batches = produce_messages(ProduceVsn, TxnCtx),
   Messages = lists:append([Msgs || {_, Msgs} <- Batches]),
-  % fetch (with isolation_level = read_committed)
+  % fetch (with isolation_level = read_committed) expect no message
   ok = fetch_and_verify(FetchReqFun, BaseOffset, [], read_committed),
   % fetch (with isolation_level = read_uncommitted)
   ok = fetch_and_verify(FetchReqFun, BaseOffset, Messages, read_uncommitted),
-  % end_txn
-  ok = kpro:commit_txn(TxnCtx),
+  % end_txn (commit)
+  ok = kpro:txn_commit(TxnCtx),
   % fetch (with isolation_level = read_committed)
   ok = fetch_and_verify(FetchReqFun, BaseOffset, Messages, read_committed),
   ok = kpro:close_connection(Conn),
   ok.
 
+%% basic test of begin -> read (fetch) write -> commit;
+%% commit implies 1) commit fetched offset, 2) commit produced messages
+txn_fetch_produce_test() ->
+  {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
+  {MinProduceVsn, MaxProduceVsn} = maps:get(produce, Versions),
+  ProduceVsn = rand(MinProduceVsn, MaxProduceVsn),
+  {_, FetchVsn} = maps:get(fetch, Versions),
+  case MaxProduceVsn >= ?MIN_MAGIC_2_PRODUCE_API_VSN of
+    true -> test_txn_fetch_produce_test(ProduceVsn, FetchVsn);
+    false -> io:format(user, " skipped (vsn = ~p)", [MaxProduceVsn])
+  end.
+
+test_txn_fetch_produce_test(ProduceVsn, FetchVsn) ->
+  Topic = topic(),
+  Partition = partition(),
+  FetchReqFun =
+    fun(Offset, read_committed) -> % this test case tests read_committed only
+        kpro_req_lib:fetch(FetchVsn, Topic, Partition,
+                           Offset, 500, 0, 10000, read_committed)
+    end,
+  GroupId = make_group_id(),
+  {ok, GroupConn} = connect_group_coordinator(GroupId),
+  TxnId = make_transactional_id(),
+  % find_coordinator (txn)
+  {ok, Conn} = connect_coordinator(TxnId),
+  % init_producer_id
+  {ok, TxnCtx} = txn_init_ctx(Conn, TxnId),
+  % add_partitions_to_txn
+  ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]),
+  % produce
+  [{BaseOffset, _} | _] = Batches = produce_messages(ProduceVsn, TxnCtx),
+  Messages = lists:append([Msgs || {_, Msgs} <- Batches]),
+  % add_offsets_to_txn
+  ok = kpro:txn_send_cg(TxnCtx, GroupId),
+  % txn_offset_commit
+  ok = kpro:txn_offset_commit(GroupConn, GroupId, TxnCtx, #{{Topic, Partition} => 42}),
+  ok = kpro:txn_offset_commit(GroupConn, GroupId, TxnCtx, #{{Topic, Partition} =>
+                                                              {43, <<"alsofake">>}}),
+  % end_txn (commit)
+  ok = kpro:txn_commit(TxnCtx),
+  % fetch (with isolation_level = read_committed)
+  ok = fetch_and_verify(FetchReqFun, BaseOffset, Messages),
+  ok = kpro:close_connection(Conn),
+  ok.
+
 %%%_* Helpers ==================================================================
 
-init_txn_ctx(Conn, TxnId) ->
-  case kpro:init_txn_ctx(Conn, TxnId) of
+txn_init_ctx(Conn, TxnId) ->
+  case kpro:txn_init_ctx(Conn, TxnId) of
     {error, ?EC_COORDINATOR_NOT_AVAILABLE} ->
       % kafka will have to create the internal topic for
       % transaction state logs for the first time there is a
       % find transactional coordinator request received.
       % it may fail with a 'coordinator not available' error for this first
       % request. herer we try again to ensure test deterministic
-      kpro:init_txn_ctx(Conn, TxnId);
+      kpro:txn_init_ctx(Conn, TxnId);
     Other ->
       Other
   end.
+
+fetch_and_verify(FetchReqFun, BaseOffset, ExpectedMessages) ->
+  fetch_and_verify(FetchReqFun, BaseOffset, ExpectedMessages, read_committed).
 
 fetch_and_verify(FetchReqFun, BaseOffset, ExpectedMessages, IsolationLevel) ->
   with_connection_to_partition_leader(
@@ -101,13 +176,13 @@ verify_messages(Offset,
 verify_messages(Offset, [], ExpectedMessages) ->
   {Offset, ExpectedMessages}.
 
-produce_messages(ProduceReqVsn, TxnCtx) ->
+produce_messages(ProduceVsn, TxnCtx) ->
   Topic = topic(),
   Partition = partition(),
   ReqFun =
     fun(Seqno, Batch) ->
         Opts = #{txn_ctx => TxnCtx, first_sequence => Seqno},
-        kpro_req_lib:produce(ProduceReqVsn, Topic, Partition, Batch, Opts)
+        kpro_req_lib:produce(ProduceVsn, Topic, Partition, Batch, Opts)
     end,
   Seqno0 = 0,
   Batch0 = make_random_batch(),
@@ -156,21 +231,20 @@ connect_coordinator(ProducerId) ->
   Cluster = kpro_test_lib:get_endpoints(ssl),
   ConnCfg = kpro_test_lib:connection_config(ssl),
   Args = #{type => txn, id => ProducerId},
-  case kpro:connect_coordinator(Cluster, ConnCfg, Args) of
-    {ok, Conn} ->
-      {ok, Conn};
-    {error, ?EC_COORDINATOR_NOT_AVAILABLE} ->
-      % kafka will have to create the internal topic for
-      % transaction state logs for the first time there is a
-      % find transactional coordinator request received.
-      % it may fail with a 'coordinator not available' error for this first
-      % request. herer we try again to ensure test deterministic
-      kpro:connect_coordinator(Cluster, ConnCfg, Args)
-  end.
+  kpro:connect_coordinator(Cluster, ConnCfg, Args).
+
+connect_group_coordinator(GroupId) ->
+  Cluster = kpro_test_lib:get_endpoints(plaintext),
+  ConnCfg = kpro_test_lib:connection_config(plaintext),
+  Args = #{type => group, id => GroupId},
+  kpro:connect_coordinator(Cluster, ConnCfg, Args).
 
 %% Make a random transactional id, so test cases would not interfere each other.
 make_transactional_id() ->
-  bin([atom_to_list(?MODULE), "-", bin(rand())]).
+  bin([atom_to_list(?MODULE), "-txn-", bin(rand())]).
+
+make_group_id() ->
+  bin([atom_to_list(?MODULE), "-grp-", bin(rand())]).
 
 rand() -> rand:uniform(1000000).
 

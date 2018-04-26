@@ -33,8 +33,10 @@
         , metadata/3
         ]).
 
--export([ add_partitions_to_txn/2
+-export([ add_offsets_to_txn/2
+        , add_partitions_to_txn/2
         , end_txn/2
+        , txn_offset_commit/4
         ]).
 
 -export([ encode/3
@@ -60,6 +62,8 @@
 -type offset() :: kpro:offset().
 -type wait() :: kpro:wait().
 -type partition() :: kpro:partition().
+-type group_id() :: kpro:group_id().
+-type offsets_to_commit() :: kpro:offsets_to_commit().
 
 %% @doc Make a `metadata' request
 -spec metadata(vsn(), all | [topic()]) -> req().
@@ -203,22 +207,44 @@ end_txn(TxnCtx, CommitOrAbort) ->
 %% @doc Make `add_partitions_to_txn' request.
 -spec add_partitions_to_txn(txn_ctx(), [{topic(), partition()}]) -> req().
 add_partitions_to_txn(TxnCtx, TopicPartitionList) ->
-  Groupped =
-  lists:foldl(
-    fun({Topic, Partition}, Acc) ->
-        kpro_lib:update_map(
-          Topic, fun(PL) -> [Partition | PL] end,
-          [Partition], Acc)
-    end, #{}, TopicPartitionList),
-  Topics =
-  maps:fold(
-    fun(Topic, Partitions, Acc) ->
-        [#{ topic => Topic
-          , partitions => Partitions
-          } | Acc]
-    end, [], Groupped),
-  Body = TxnCtx#{topics => Topics},
+  Grouped =
+    lists:foldl(
+      fun({Topic, Partition}, Acc) ->
+          kpro_lib:update_map(
+            Topic, fun(PL) -> [Partition | PL] end,
+            [Partition], Acc)
+      end, #{}, TopicPartitionList),
+  Body = TxnCtx#{topics => tp_map_to_array(Grouped)},
   make(add_partitions_to_txn, _Vsn = 0, Body).
+
+%% @doc Make a `txn_offset_commit' request.
+-spec txn_offset_commit(group_id(), txn_ctx(),
+                        offsets_to_commit(), binary()) -> req().
+txn_offset_commit(GrpId, TxnCtx, Offsets, UserData) when is_map(Offsets) ->
+  txn_offset_commit(GrpId, TxnCtx, maps:to_list(Offsets), UserData);
+txn_offset_commit(GrpId, TxnCtx, Offsets, DefaultUserData) ->
+  All =
+    lists:foldl(
+      fun({{Topic, Partition}, OffsetUd}, Acc) ->
+          {Offset, UserData} =
+            case OffsetUd of
+              {O, D} -> {O, D};
+              O      -> {O, DefaultUserData}
+            end,
+          PD = #{ partition => Partition
+                , offset => Offset
+                , metadata => UserData
+                },
+          kpro_lib:update_map(Topic, fun(PDL) -> [PD | PDL] end, [PD], Acc)
+      end, #{}, Offsets),
+  Body = TxnCtx#{topics => tp_map_to_array(All), group_id => GrpId},
+  make(txn_offset_commit, _Vsn = 0, Body).
+
+%% @doc Make `add_offsets_to_txn' request.
+-spec add_offsets_to_txn(txn_ctx(), group_id()) -> req().
+add_offsets_to_txn(TxnCtx, CgId) ->
+  Body = TxnCtx#{group_id => CgId},
+  make(add_offsets_to_txn, _Vsn = 0, Body).
 
 %% @doc Help function to make a request body.
 -spec make(api(), vsn(), struct()) -> req().
@@ -245,6 +271,16 @@ encode(ClientName, CorrId, Req) ->
   [encode(int32, Size), IoData].
 
 %%%_* Internal functions =======================================================
+
+%% Turn #{Topic => PartitionsArray} into
+%% [#{topic => Topic, partitions => PartitionsArray}]
+tp_map_to_array(TPM) ->
+  maps:fold(
+    fun(Topic, Partitions, Acc) ->
+        [ #{ topic => Topic
+           , partitions => Partitions
+           } | Acc ]
+    end, [], TPM).
 
 required_acks(none) -> 0;
 required_acks(leader_only) -> 1;
