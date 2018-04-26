@@ -36,14 +36,18 @@
         ]).
 
 %% Transactional RPCs
--export([ abort_txn/1
-        , abort_txn/2
-        , commit_txn/1
-        , commit_txn/2
-        , init_txn_ctx/2
-        , init_txn_ctx/3
-        , send_txn_partitions/2
-        , send_txn_partitions/3
+-export([ txn_abort/1
+        , txn_abort/2
+        , txn_commit/1
+        , txn_commit/2
+        , txn_init_ctx/2
+        , txn_init_ctx/3
+        , txn_offset_commit/4
+        , txn_offset_commit/5
+        , txn_send_cg/2
+        , txn_send_cg/3
+        , txn_send_partitions/2
+        , txn_send_partitions/3
         ]).
 
 %% request makers/response parsers
@@ -94,6 +98,7 @@
              , message/0
              , msg_ts/0
              , offset/0
+             , offsets_to_commit/0
              , partition/0
              , portnum/0
              , primitive/0
@@ -234,6 +239,11 @@
                     | #{batch_meta_key() => batch_meta_val()}.
 -type batch_decode_result() :: ?incomplete_batch(int32())
                              | {batch_meta(), [message()]}.
+%% offset or offset + associated user-data to commit
+-type offset_ud() :: offset() %% no user data
+                   | {offset(), binary()}.
+-type offsets_to_commit() :: #{{topic(), partition()} => offset_ud()}
+                           | [{{topic(), partition()}, offset_ud()}].
 
 %% All versions of kafka messages (records) share the same header:
 %% Offset => int64
@@ -412,50 +422,77 @@ find(Field, Struct, Default) ->
 %% broker setting. The default timeout in kafka broker is 1 minute.
 %% `txn_timeout' is for kafka transaction coordinator to abort transaction if
 %% a transaction did not end (commit or abort) in time.
--spec init_txn_ctx(connection(), transactional_id()) ->
+-spec txn_init_ctx(connection(), transactional_id()) ->
         {ok, txn_ctx()} | {error, any()}.
-init_txn_ctx(Connection, TxnId) ->
-  init_txn_ctx(Connection, TxnId, #{}).
+txn_init_ctx(Connection, TxnId) ->
+  txn_init_ctx(Connection, TxnId, #{}).
 
 %% @doc Initialize a transaction context, the connection should be established
 %% towards transactional coordinator broker.
--spec init_txn_ctx(connection(), transactional_id(),
+-spec txn_init_ctx(connection(), transactional_id(),
                    #{ timeout => timeout()
                     , txn_timeout => pos_integer()
                     }) -> {ok, txn_ctx()} | {error, any()}.
-init_txn_ctx(Connection, TxnId, Opts) ->
-  kpro_txn_lib:init_txn_ctx(Connection, TxnId, Opts).
+txn_init_ctx(Connection, TxnId, Opts) ->
+  kpro_txn_lib:txn_init_ctx(Connection, TxnId, Opts).
 
 %% @doc Abort transaction.
--spec abort_txn(txn_ctx()) -> ok | {errory, any()}.
-abort_txn(TxnCtx) ->
-  abort_txn(TxnCtx, #{}).
+-spec txn_abort(txn_ctx()) -> ok | {errory, any()}.
+txn_abort(TxnCtx) ->
+  txn_abort(TxnCtx, #{}).
 
 %% @doc Abort transaction.
--spec abort_txn(txn_ctx(), #{timeout => timeout()}) -> ok | {error, any()}.
-abort_txn(TxnCtx, Opts) ->
+-spec txn_abort(txn_ctx(), #{timeout => timeout()}) -> ok | {error, any()}.
+txn_abort(TxnCtx, Opts) ->
   kpro_txn_lib:end_txn(TxnCtx, abort, Opts).
 
-%% @doc Add partitions to transaction.
--spec send_txn_partitions(txn_ctx(), [{topic(), partition()}]) ->
+%% @see txn_send_partitions/3
+-spec txn_send_partitions(txn_ctx(), [{topic(), partition()}]) ->
         ok | {error, any()}.
-send_txn_partitions(TxnCtx, TPL) ->
-  send_txn_partitions(TxnCtx, TPL, #{}).
+txn_send_partitions(TxnCtx, TPL) ->
+  txn_send_partitions(TxnCtx, TPL, #{}).
 
 %% @doc Add partitions to transaction.
--spec send_txn_partitions(txn_ctx(), [{topic(), partition()}],
+-spec txn_send_partitions(txn_ctx(), [{topic(), partition()}],
                           #{timeout => timeout()}) -> ok | {error, any()}.
-send_txn_partitions(TxnCtx, TPL, Opts) ->
+txn_send_partitions(TxnCtx, TPL, Opts) ->
   kpro_txn_lib:add_partitions_to_txn(TxnCtx, TPL, Opts).
 
-%% @doc Commit transaction.
--spec commit_txn(txn_ctx()) -> ok | {error, any()}.
-commit_txn(TxnCtx) ->
-  commit_txn(TxnCtx, #{}).
+%% @doc see txn_offset_commit/5
+-spec txn_offset_commit(connection(), group_id(), txn_ctx(),
+                        offsets_to_commit()) -> ok | {error, any()}.
+txn_offset_commit(GrpConnection, GrpId, TxnCtx, Offsets) ->
+  txn_offset_commit(GrpConnection, GrpId, TxnCtx, Offsets, #{}).
+
+%% @doc Send transactional offset commit request to group coordinator.
+%% `user_data' in `Opts' is used as default user-data in offset commit request
+%% if there is no user-data associated with offset in `offsets_to_commit()'
+-spec txn_offset_commit(connection(), group_id(), txn_ctx(),
+                        offsets_to_commit(),
+                        #{timeout => timeout(),
+                          user_data => binary()}) -> ok | {error, any()}.
+txn_offset_commit(GrpConnection, GrpId, TxnCtx, Offsets, Opts) ->
+  kpro_txn_lib:txn_offset_commit(GrpConnection, GrpId, TxnCtx, Offsets, Opts).
+
+%% @see txn_send_cg/3
+txn_send_cg(TxnCtx, CgId) ->
+  txn_send_cg(TxnCtx, CgId, #{}).
+
+%% @doc Add consumed offsets to transaction.
+%% This is done by sending the consumer group ID to transaction coordinator.
+-spec txn_send_cg(txn_ctx(), group_id(), #{timeout => timeout()}) ->
+        ok | {error, any()}.
+txn_send_cg(TxCtx, CgId, Opts) ->
+  kpro_txn_lib:add_offsets_to_txn(TxCtx, CgId, Opts).
 
 %% @doc Commit transaction.
--spec commit_txn(txn_ctx(), #{timeout => timeout()}) -> ok | {error, any()}.
-commit_txn(TxnCtx, Opts) ->
+-spec txn_commit(txn_ctx()) -> ok | {error, any()}.
+txn_commit(TxnCtx) ->
+  txn_commit(TxnCtx, #{}).
+
+%% @doc Commit transaction.
+-spec txn_commit(txn_ctx(), #{timeout => timeout()}) -> ok | {error, any()}.
+txn_commit(TxnCtx, Opts) ->
   kpro_txn_lib:end_txn(TxnCtx, commit, Opts).
 
 %%%_* Emacs ====================================================================

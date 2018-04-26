@@ -14,22 +14,27 @@
 %%%
 -module(kpro_txn_lib).
 
--export([ add_partitions_to_txn/3
+-export([ add_offsets_to_txn/3
+        , add_partitions_to_txn/3
         , end_txn/3
-        , init_txn_ctx/3
+        , txn_init_ctx/3
+        , txn_offset_commit/5
         ]).
 
 -type txn_ctx() :: kpro:txn_ctx().
 -type topic() :: kpro:topic().
 -type partition() :: kpro:partition().
+-type offsets_to_commit() :: kpro:offsets_to_commit().
+-type group_id() :: kpro:group_id().
+-type connection() :: kpro:connection().
 
 -define(DEFAULT_TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_TXN_TIMEOUT, timer:seconds(30)).
 
 -include("kpro_private.hrl").
 
-%% @see `kpro:init_txn_ctx/3'
-init_txn_ctx(Connection, TxnId, Opts) ->
+%% @see kpro:txn_init_ctx/3.
+txn_init_ctx(Connection, TxnId, Opts) ->
   ReqTimeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
   TxnTimeout = maps:get(txn_timeout, Opts, ?DEFAULT_TXN_TIMEOUT),
   Req = kpro_req_lib:make(init_producer_id, _Vsn = 0,
@@ -69,13 +74,69 @@ add_partitions_to_txn(TxnCtx, TPL, Opts) ->
   Req = kpro_req_lib:add_partitions_to_txn(TxnCtx, TPL),
   FL =
     [ fun() -> kpro_connection:request_sync(Connection, Req, Timeout) end
-    , fun(#kpro_rsp{msg = Body}) -> parse_add_partitions_error(Body) end
+    , fun(#kpro_rsp{msg = Body}) -> parse_add_partitions_rsp(Body) end
+    ],
+  kpro_lib:ok_pipe(FL).
+
+%% @doc Send consumer group ID to transaction coordinator.
+%% Transaction coordinator will map the group ID to its internal
+%% partition number in __consumer_offsets topic.
+%% then add that topic-partition to transaction like what the
+%% `add_partitions_to_txn' API would achieve.
+-spec add_offsets_to_txn(txn_ctx(), group_id(),
+                         #{timeout => timeout()}) -> ok | {error, any()}.
+add_offsets_to_txn(TxnCtx, CgId, Opts) ->
+  Connection = maps:get(connection, TxnCtx),
+  Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
+  Req = kpro_req_lib:add_offsets_to_txn(TxnCtx, CgId),
+  FL =
+    [ fun() -> kpro_connection:request_sync(Connection, Req, Timeout) end
+    , fun(#kpro_rsp{msg = #{error_code := EC}}) ->
+          case kpro_error_code:is_error(EC) of
+            true -> {error, EC};
+            false -> ok
+          end
+      end
+    ],
+  kpro_lib:ok_pipe(FL).
+
+-spec txn_offset_commit(connection(), group_id(), txn_ctx(),
+                        offsets_to_commit(),
+                        #{timeout => timeout(),
+                          user_data => binary()}) -> ok | {error, any()}.
+txn_offset_commit(GrpConnection, GrpId, TxnCtx, Offsets, Opts) ->
+  Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
+  UserData = maps:get(user_data, Opts, <<>>),
+  Req = kpro_req_lib:txn_offset_commit(GrpId, TxnCtx, Offsets, UserData),
+  FL =
+    [ fun() -> kpro_connection:request_sync(GrpConnection, Req, Timeout) end
+    , fun(#kpro_rsp{msg = Body}) -> parse_txn_offset_commit_rsp(Body) end
     ],
   kpro_lib:ok_pipe(FL).
 
 %%%_* Internals ================================================================
 
-parse_add_partitions_error(#{errors := Errors0}) ->
+parse_txn_offset_commit_rsp(#{topics := Topics}) ->
+  FP = fun(#{ partition := Partition
+            , error_code := EC
+            }, Acc) ->
+           case kpro_error_code:is_error(EC) of
+             true -> [{Partition, EC} | Acc];
+             false -> Acc
+           end
+       end,
+  FT = fun(#{ topic := Topic
+            , partitions := Partitions
+            }, Acc) ->
+           PartitionErrs = lists:foldl(FP, [], Partitions),
+           [{{Topic, Partition}, EC} || {Partition, EC} <- PartitionErrs] ++ Acc
+       end,
+  case lists:foldl(FT, [], Topics) of
+    [] -> ok;
+    Errors -> {error, Errors}
+  end.
+
+parse_add_partitions_rsp(#{errors := Errors0}) ->
   Errors =
   lists:flatten(
     lists:map(

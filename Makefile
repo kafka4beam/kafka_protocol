@@ -7,6 +7,7 @@ rebar_cmd = $(rebar) $(profile:%=as %)
 GEN_INPUT = include/*.hrl priv/kpro_gen.escript priv/kafka.bnf priv/kpro_scanner.xrl priv/kpro_parser.yrl
 GEN_CODE = src/kpro_schema.erl
 
+# results of this target are to be commited in this repo
 .PHONY: kafka-bnf
 kafka-bnf:
 	@cd priv/kafka_protocol_bnf && gradle run

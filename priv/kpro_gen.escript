@@ -33,33 +33,33 @@ main(_Args) ->
   {ok, _} = compile:file(kpro_parser, [report_errors]),
   {ok, DefGroups} = kpro_parser:file("kafka.bnf"),
   ExpandedTypes = [I || I <- lists:map(fun expand/1, DefGroups), is_tuple(I)],
-  GrouppedTypes = group_per_name(ExpandedTypes, []),
-  ok = generate_schema_module(GrouppedTypes).
+  GroupedTypes = group_per_name(ExpandedTypes, []),
+  ok = generate_schema_module(GroupedTypes).
 
 -define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
 -module(kpro_schema).
 -export([all_apis/0, vsn_range/1, api_key/1, req/2, rsp/2]).
 ").
 
-generate_schema_module(GrouppedTypes) ->
+generate_schema_module(GroupedTypes) ->
   Filename = filename:join(["..", "src", "kpro_schema.erl"]),
   IoData =
     [?SCHEMA_MODULE_HEADER, "\n",
-     generate_all_apis_fun(GrouppedTypes),
-     generate_version_rage_clauses(GrouppedTypes),
+     generate_all_apis_fun(GroupedTypes),
+     generate_version_rage_clauses(GroupedTypes),
      generate_api_key_clauses(),
-     generate_req_rsp_clauses(GrouppedTypes)
+     generate_req_rsp_clauses(GroupedTypes)
     ],
   file:write_file(Filename, IoData).
 
-generate_req_rsp_clauses(GrouppedTypes0) ->
-  GrouppedTypes =
+generate_req_rsp_clauses(GroupedTypes0) ->
+  GroupedTypes =
     lists:map(fun({N, Types0}) ->
                   Types = lists:keysort(1, Types0),
                   {N, merge_versions(Types)}
-              end, GrouppedTypes0),
-  ReqClauses = lists:flatmap(fun generate_req_clauses/1, GrouppedTypes),
-  RspClauses = lists:flatmap(fun generate_rsp_clauses/1, GrouppedTypes),
+              end, GroupedTypes0),
+  ReqClauses = lists:flatmap(fun generate_req_clauses/1, GroupedTypes),
+  RspClauses = lists:flatmap(fun generate_rsp_clauses/1, GroupedTypes),
   [infix(ReqClauses, ";\n"), ".\n\n",
    infix(RspClauses, ";\n"), ".\n"
   ].
@@ -73,7 +73,7 @@ generate_api_key_clauses() ->
     ],
   [infix(Clauses, ";\n"), ".\n\n"].
 
-generate_all_apis_fun(GrouppedTypes) ->
+generate_all_apis_fun(GroupedTypes) ->
   F = fun({Name, _}, Acc) ->
           case split_name(Name) of
             {API, "req"} ->
@@ -85,10 +85,10 @@ generate_all_apis_fun(GrouppedTypes) ->
               Acc
           end
       end,
-  APIs = lists:foldr(F, [], GrouppedTypes),
+  APIs = lists:foldr(F, [], GroupedTypes),
   ["all_apis() ->\n[", infix(APIs, ",\n"), "].\n\n"].
 
-generate_version_rage_clauses(GrouppedTypes) ->
+generate_version_rage_clauses(GroupedTypes) ->
   F = fun({Name, VersionedFields}, Acc) ->
           case split_name(Name) of
             {API, "req"} ->
@@ -101,7 +101,7 @@ generate_version_rage_clauses(GrouppedTypes) ->
               Acc
           end
       end,
-  Clauses = lists:foldr(F, [], GrouppedTypes),
+  Clauses = lists:foldr(F, [], GroupedTypes),
   [infix(Clauses, ";\n"), ".\n\n"].
 
 generate_req_clauses(PerNameTypes) ->

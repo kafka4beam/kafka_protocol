@@ -3,3 +3,4 @@
 * use {package, 4} socket option
 * generate error-codes
 * fix incomplete message when read_committed in an on-going transaction
+* Test two transactions in a row (without producer_id re-init)
