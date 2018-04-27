@@ -65,7 +65,8 @@ test_txn_produce(ProduceVsn, FetchVsn) ->
   % add_partitions_to_txn
   ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]),
   % produce
-  [{BaseOffset, _} | _] = Batches = produce_messages(ProduceVsn, TxnCtx),
+  {_Seqno, Batches} = produce_messages(ProduceVsn, TxnCtx),
+  [{BaseOffset, _} | _] = Batches,
   Messages = lists:append([Msgs || {_, Msgs} <- Batches]),
   % fetch (with isolation_level = read_committed) expect no message
   ok = fetch_and_verify(FetchReqFun, BaseOffset, [], read_committed),
@@ -108,7 +109,8 @@ test_txn_fetch_produce_test(ProduceVsn, FetchVsn) ->
   % add_partitions_to_txn
   ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]),
   % produce
-  [{BaseOffset, _} | _] = Batches = produce_messages(ProduceVsn, TxnCtx),
+  {_Seqno, Batches} = produce_messages(ProduceVsn, TxnCtx),
+  [{BaseOffset, _} | _] = Batches,
   Messages = lists:append([Msgs || {_, Msgs} <- Batches]),
   % add_offsets_to_txn
   ok = kpro:txn_send_cg(TxnCtx, GroupId),
@@ -123,6 +125,47 @@ test_txn_fetch_produce_test(ProduceVsn, FetchVsn) ->
   ok = fetch_and_verify(FetchReqFun, BaseOffset, Messages),
   ok = kpro:close_connection(Conn),
   ok.
+
+%% test two transactions for the same transactional producer
+%% without transaction context re-init
+txn_produce_2_tx_test() ->
+  {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
+  {MinProduceVsn, MaxProduceVsn} = maps:get(produce, Versions),
+  {_, FetchVsn} = maps:get(fetch, Versions),
+  case MaxProduceVsn >= ?MIN_MAGIC_2_PRODUCE_API_VSN of
+    true -> test_txn_produce_2(rand(MinProduceVsn, MaxProduceVsn), FetchVsn);
+    false -> io:format(user, " skipped (vsn = ~p)", [MaxProduceVsn])
+  end.
+
+test_txn_produce_2(ProduceVsn, FetchVsn) ->
+  Topic = topic(),
+  Partition = partition(),
+  FetchReqFun =
+    fun(Offset, IsolationLevel) ->
+        kpro_req_lib:fetch(FetchVsn, Topic, Partition,
+                           Offset, 500, 0, 10000, IsolationLevel)
+    end,
+  TxnId = make_transactional_id(),
+  % find_coordinator (txn)
+  {ok, Conn} = connect_coordinator(TxnId),
+  % init_producer_id
+  {ok, TxnCtx} = kpro:txn_init_ctx(Conn, TxnId),
+
+  TxnFun =
+    fun(Seqno) ->
+        ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]),
+        {NextSeqno, Batches} = produce_messages(ProduceVsn, TxnCtx, Seqno),
+        [{BaseOffset, _} | _] = Batches,
+        Messages = lists:append([Msgs || {_, Msgs} <- Batches]),
+        ok = kpro:txn_commit(TxnCtx),
+        ok = fetch_and_verify(FetchReqFun, BaseOffset, Messages),
+        NextSeqno
+    end,
+  Seqno1 = TxnFun(0),
+  _Seqno2 = TxnFun(Seqno1),
+  ok = kpro:close_connection(Conn),
+  ok.
+
 
 %%%_* Helpers ==================================================================
 
@@ -165,6 +208,9 @@ verify_messages(Offset, [], ExpectedMessages) ->
   {Offset, ExpectedMessages}.
 
 produce_messages(ProduceVsn, TxnCtx) ->
+  produce_messages(ProduceVsn, TxnCtx, _Seqno = 0).
+
+produce_messages(ProduceVsn, TxnCtx, Seqno0) ->
   Topic = topic(),
   Partition = partition(),
   ReqFun =
@@ -172,11 +218,11 @@ produce_messages(ProduceVsn, TxnCtx) ->
         Opts = #{txn_ctx => TxnCtx, first_sequence => Seqno},
         kpro_req_lib:produce(ProduceVsn, Topic, Partition, Batch, Opts)
     end,
-  Seqno0 = 0,
   Batch0 = make_random_batch(),
   Req0 = ReqFun(Seqno0, Batch0),
-  Seqno1 = length(Batch0),
+  Seqno1 = Seqno0 + length(Batch0),
   Batch1 = make_random_batch(),
+  Seqno  = Seqno1 + length(Batch1),
   Req1 = ReqFun(Seqno1, Batch1),
   with_connection_to_partition_leader(
     fun(Connection) ->
@@ -188,7 +234,7 @@ produce_messages(ProduceVsn, TxnCtx) ->
         #{ error_code := no_error
          , base_offset := Offset1
          } = kpro_rsp_lib:parse(Rsp1),
-        [{Offset0, Batch0}, {Offset1, Batch1}]
+        {Seqno, [{Offset0, Batch0}, {Offset1, Batch1}]}
     end).
 
 with_connection_to_partition_leader(Fun) ->
