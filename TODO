@@ -1,6 +1,3 @@
-* Make {active, false} | {active, N} configurable in kpro_connection
 * Document query_api_versions connection config
-* use {package, 4} socket option
 * generate error-codes
-* fix incomplete message when read_committed in an on-going transaction
 * Test two transactions in a row (without producer_id re-init)

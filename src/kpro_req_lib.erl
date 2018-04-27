@@ -260,15 +260,12 @@ make(API, Vsn, Fields) ->
 encode(ClientName, CorrId, Req) ->
   #kpro_req{api = API, vsn = Vsn, msg = Msg} = Req,
   ApiKey = kpro_schema:api_key(API),
-  IoData =
-    [ encode(int16, ApiKey)
-    , encode(int16, Vsn)
-    , encode(int32, CorrId)
-    , encode(string, ClientName)
-    , encode_struct(API, Vsn, Msg)
-    ],
-  Size = kpro_lib:data_size(IoData),
-  [encode(int32, Size), IoData].
+  [ encode(int16, ApiKey)
+  , encode(int16, Vsn)
+  , encode(int32, CorrId)
+  , encode(string, ClientName)
+  , encode_struct(API, Vsn, Msg)
+  ].
 
 %%%_* Internal functions =======================================================
 
