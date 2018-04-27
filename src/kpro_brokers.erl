@@ -166,11 +166,9 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
           Brokers = kpro:find(brokers, Meta),
           [TopicMeta] = kpro:find(topic_metadata, Meta),
           ErrorCode = kpro:find(error_code, TopicMeta),
-          case kpro_error_code:is_error(ErrorCode) of
-            true ->
-              {error, ErrorCode};
-            false ->
-              {ok, {Brokers, TopicMeta}}
+          case ErrorCode =:= ?kpro_no_error of
+            true  -> {ok, {Brokers, TopicMeta}};
+            false -> {error, ErrorCode}
           end
       end
     , fun({Brokers, TopicMeta}) ->
@@ -179,16 +177,16 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
           case lists:filter(Pred, Partitions) of
             [] ->
               %% Partition number is out of range
-              {error, ?EC_UNKNOWN_TOPIC_OR_PARTITION};
+              {error, unknown_topic_or_partition};
             [PartitionMeta] ->
               {ok, {Brokers, PartitionMeta}}
           end
       end
     , fun({Brokers, PartitionMeta}) ->
           ErrorCode = kpro:find(error_code, PartitionMeta),
-          case kpro_error_code:is_error(ErrorCode) of
-            true -> {error, ErrorCode};
-            false -> {ok, {Brokers, PartitionMeta}}
+          case ErrorCode =:= ?kpro_no_error of
+            true  -> {ok, {Brokers, PartitionMeta}};
+            false -> {error, ErrorCode}
           end
       end
     , fun({Brokers, PartitionMeta}) ->
@@ -223,18 +221,18 @@ discover_coordinator(Connection, Type, Id, Timeout) ->
     , fun(#kpro_rsp{msg = Rsp}) ->
           ErrorCode = kpro:find(error_code, Rsp),
           ErrMsg = kpro:find(error_message, Rsp, ?kpro_null),
-          case kpro_error_code:is_error(ErrorCode) of
-            true when ErrMsg =:= ?kpro_null ->
-              %% v0
-              {error, ErrorCode};
+          case ErrorCode =:= ?kpro_no_error of
             true ->
-              %% v1
-              {error, [{error_code, ErrorCode}, {error_msg, ErrMsg}]};
-            false ->
               CoorInfo = kpro:find(coordinator, Rsp),
               Host = kpro:find(host, CoorInfo),
               Port = kpro:find(port, CoorInfo),
-              {ok, {Host, Port}}
+              {ok, {Host, Port}};
+            false when ErrMsg =:= ?kpro_null ->
+              %% v0
+              {error, ErrorCode};
+            false ->
+              %% v1
+              {error, [{error_code, ErrorCode}, {error_msg, ErrMsg}]}
           end
       end
     ],

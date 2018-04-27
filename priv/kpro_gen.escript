@@ -38,7 +38,7 @@ main(_Args) ->
 
 -define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
 -module(kpro_schema).
--export([all_apis/0, vsn_range/1, api_key/1, req/2, rsp/2]).
+-export([all_apis/0, vsn_range/1, api_key/1, req/2, rsp/2, ec/1]).
 ").
 
 generate_schema_module(GroupedTypes) ->
@@ -48,7 +48,8 @@ generate_schema_module(GroupedTypes) ->
      generate_all_apis_fun(GroupedTypes),
      generate_version_rage_clauses(GroupedTypes),
      generate_api_key_clauses(),
-     generate_req_rsp_clauses(GroupedTypes)
+     generate_req_rsp_clauses(GroupedTypes),
+     generate_ec_clauses()
     ],
   file:write_file(Filename, IoData).
 
@@ -209,6 +210,16 @@ underscorize([H | T]) ->
 infix([], _Sep) -> [];
 infix([Str], _Sep) -> [Str];
 infix([H | T], Sep) -> [H, Sep | infix(T, Sep)].
+
+%% error-code decoder
+generate_ec_clauses() ->
+  {ok, Errors} = file:consult("error-codes.eterm"),
+  DecodeClauses =
+    lists:map(
+      fun({Name, Code, _Retriable, _Desc}) ->
+          ["ec(", integer_to_list(Code), ") -> ", string:to_lower(Name)]
+      end, Errors),
+  [infix(DecodeClauses, ";\n"), ".\n"].
 
 %%% Local Variables:
 %%% allout-layout: t

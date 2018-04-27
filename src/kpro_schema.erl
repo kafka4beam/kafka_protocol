@@ -1,6 +1,6 @@
 %% generated code, do not edit!
 -module(kpro_schema).
--export([all_apis/0, vsn_range/1, api_key/1, req/2, rsp/2]).
+-export([all_apis/0, vsn_range/1, api_key/1, req/2, rsp/2, ec/1]).
 
 all_apis() ->
 [produce,
@@ -851,3 +851,76 @@ rsp(create_partitions, 0) ->
    {topic_errors,{array,[{topic,string},
                          {error_code,int16},
                          {error_message,nullable_string}]}}].
+ec(0) -> no_error;
+ec(-1) -> unknown_server_error;
+ec(1) -> offset_out_of_range;
+ec(2) -> corrupt_message;
+ec(3) -> unknown_topic_or_partition;
+ec(4) -> invalid_fetch_size;
+ec(5) -> leader_not_available;
+ec(6) -> not_leader_for_partition;
+ec(7) -> request_timed_out;
+ec(8) -> broker_not_available;
+ec(9) -> replica_not_available;
+ec(10) -> message_too_large;
+ec(11) -> stale_controller_epoch;
+ec(12) -> offset_metadata_too_large;
+ec(13) -> network_exception;
+ec(14) -> coordinator_load_in_progress;
+ec(15) -> coordinator_not_available;
+ec(16) -> not_coordinator;
+ec(17) -> invalid_topic_exception;
+ec(18) -> record_list_too_large;
+ec(19) -> not_enough_replicas;
+ec(20) -> not_enough_replicas_after_append;
+ec(21) -> invalid_required_acks;
+ec(22) -> illegal_generation;
+ec(23) -> inconsistent_group_protocol;
+ec(24) -> invalid_group_id;
+ec(25) -> unknown_member_id;
+ec(26) -> invalid_session_timeout;
+ec(27) -> rebalance_in_progress;
+ec(28) -> invalid_commit_offset_size;
+ec(29) -> topic_authorization_failed;
+ec(30) -> group_authorization_failed;
+ec(31) -> cluster_authorization_failed;
+ec(32) -> invalid_timestamp;
+ec(33) -> unsupported_sasl_mechanism;
+ec(34) -> illegal_sasl_state;
+ec(35) -> unsupported_version;
+ec(36) -> topic_already_exists;
+ec(37) -> invalid_partitions;
+ec(38) -> invalid_replication_factor;
+ec(39) -> invalid_replica_assignment;
+ec(40) -> invalid_config;
+ec(41) -> not_controller;
+ec(42) -> invalid_request;
+ec(43) -> unsupported_for_message_format;
+ec(44) -> policy_violation;
+ec(45) -> out_of_order_sequence_number;
+ec(46) -> duplicate_sequence_number;
+ec(47) -> invalid_producer_epoch;
+ec(48) -> invalid_txn_state;
+ec(49) -> invalid_producer_id_mapping;
+ec(50) -> invalid_transaction_timeout;
+ec(51) -> concurrent_transactions;
+ec(52) -> transaction_coordinator_fenced;
+ec(53) -> transactional_id_authorization_failed;
+ec(54) -> security_disabled;
+ec(55) -> operation_not_attempted;
+ec(56) -> kafka_storage_error;
+ec(57) -> log_dir_not_found;
+ec(58) -> sasl_authentication_failed;
+ec(59) -> unknown_producer_id;
+ec(60) -> reassignment_in_progress;
+ec(61) -> delegation_token_auth_disabled;
+ec(62) -> delegation_token_not_found;
+ec(63) -> delegation_token_owner_mismatch;
+ec(64) -> delegation_token_request_not_allowed;
+ec(65) -> delegation_token_authorization_failed;
+ec(66) -> delegation_token_expired;
+ec(67) -> invalid_principal_type;
+ec(68) -> non_empty_group;
+ec(69) -> group_id_not_found;
+ec(70) -> fetch_session_id_not_found;
+ec(71) -> invalid_fetch_session_epoch.

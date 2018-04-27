@@ -141,7 +141,7 @@ translate([api_key | _], ApiKey) ->
       ApiKey
   end;
 translate([error_code | _], ErrorCode) ->
-  kpro_error_code:decode(ErrorCode);
+  kpro_schema:ec(ErrorCode);
 translate([member_metadata | _] = Stack, Bin) ->
   Schema = kpro_lib:get_prelude_schema(cg_member_metadata, 0),
   case Bin =:= <<>> of

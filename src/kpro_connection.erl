@@ -217,10 +217,8 @@ query_api_versions(Sock, Mod, ClientId, Timeout) ->
                               Timeout, failed_to_query_api_versions),
   #kpro_rsp{api = api_versions, vsn = 0, msg = Body} = Rsp,
   ErrorCode = find(error_code, Body),
-  case kpro_error_code:is_error(ErrorCode) of
+  case ErrorCode =:= ?kpro_no_error of
     true ->
-      erlang:error({failed_to_query_api_versions, ErrorCode});
-    false ->
       Versions = find(api_versions, Body),
       F = fun(V, Acc) ->
           API = find(api_key, V),
@@ -235,7 +233,9 @@ query_api_versions(Sock, Mod, ClientId, Timeout) ->
               Acc
           end
       end,
-      lists:foldl(F, #{}, Versions)
+      lists:foldl(F, #{}, Versions);
+    false ->
+      erlang:error({failed_to_query_api_versions, ErrorCode})
   end.
 
 % Send request to active = false socket, and wait for response.
@@ -280,10 +280,8 @@ sasl_auth(_Host, Sock, Mod, ClientId, Timeout,
                               Timeout, sasl_auth_error),
   #kpro_rsp{api = sasl_handshake, vsn = 0, msg = Body} = Rsp,
   ErrorCode = find(error_code, Body),
-  case kpro_error_code:is_error(ErrorCode) of
+  case ErrorCode =:= ?kpro_no_error of
     true ->
-      erlang:error({sasl_auth_error, ErrorCode});
-    false ->
       ok = Mod:send(Sock, sasl_plain_token(SaslUser, SaslPassword)),
       case Mod:recv(Sock, _Len = 0, Timeout) of
         {ok, <<>>} ->
@@ -292,7 +290,9 @@ sasl_auth(_Host, Sock, Mod, ClientId, Timeout,
           erlang:error({sasl_auth_error, bad_credentials});
         Unexpected ->
           erlang:error({sasl_auth_error, Unexpected})
-      end
+      end;
+    false ->
+      erlang:error({sasl_auth_error, ErrorCode})
   end;
 sasl_auth(Host, Sock, Mod, ClientId, Timeout,
           {callback, ModuleName, Opts}) ->
