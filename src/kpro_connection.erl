@@ -59,21 +59,14 @@
                  | request_timeout
                  | sasl
                  | ssl.
+
 -type cfg_val() :: term().
 -type config() :: #{cfg_key() => cfg_val()}.
 -type requests() :: kpro_sent_reqs:requests().
--type byte_count() :: non_neg_integer().
 -type hostname() :: kpro:hostname().
 -type portnum()  :: kpro:portnum().
 -type client_id() :: kpro:client_id().
 -type connection() :: pid().
-
--record(acc, { expected_size = error(bad_init) :: byte_count()
-             , acc_size = 0 :: byte_count()
-             , acc_buffer = [] :: [binary()] %% received bytes in reversed order
-             }).
-
--type acc() :: binary() | #acc{}.
 
 -define(undef, undefined).
 
@@ -84,7 +77,6 @@
                , mod         :: ?undef | gen_tcp | ssl
                , req_timeout :: ?undef | timeout()
                , api_vsns    :: ?undef | kpro:vsn_ranges()
-               , acc = <<>>  :: acc()
                , requests    :: ?undef | requests()
                }).
 
@@ -95,8 +87,9 @@
 %% @doc Return all config keys make client config management easy.
 -spec all_cfg_keys() -> [cfg_key()].
 all_cfg_keys() ->
-  [ connect_timeout, debug, client_id, request_timeout, sasl, ssl, nolink,
-    query_api_versions].
+  [ connect_timeout, debug, client_id, request_timeout, sasl, ssl,
+    nolink, query_api_versions
+  ].
 
 %% @doc Connect to the given endpoint.
 %% The started connection pid is linked to caller
@@ -161,7 +154,8 @@ debug(Pid, File) when is_list(File) ->
 -spec init(pid(), hostname(), portnum(), config()) -> no_return().
 init(Parent, Host, Port, Config) ->
   Timeout = get_connect_timeout(Config),
-  SockOpts = [{active, once}, {packet, raw}, binary, {nodelay, true}],
+  %% initial active opt should be 'false' before upgrading to ssl
+  SockOpts = [{active, false}, binary, {nodelay, true}],
   case gen_tcp:connect(Host, Port, SockOpts, Timeout) of
     {ok, Sock} ->
       State = #state{ client_id = get_client_id(Config)
@@ -185,7 +179,9 @@ init(Parent, Host, Port, Config) ->
 
 -spec do_init(state(), port(), hostname(), config()) -> no_return().
 do_init(State0, Sock, Host, Config) ->
-  #state{parent = Parent, client_id = ClientId} = State0,
+  #state{ parent = Parent
+        , client_id = ClientId
+        } = State0,
   Debug = sys:debug_options(maps:get(debug, Config, [])),
   Timeout = get_connect_timeout(Config),
   %% adjusting buffer size as per recommendation at
@@ -197,6 +193,8 @@ do_init(State0, Sock, Host, Config) ->
   SslOpts = maps:get(ssl, Config, false),
   Mod = get_tcp_mod(SslOpts),
   NewSock = maybe_upgrade_to_ssl(Sock, Mod, SslOpts, Timeout),
+  %% from now on, it's all packet-4 messages
+  ok = setopts(NewSock, Mod, [{packet, 4}]),
   ok = sasl_auth(Host, NewSock, Mod, ClientId, Timeout, get_sasl_opt(Config)),
   Versions =
     case Config of
@@ -208,6 +206,9 @@ do_init(State0, Sock, Host, Config) ->
   ReqTimeout = get_request_timeout(Config),
   ok = send_assert_max_req_age(self(), ReqTimeout),
   Requests = kpro_sent_reqs:new(),
+  %% from now on, enter `{active, once}' mode
+  %% NOTE: ssl doesn't support `{active, N}'
+  ok = setopts(NewSock, Mod, [{active, once}]),
   loop(State#state{requests = Requests, req_timeout = ReqTimeout}, Debug).
 
 query_api_versions(Sock, Mod, ClientId, Timeout) ->
@@ -244,11 +245,9 @@ inactive_request_sync(#kpro_req{api = API, vsn = Vsn} = Req,
   ok = setopts(Sock, Mod, [{active, false}]),
   try
     ok = Mod:send(Sock, ReqBin),
-    {ok, <<Len:32>>} = Mod:recv(Sock, 4, Timeout),
-    {ok, RspBin} = Mod:recv(Sock, Len, Timeout),
-    {[{CorrId, Rsp}], <<>>} =
-      kpro_rsp_lib:decode_corr_id(<<Len:32, RspBin/binary>>),
-    kpro_rsp_lib:decode_body(API, Vsn, Rsp, _IgnoredRef = make_ref())
+    {ok, RspBin} = Mod:recv(Sock, _Len = 0, Timeout),
+    {CorrId, Body} = decode_corr_id(RspBin),
+    kpro_rsp_lib:decode(API, Vsn, Body, _IgnoredRef = make_ref())
   catch
     error : Reason ->
       Stack = erlang:get_stacktrace(),
@@ -286,8 +285,8 @@ sasl_auth(_Host, Sock, Mod, ClientId, Timeout,
       erlang:error({sasl_auth_error, ErrorCode});
     false ->
       ok = Mod:send(Sock, sasl_plain_token(SaslUser, SaslPassword)),
-      case Mod:recv(Sock, 4, Timeout) of
-        {ok, <<0:32>>} ->
+      case Mod:recv(Sock, _Len = 0, Timeout) of
+        {ok, <<>>} ->
           ok;
         {error, closed} ->
           erlang:error({sasl_auth_error, bad_credentials});
@@ -306,9 +305,9 @@ sasl_auth(Host, Sock, Mod, ClientId, Timeout,
   end.
 
 sasl_plain_token(User, Password) ->
-  Message = list_to_binary([0, unicode:characters_to_binary(User),
-                            0, unicode:characters_to_binary(Password)]),
-  <<(byte_size(Message)):32, Message/binary>>.
+  [0, unicode:characters_to_binary(User),
+   0, unicode:characters_to_binary(Password)
+  ].
 
 setopts(Sock, _Mod = gen_tcp, Opts) -> inet:setopts(Sock, Opts);
 setopts(Sock, _Mod = ssl, Opts)     ->  ssl:setopts(Sock, Opts).
@@ -354,8 +353,7 @@ call(Pid, Request) ->
 reply({To, Tag}, Reply) ->
   To ! {Tag, Reply}.
 
-loop(#state{sock = Sock, mod = Mod} = State, Debug) ->
-  ok = setopts(Sock, Mod, [{active, once}]),
+loop(#state{} = State, Debug) ->
   Msg = receive Input -> Input end,
   decode_msg(Msg, State, Debug).
 
@@ -368,25 +366,16 @@ decode_msg(Msg, State, Debug0) ->
   handle_msg(Msg, State, Debug).
 
 handle_msg({_, Sock, Bin}, #state{ sock     = Sock
-                                 , acc      = Acc0
                                  , requests = Requests
                                  , mod      = Mod
                                  } = State, Debug) when is_binary(Bin) ->
-  case Mod of
-    gen_tcp -> ok = inet:setopts(Sock, [{active, once}]);
-    ssl     -> ok = ssl:setopts(Sock, [{active, once}])
-  end,
-  Acc1 = acc_recv_bytes(Acc0, Bin),
-  {Responses, Acc} = decode_response(Acc1),
-  NewRequests =
-    lists:foldl(
-      fun({CorrId, Body}, Reqs) ->
-        {Caller, Ref, API, Vsn} = kpro_sent_reqs:get_req(Reqs, CorrId),
-        Rsp = kpro_rsp_lib:decode_body(API, Vsn, Body, Ref),
-        ok = cast(Caller, {msg, self(), Rsp}),
-        kpro_sent_reqs:del(Reqs, CorrId)
-      end, Requests, Responses),
-  ?MODULE:loop(State#state{acc = Acc, requests = NewRequests}, Debug);
+  ok = setopts(Sock, Mod, [{active, once}]),
+  {CorrId, Body} = decode_corr_id(Bin),
+  {Caller, Ref, API, Vsn} = kpro_sent_reqs:get_req(Requests, CorrId),
+  Rsp = kpro_rsp_lib:decode(API, Vsn, Body, Ref),
+  ok = cast(Caller, {msg, self(), Rsp}),
+  NewRequests = kpro_sent_reqs:del(Requests, CorrId),
+  ?MODULE:loop(State#state{requests = NewRequests}, Debug);
 handle_msg(assert_max_req_age, #state{ requests = Requests
                                      , req_timeout = ReqTimeout
                                      } = State, Debug) ->
@@ -521,35 +510,6 @@ send_assert_max_req_age(Pid, Timeout) when Timeout >= 1000 ->
   _ = erlang:send_after(SendAfter, Pid, assert_max_req_age),
   ok.
 
-%% Accumulate newly received bytes.
--spec acc_recv_bytes(acc(), binary()) -> acc().
-acc_recv_bytes(Acc, NewBytes) when is_binary(Acc) ->
-  case <<Acc/binary, NewBytes/binary>> of
-    <<Size:32/signed-integer, _/binary>> = AccBytes ->
-      do_acc(#acc{expected_size = Size + ?SIZE_HEAD_BYTES}, AccBytes);
-    AccBytes ->
-      AccBytes
-  end;
-acc_recv_bytes(#acc{} = Acc, NewBytes) ->
-  do_acc(Acc, NewBytes).
-
-%% Add newly received bytes to buffer.
--spec do_acc(acc(), binary()) -> acc().
-do_acc(#acc{acc_size = AccSize, acc_buffer = AccBuffer} = Acc, NewBytes) ->
-  Acc#acc{ acc_size = AccSize + size(NewBytes)
-         , acc_buffer = [NewBytes | AccBuffer]
-         }.
-
-%% Decode response when accumulated enough bytes.
--spec decode_response(acc()) -> {[kpro:rsp()], acc()}.
-decode_response(#acc{ expected_size = ExpectedSize
-                    , acc_size = AccSize
-                    , acc_buffer = AccBuffer
-                    }) when AccSize >= ExpectedSize ->
-  kpro_rsp_lib:decode_corr_id(iolist_to_binary(lists:reverse(AccBuffer)));
-decode_response(Acc) ->
-  {[], Acc}.
-
 %% So far supported endpoint is tuple {Hostname, Port}
 %% which lacks of hint on which protocol to use.
 %% It would be a bit nicer if we support endpoint formats like below:
@@ -629,45 +589,7 @@ get_client_id(Config) ->
 find(FieldName, Struct) ->
   kpro_lib:find(FieldName, Struct, {no_such_field, FieldName}).
 
-%%%_* Eunit ====================================================================
-
--ifdef(TEST).
-
--include_lib("eunit/include/eunit.hrl").
-
-acc_test_() ->
-  [{"clean start flow",
-    fun() ->
-        Acc0 = acc_recv_bytes(<<>>, <<0, 0>>),
-        ?assertEqual(Acc0, <<0, 0>>),
-        Acc1 = acc_recv_bytes(Acc0, <<0, 1, 0, 0>>),
-        ?assertEqual(#acc{expected_size = 5,
-                          acc_size = 6,
-                          acc_buffer = [<<0, 0, 0, 1, 0, 0>>]
-                         }, Acc1)
-    end},
-   {"old tail leftover",
-    fun() ->
-        Acc0 = acc_recv_bytes(<<0, 0>>, <<0, 4>>),
-        ?assertEqual(#acc{expected_size = 8,
-                          acc_size = 4,
-                          acc_buffer = [<<0, 0, 0, 4>>]
-                         }, Acc0),
-        Acc1 = acc_recv_bytes(Acc0, <<0, 0>>),
-        ?assertEqual(#acc{expected_size = 8,
-                          acc_size = 6,
-                          acc_buffer = [<<0, 0>>, <<0, 0, 0, 4>>]
-                         }, Acc1),
-        Acc2 = acc_recv_bytes(Acc1, <<1, 1>>),
-        ?assertEqual(#acc{expected_size = 8,
-                          acc_size = 8,
-                          acc_buffer = [<<1, 1>>, <<0, 0>>, <<0, 0, 0, 4>>]
-                         }, Acc2)
-    end
-   }
-  ].
-
--endif.
+decode_corr_id(<<CorrId:32/unsigned-integer, Body/binary>>) -> {CorrId, Body}.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

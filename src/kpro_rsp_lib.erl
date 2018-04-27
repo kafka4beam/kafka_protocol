@@ -15,8 +15,7 @@
 
 -module(kpro_rsp_lib).
 
--export([ decode_corr_id/1
-        , decode_body/4
+-export([ decode/4
         , dec_struct/4
         ]).
 
@@ -27,17 +26,9 @@
 
 -define(IS_STRUCT_SCHEMA(Schema), is_list(Schema)).
 
-%% @doc Decode byte stream into a list of `{correlation_id, message_body}'
-%% tuples. It is unable to decode `message_body' binary because we do not know
-%% what message type it is. Only after a lookup with `correlation_id'
-%% to find the sent request type, can we decode the message body.
--spec decode_corr_id(binary()) -> {[{kpro:corr_id(), binary()}], binary()}.
-decode_corr_id(Bin) ->
-  decode_corr_id(Bin, []).
-
-%% @doc Decode body binary.
--spec decode_body(kpro:api(), kpro:vsn(), binary(), reference()) -> kpro:rsp().
-decode_body(API, Vsn, Body, Ref) ->
+%% @doc Decode message body binary (without the leading 4-byte correlation ID.
+-spec decode(kpro:api(), kpro:vsn(), binary(), reference()) -> kpro:rsp().
+decode(API, Vsn, Body, Ref) ->
   {Message, <<>>} =
     try
       decode_struct(API, Vsn, Body)
@@ -109,22 +100,6 @@ dec(Type, Bin) -> kpro_lib:decode(Type, Bin).
 decode_struct(API, Vsn, Bin) ->
   Schema = kpro_lib:get_rsp_schema(API, Vsn),
   dec_struct(Schema, #{}, _Stack = [{API, Vsn}], Bin).
-
-decode_corr_id(Bin, Acc) ->
-  case do_decode_corr_id(Bin) of
-    {incomplete, Rest} ->
-      {lists:reverse(Acc), Rest};
-    {Response, Rest} ->
-      decode_corr_id(Rest, [Response | Acc])
-  end.
-
-%% Decode responses received from kafka broker.
-%% {incomplete, TheOriginalBinary} is returned if this is not a complete packet.
-do_decode_corr_id(<<Size:32/?INT, Bin:Size/binary, Rest/binary>>) ->
-  <<CorrId:32/unsigned-integer, MsgBody/binary>> = Bin,
-  {{CorrId, MsgBody}, Rest};
-do_decode_corr_id(Bin) ->
-  {incomplete, Bin}.
 
 %% A struct field should have one of below types:
 %% 1. An array of any
