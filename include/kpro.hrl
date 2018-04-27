@@ -18,7 +18,6 @@
 %% Header file for kafka client (brod).
 
 -include("kpro_public.hrl").
--include("kpro_error_code.hrl").
 
 -record(kpro_req,
         { ref = make_ref() :: reference()
@@ -37,6 +36,7 @@
 
 -define(incomplete_batch(ExpectedSize), {incomplete_message, ExpectedSize}).
 -define(kpro_null, undefined).
+-define(kpro_no_error, no_error).
 -define(kpro_cg_no_assignment, ?kpro_null).
 -define(kpro_cg_no_member_metadata, ?kpro_null).
 -define(kpro_read_committed, read_committed).

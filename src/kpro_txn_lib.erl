@@ -30,6 +30,10 @@
 
 -define(DEFAULT_TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_TXN_TIMEOUT, timer:seconds(30)).
+-define(OK_OR_ERR_TUPLE(EC), case EC =:= ?kpro_no_error of
+                               true -> ok;
+                               false -> {error, EC}
+                             end).
 
 -include("kpro_private.hrl").
 
@@ -56,12 +60,7 @@ end_txn(TxnCtx, AbortOrCommit, Opts) ->
   Req = kpro_req_lib:end_txn(TxnCtx, AbortOrCommit),
   FL =
     [ fun() -> kpro_connection:request_sync(Connection, Req, Timeout) end
-    , fun(#kpro_rsp{msg = #{error_code := ErrorCode}}) ->
-          case kpro_error_code:is_error(ErrorCode) of
-            true -> {error, ErrorCode};
-            false -> ok
-          end
-      end
+    , fun(#kpro_rsp{msg = #{error_code := EC}}) -> ?OK_OR_ERR_TUPLE(EC) end
     ],
   kpro_lib:ok_pipe(FL).
 
@@ -91,12 +90,7 @@ add_offsets_to_txn(TxnCtx, CgId, Opts) ->
   Req = kpro_req_lib:add_offsets_to_txn(TxnCtx, CgId),
   FL =
     [ fun() -> kpro_connection:request_sync(Connection, Req, Timeout) end
-    , fun(#kpro_rsp{msg = #{error_code := EC}}) ->
-          case kpro_error_code:is_error(EC) of
-            true -> {error, EC};
-            false -> ok
-          end
-      end
+    , fun(#kpro_rsp{msg = #{error_code := EC}}) -> ?OK_OR_ERR_TUPLE(EC) end
     ],
   kpro_lib:ok_pipe(FL).
 
@@ -120,9 +114,9 @@ parse_txn_offset_commit_rsp(#{topics := Topics}) ->
   FP = fun(#{ partition := Partition
             , error_code := EC
             }, Acc) ->
-           case kpro_error_code:is_error(EC) of
-             true -> [{Partition, EC} | Acc];
-             false -> Acc
+           case ?kpro_no_error =:= EC of
+             true  -> Acc;
+             false -> [{Partition, EC} | Acc]
            end
        end,
   FT = fun(#{ topic := Topic
@@ -143,9 +137,9 @@ parse_add_partitions_rsp(#{errors := Errors0}) ->
       fun(#{topic := Topic, partition_errors := PartitionErrors}) ->
           lists:map(
             fun(#{partition := Partition, error_code := ErrorCode}) ->
-                case kpro_error_code:is_error(ErrorCode) of
-                  true -> {Topic, Partition, ErrorCode};
-                  false -> []
+                case ErrorCode =:= ?kpro_no_error of
+                  true  -> [];
+                  false -> {Topic, Partition, ErrorCode}
                 end
             end, PartitionErrors)
       end, Errors0)),
@@ -155,7 +149,7 @@ parse_add_partitions_rsp(#{errors := Errors0}) ->
   end.
 
 make_txn_ctx(Connection, TxnId,
-             #{ error_code := ?EC_NONE
+             #{ error_code := ?kpro_no_error
               , producer_id := ProducerId
               , producer_epoch := ProducerEpoch
               }) ->

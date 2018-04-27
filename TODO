@@ -1,3 +1,2 @@
 * Document query_api_versions connection config
-* generate error-codes
 * Test two transactions in a row (without producer_id re-init)
