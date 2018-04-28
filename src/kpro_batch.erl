@@ -80,7 +80,7 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
           #{ producer_id := ProducerId
            , producer_epoch := ProducerEpoch
            }) ->
-  IsTxn = is_integer(ProducerId) andalso ProducerId > 0,
+  IsTxn = is_integer(ProducerId) andalso ProducerId >= 0,
   FirstTimestamp =
     case maps:get(ts, FirstMsg, false) of
       false -> kpro_lib:now_ts();

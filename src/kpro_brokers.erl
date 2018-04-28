@@ -16,6 +16,7 @@
 -module(kpro_brokers).
 
 -export([ connect_any/2
+        , connect_controller/3
         , connect_coordinator/3
         , connect_partition_leader/5
         , discover_coordinator/4
@@ -35,6 +36,7 @@
 -type coordinator_type() :: kpro:coordinator_type().
 -type group_id() :: kpro:group_id().
 -type transactional_id() :: kpro:transactional_id().
+-type conn_config() :: kpro:conn_config().
 
 -define(DEFAULT_TIMEOUT, timer:seconds(5)).
 
@@ -73,25 +75,11 @@ with_connection(Endpoints, Config, Fun) ->
 -spec connect_partition_leader(connection() | [endpoint()], config(),
                                topic(), partition(), #{timeout => timeout()}) ->
         {ok, connection()} | {error, any()}.
-connect_partition_leader(C, Config, Topic, Partition, Opts) when is_pid(C) ->
-  Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
-  FL =
-    [ fun() -> discover_partition_leader(C, Topic, Partition, Timeout) end
-    , fun(LeaderEndpoint) -> connect_any([LeaderEndpoint], Config) end
-    ],
-  kpro_lib:ok_pipe(FL, Timeout);
 connect_partition_leader(Bootstrap, Config, Topic, Partition, Opts) ->
-  %% Connect without linking to the connection pid
-  NolinkConfig = Config#{nolink => true},
   Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
-  FL =
-    [ fun() -> connect_any(Bootstrap, NolinkConfig) end
-    , fun(Connection) ->
-        try discover_partition_leader(Connection, Topic, Partition, Timeout)
-        after kpro_connection:stop(Connection) end end
-    , fun(LeaderEndpoint) -> connect_any([LeaderEndpoint], Config) end
-    ],
-  kpro_lib:ok_pipe(FL, Timeout).
+  DiscoverFun =
+    fun(C) -> discover_partition_leader(C, Topic, Partition, Timeout) end,
+  discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
 
 %% @doc Connect group or transaction coordinator.
 %% If the first arg is not a connection pid but a list of bootstraping
@@ -102,28 +90,21 @@ connect_partition_leader(Bootstrap, Config, Topic, Partition, Opts) ->
                            , id => binary()
                            , timeout => timeout()
                            }) -> {ok, connection()} | {error, any()}.
-connect_coordinator(C, Config, #{ type := Type
-                                , id := Id
-                                } = Args) when is_pid(C) ->
-  Timeout = maps:get(timeout, Args, ?DEFAULT_TIMEOUT),
-  FL =
-    [ fun() -> discover_coordinator(C, Type, Id, Timeout) end
-    , fun(CoordinatorEp) -> connect_any([CoordinatorEp], Config) end
-    ],
-  kpro_lib:ok_pipe(FL, Timeout);
 connect_coordinator(Bootstrap, Config, #{ type := Type
                                         , id := Id
                                         } = Args) ->
   Timeout = maps:get(timeout, Args, ?DEFAULT_TIMEOUT),
-  NoLinkConfig = Config#{nolink => true},
-  FL =
-    [ fun() -> connect_any(Bootstrap, NoLinkConfig) end
-    , fun(Connection) ->
-        try discover_coordinator(Connection, Type, Id, Timeout)
-        after kpro_connection:stop(Connection) end end
-    , fun(CoordinatorEp) -> connect_any([CoordinatorEp], Config) end
-    ],
-  kpro_lib:ok_pipe(FL, Timeout).
+  DiscoverFun = fun(Conn) -> discover_coordinator(Conn, Type, Id, Timeout) end,
+  discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
+
+%% @doc Conect to the controller broker of the kafka cluster.
+-spec connect_controller(connection() | [endpoint()], conn_config(),
+                         #{timeout => timeout()}) ->
+        {ok, connection()} | {error, any()}.
+connect_controller(Bootstrap, ConnConfig, Opts) ->
+  Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
+  DiscoverFun = fun(Conn) -> discover_controller(Conn, Timeout) end,
+  discover_and_connect(DiscoverFun, Bootstrap, ConnConfig, Timeout).
 
 %% @doc Qury API version ranges using the given `kpro_connection' pid.
 -spec get_api_versions(connection()) ->
@@ -239,6 +220,48 @@ discover_coordinator(Connection, Type, Id, Timeout) ->
   kpro_lib:ok_pipe(FL, Timeout).
 
 %%%_* Internal functions =======================================================
+
+discover_controller(Conn, Timeout) ->
+  FL =
+    [ fun() ->
+          Req = kpro_req_lib:metadata(_Vsn = 1, _Topics = all),
+          kpro_connection:request_sync(Conn, Req, Timeout)
+      end
+    , fun(#kpro_rsp{msg = Meta}) ->
+          Brokers = kpro:find(brokers, Meta),
+          Controller = kpro:find(controller_id, Meta),
+          Broker = kpro_lib:keyfind(node_id, Controller, Brokers),
+          #{ host := Host
+           , port := Port
+           } = Broker,
+          {ok, {Host, Port}}
+      end
+    ],
+  kpro_lib:ok_pipe(FL, Timeout).
+
+
+%% Discover broker and connect to it. The broker can be:
+%% * Partition leader
+%% * Cluster controller
+%% * Group coordinator
+%% * Transactional coordinator
+discover_and_connect(DiscoverFun, C, Config, Timeout) when is_pid(C) ->
+  FL =
+    [ fun() -> DiscoverFun(C) end
+    , fun(CoordinatorEp) -> connect_any([CoordinatorEp], Config) end
+    ],
+  kpro_lib:ok_pipe(FL, Timeout);
+discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout) ->
+  %% the socket is short-lived, no need to link it.
+  NoLinkConfig = Config#{nolink => true},
+  FL =
+    [ fun() -> connect_any(Bootstrap, NoLinkConfig) end
+    , fun(Connection) ->
+        try DiscoverFun(Connection)
+        after kpro_connection:stop(Connection) end end
+    , fun(DiscoveredEndpoint) -> connect_any([DiscoveredEndpoint], Config) end
+    ],
+  kpro_lib:ok_pipe(FL, Timeout).
 
 api_vsn_range_intersection(undefined) ->
   %% kpro_connection is configured not to query api versions (kafka-0.9)
