@@ -39,6 +39,11 @@
         , txn_offset_commit/4
         ]).
 
+-export([ create_partitions/3
+        , create_topics/3
+        , delete_topics/3
+        ]).
+
 -export([ encode/3
         , make/3
         ]).
@@ -245,6 +250,45 @@ txn_offset_commit(GrpId, TxnCtx, Offsets, DefaultUserData) ->
 add_offsets_to_txn(TxnCtx, CgId) ->
   Body = TxnCtx#{group_id => CgId},
   make(add_offsets_to_txn, _Vsn = 0, Body).
+
+%% @doc Make `create_topics' request.
+%% if 0 is given as `timeout' option the request will trigger a creation
+%% but return immediately.
+%% `validate_only' option is only relavent when the API version is
+%% greater than 0.
+-spec create_topics(vsn(), [Topics :: kpro:struct()],
+                    #{timeout => kpro:int32(),
+                      validate_only => boolean()}) -> req().
+create_topics(Vsn, Topics, Opts) ->
+  Timeout = maps:get(timeout, Opts, 0),
+  ValidateOnly = maps:get(validate_only, Opts, false),
+  Body = #{ create_topic_requests => Topics
+          , timeout => Timeout
+          , validate_only => ValidateOnly
+          },
+  make(create_topics, Vsn, Body).
+
+%% @doc Make a `create_partitions' request.
+-spec create_partitions(vsn(), [Topics :: kpro:struct()],
+                        #{timeout => kpro:int32(),
+                          validate_only => boolean()}) -> req().
+create_partitions(Vsn, Topics, Opts) ->
+  Timeout = maps:get(timeout, Opts, 0),
+  ValidateOnly = maps:get(validate_only, Opts, false),
+  Body = #{ topic_partitions => Topics
+          , timeout => Timeout
+          , validate_only => ValidateOnly
+          },
+  make(create_partitions, Vsn, Body).
+
+%% @doc Make `delete_topics' request.
+-spec delete_topics(vsn(), [topic()], #{timeout => kpro:int32()}) -> req().
+delete_topics(Vsn, Topics, Opts) ->
+  Timeout = maps:get(timeout, Opts, 0),
+  Body = #{ topics => Topics
+          , timeout => Timeout
+          },
+  make(delete_topics, Vsn, Body).
 
 %% @doc Help function to make a request body.
 -spec make(api(), vsn(), struct()) -> req().

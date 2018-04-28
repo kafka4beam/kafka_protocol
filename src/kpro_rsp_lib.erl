@@ -68,6 +68,33 @@ parse(#kpro_rsp{ api = fetch
   #{ header => Header
    , batches => decode_batches(Vsn, Records)
    };
+parse(#kpro_rsp{ api = create_topics
+               , msg = Msg
+               }) ->
+  Errors = kpro:find(topic_errors, Msg),
+  Pred = fun(#{error_code := EC}) -> EC =/= ?kpro_no_error end,
+  case lists:filter(Pred, Errors) of
+    [] -> ok;
+    Errs -> {error, Errs}
+  end;
+parse(#kpro_rsp{ api = delete_topics
+               , msg = Msg
+               }) ->
+  Errors = kpro:find(topic_error_codes, Msg),
+  Pred = fun(#{error_code := EC}) -> EC =/= ?kpro_no_error end,
+  case lists:filter(Pred, Errors) of
+    [] -> ok;
+    Errs -> {error, Errs}
+  end;
+parse(#kpro_rsp{ api = create_partitions
+               , msg = Msg
+               }) ->
+  Errors = kpro:find(topic_errors, Msg),
+  Pred = fun(#{error_code := EC}) -> EC =/= ?kpro_no_error end,
+  case lists:filter(Pred, Errors) of
+    [] -> ok;
+    Errs -> {error, Errs}
+  end;
 parse(Rsp) ->
   %% Not supported yet
   Rsp.

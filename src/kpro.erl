@@ -18,6 +18,8 @@
 %% Connection
 -export([ close_connection/1
         , connect_any/2
+        , connect_controller/2
+        , connect_controller/3
         , connect_coordinator/3
         , connect_partition_leader/4
         , connect_partition_leader/5
@@ -363,7 +365,20 @@ connect_partition_leader(Bootstrap, ConnConfig, Topic, Partition, Opts) ->
 discover_partition_leader(Connection, Topic, Partition, Timeout) ->
   kpro_brokers:discover_partition_leader(Connection, Topic, Partition, Timeout).
 
-%% @doc Connect group or transaction coordinator.
+%% @see connect_controller/3.
+-spec connect_controller(connection() | [endpoint()], conn_config()) ->
+        {ok, connection()} | {error, any()}.
+connect_controller(Bootstrap, ConnConfig) ->
+  connect_controller(Bootstrap, ConnConfig, #{}).
+
+%% @doc Conect to the controller broker of the kafka cluster.
+-spec connect_controller(connection() | [endpoint()], conn_config(),
+                         #{timeout => timeout()}) ->
+        {ok, connection()} | {error, any()}.
+connect_controller(Bootstrap, ConnConfig, Opts) ->
+  kpro_brokers:connect_controller(Bootstrap, ConnConfig, Opts).
+
+%% @doc Connect to group or transaction coordinator.
 %% If the first arg is not a connection pid but a list of bootstraping
 %% endpoints, it will frist try to connect to any of the nodes
 %% NOTE: 'txn' type only applicable to kafka 0.11 or later

@@ -9,6 +9,7 @@
         , get_req_schema/2
         , get_rsp_schema/2
         , get_ts_type/2
+        , keyfind/3
         , now_ts/0
         , ok_pipe/1
         , ok_pipe/2
@@ -167,44 +168,6 @@ find(Field, Struct, Error) when is_list(Struct) ->
 find(_Field, Other, _Error) ->
   erlang:error({not_struct, Other}).
 
-parse_endpoint("plaintext://" ++ HostPort) ->
-  {plaintext, parse_host_port(HostPort)};
-parse_endpoint("ssl://" ++ HostPort) ->
-  {ssl, parse_host_port(HostPort)};
-parse_endpoint("sasl_ssl://" ++ HostPort) ->
-  {sasl_ssl, parse_host_port(HostPort)};
-parse_endpoint("sasl_plaintext://" ++ HostPort) ->
-  {sasl_plaintext, parse_host_port(HostPort)};
-parse_endpoint(HostPort) ->
-  {undefined, parse_host_port(HostPort)}.
-
-%%%_* Internals ================================================================
-
-parse_host_port(HostPort) ->
-  case string:tokens(HostPort, ":") of
-    [Host] ->
-      {Host, 9092};
-    [Host, Port] ->
-      {Host, list_to_integer(Port)}
-  end.
-
--spec data_size(iodata(), count()) -> count().
-data_size([], Size) -> Size;
-data_size(<<>>, Size) -> Size;
-data_size(I, Size) when ?IS_BYTE(I) -> Size + 1;
-data_size(B, Size) when is_binary(B) -> Size + size(B);
-data_size([H | T], Size0) ->
-  Size1 = data_size(H, Size0),
-  data_size(T, Size1).
-
-get_schema(F, Context) ->
-  try
-    F()
-  catch
-    error : function_clause ->
-      erlang:error({unknown_type, Context})
-  end.
-
 %% @doc Equivalent to `maps:update_with/4' (since otp 19).
 update_map(Key, Fun, Init, Map) ->
   case Map of
@@ -262,6 +225,62 @@ with_timeout(F0, Timeout) ->
       unlink(Agent),
       erlang:exit(Agent, kill),
       {error, timeout}
+  end.
+
+%% @doc Find in a list for a struct having a given field value.
+%% exception if the given field name is not found.
+%% return 'false' if no such struct exists.
+-spec keyfind(kpro:field_name(), kpro:field_value(), [kpro:struct()]) ->
+        false | kpro:struct().
+keyfind(FieldName, FieldValue, Structs) ->
+  Pred = fun(Struct) ->
+             find(FieldName, Struct, {no_such_field, FieldName}) =:= FieldValue
+         end,
+  find_first(Pred, Structs).
+
+%%%_* Internals ================================================================
+
+find_first(_Pred, []) -> false;
+find_first(Pred, [Struct | Rest]) ->
+  case Pred(Struct) of
+    true -> Struct;
+    false -> find_first(Pred, Rest)
+  end.
+
+parse_endpoint("plaintext://" ++ HostPort) ->
+  {plaintext, parse_host_port(HostPort)};
+parse_endpoint("ssl://" ++ HostPort) ->
+  {ssl, parse_host_port(HostPort)};
+parse_endpoint("sasl_ssl://" ++ HostPort) ->
+  {sasl_ssl, parse_host_port(HostPort)};
+parse_endpoint("sasl_plaintext://" ++ HostPort) ->
+  {sasl_plaintext, parse_host_port(HostPort)};
+parse_endpoint(HostPort) ->
+  {undefined, parse_host_port(HostPort)}.
+
+parse_host_port(HostPort) ->
+  case string:tokens(HostPort, ":") of
+    [Host] ->
+      {Host, 9092};
+    [Host, Port] ->
+      {Host, list_to_integer(Port)}
+  end.
+
+-spec data_size(iodata(), count()) -> count().
+data_size([], Size) -> Size;
+data_size(<<>>, Size) -> Size;
+data_size(I, Size) when ?IS_BYTE(I) -> Size + 1;
+data_size(B, Size) when is_binary(B) -> Size + size(B);
+data_size([H | T], Size0) ->
+  Size1 = data_size(H, Size0),
+  data_size(T, Size1).
+
+get_schema(F, Context) ->
+  try
+    F()
+  catch
+    error : function_clause ->
+      erlang:error({unknown_type, Context})
   end.
 
 do_ok_pipe([Fun | FunList]) ->
