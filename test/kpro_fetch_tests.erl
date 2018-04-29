@@ -1,3 +1,17 @@
+%%%   Copyright (c) 2018, Klarna AB
+%%%
+%%%   Licensed under the Apache License, Version 2.0 (the "License");
+%%%   you may not use this file except in compliance with the License.
+%%%   You may obtain a copy of the License at
+%%%
+%%%       http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%%   Unless required by applicable law or agreed to in writing, software
+%%%   distributed under the License is distributed on an "AS IS" BASIS,
+%%%   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%%   See the License for the specific language governing permissions and
+%%%   limitations under the License.
+%%%
 -module(kpro_fetch_tests).
 
 -include_lib("eunit/include/eunit.hrl").
@@ -26,7 +40,7 @@ fetch_and_verify(Connection, Vsn, BeginOffset, Messages) ->
   #kafka_message{offset = NextBeginOffset} = lists:last(Batch),
   fetch_and_verify(Connection, Vsn, NextBeginOffset + 1, Rest).
 
-%% kafka 0.9 may return messages having offset less than rquested
+%% kafka 0.9 may return messages having offset less than requested
 %% in case the requested offset is in the middle of a compressed batch
 drop_older_offsets(Offset, [#kafka_message{offset = O} | R] = ML) ->
   case Offset < O of
@@ -53,7 +67,10 @@ do_fetch(Connection, Vsn, BeginOffset, MaxBytes) ->
   #{ header := Header
    , batches := Batches
    } = kpro:parse_response(Rsp),
-  ?assertEqual(no_error, kpro:find(error_code, Header)),
+  case Header of
+    undefined -> ok;
+    _ -> ?assertEqual(no_error, kpro:find(error_code, Header))
+  end,
   case Batches of
     ?incomplete_batch(Size) ->
       do_fetch(Connection, Vsn, BeginOffset, Size);
@@ -101,8 +118,10 @@ rand_num(N) -> (os:system_time() rem N) + 1.
 rand_element(L) -> lists:nth(rand_num(length(L)), L).
 
 make_req(Vsn, Offset, MaxBytes) ->
-  kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, Offset, 500, 0, MaxBytes,
-                     ?kpro_read_committed).
+  Opts = #{ max_wait_time => 500
+          , max_bytes => MaxBytes
+          },
+  kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, Offset, Opts).
 
 random_config() ->
   Configs0 =

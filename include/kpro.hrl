@@ -28,13 +28,13 @@
         }).
 
 -record(kpro_rsp,
-        { ref :: reference()
+        { ref :: false | reference()
         , api :: kpro:api()
         , vsn :: kpro:vsn()
         , msg :: binary() | kpro:struct()
         }).
 
--define(incomplete_batch(ExpectedSize), {incomplete_message, ExpectedSize}).
+-define(incomplete_batch(ExpectedSize), {incomplete_batch, ExpectedSize}).
 -define(kpro_null, undefined).
 -define(kpro_no_error, no_error).
 -define(kpro_cg_no_assignment, ?kpro_null).

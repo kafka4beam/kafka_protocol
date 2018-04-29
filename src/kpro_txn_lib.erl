@@ -30,10 +30,6 @@
 
 -define(DEFAULT_TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_TXN_TIMEOUT, timer:seconds(30)).
--define(OK_OR_ERR_TUPLE(EC), case EC =:= ?kpro_no_error of
-                               true -> ok;
-                               false -> {error, EC}
-                             end).
 
 -include("kpro_private.hrl").
 
@@ -60,7 +56,7 @@ end_txn(TxnCtx, AbortOrCommit, Opts) ->
   Req = kpro_req_lib:end_txn(TxnCtx, AbortOrCommit),
   FL =
     [ fun() -> kpro_connection:request_sync(Connection, Req, Timeout) end
-    , fun(#kpro_rsp{msg = #{error_code := EC}}) -> ?OK_OR_ERR_TUPLE(EC) end
+    , fun(#kpro_rsp{msg = #{error_code := EC}}) -> ok_or_error_tuple(EC) end
     ],
   kpro_lib:ok_pipe(FL).
 
@@ -90,7 +86,7 @@ add_offsets_to_txn(TxnCtx, CgId, Opts) ->
   Req = kpro_req_lib:add_offsets_to_txn(TxnCtx, CgId),
   FL =
     [ fun() -> kpro_connection:request_sync(Connection, Req, Timeout) end
-    , fun(#kpro_rsp{msg = #{error_code := EC}}) -> ?OK_OR_ERR_TUPLE(EC) end
+    , fun(#kpro_rsp{msg = #{error_code := EC}}) -> ok_or_error_tuple(EC) end
     ],
   kpro_lib:ok_pipe(FL).
 
@@ -160,6 +156,10 @@ make_txn_ctx(Connection, TxnId,
         }};
 make_txn_ctx(_Connection, _TxnId, #{error_code := EC}) ->
   {error, EC}.
+
+
+ok_or_error_tuple(?kpro_no_error) -> ok;
+ok_or_error_tuple(EC) -> {error, EC}.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

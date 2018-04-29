@@ -16,7 +16,7 @@
 
 %%%=============================================================================
 %%% @doc
-%%% This module manages an opaque of sent-request collection.
+%%% This module manages an opaque collection of sent-requests.
 %%% @end
 %%% ============================================================================
 
@@ -57,7 +57,7 @@
 new() -> #requests{}.
 
 %% @doc Add a new request to sent collection.
-%% Return the last corrlation ID and the new opaque.
+%% Return the last corrlation ID and the new collection.
 -spec add(requests(), pid(), reference(), kpro:api(), kpro:vsn()) ->
         {corr_id(), requests()}.
 add(#requests{ corr_id = CorrId

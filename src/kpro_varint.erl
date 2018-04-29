@@ -31,13 +31,13 @@ encode(Int) ->
   Bytes = enc_varint(enc_zigzag(Int)),
   iolist_to_binary(Bytes).
 
--spec enc_zigzag(integer()) -> integer().
+-spec enc_zigzag(integer()) -> non_neg_integer().
 enc_zigzag(Int) ->
   true = (Int >= -(1 bsl ?MAX_BITS)),
   true = (Int < ((1 bsl ?MAX_BITS) - 1)),
   (Int bsl 1) bxor (Int bsr ?MAX_BITS).
 
--spec enc_varint(integer()) -> iodata().
+-spec enc_varint(non_neg_integer()) -> iodata().
 enc_varint(I) ->
   H = I bsr 7,
   L = I band 127,

@@ -46,7 +46,7 @@ generate_schema_module(GroupedTypes) ->
   IoData =
     [?SCHEMA_MODULE_HEADER, "\n",
      generate_all_apis_fun(GroupedTypes),
-     generate_version_rage_clauses(GroupedTypes),
+     generate_version_range_clauses(GroupedTypes),
      generate_api_key_clauses(),
      generate_req_rsp_clauses(GroupedTypes),
      generate_ec_clauses()
@@ -69,10 +69,10 @@ generate_api_key_clauses() ->
   {ok, Apis} = file:consult("api-keys.eterm"),
   Clauses =
     [ ["api_key(", atom_to_list(Name), ") -> ", integer_to_list(Id), ";\n",
-       "api_key(", integer_to_list(Id), ") -> ", atom_to_list(Name)
+       "api_key(", integer_to_list(Id), ") -> ", atom_to_list(Name), ";\n"
       ] || {Name, Id} <- Apis
     ],
-  [infix(Clauses, ";\n"), ".\n\n"].
+  [Clauses, "api_key(API) -> erlang:error({not_supported, API}).\n\n"].
 
 generate_all_apis_fun(GroupedTypes) ->
   F = fun({Name, _}, Acc) ->
@@ -89,21 +89,21 @@ generate_all_apis_fun(GroupedTypes) ->
   APIs = lists:foldr(F, [], GroupedTypes),
   ["all_apis() ->\n[", infix(APIs, ",\n"), "].\n\n"].
 
-generate_version_rage_clauses(GroupedTypes) ->
+generate_version_range_clauses(GroupedTypes) ->
   F = fun({Name, VersionedFields}, Acc) ->
           case split_name(Name) of
             {API, "req"} ->
               Versions = [V || {V, _} <- VersionedFields],
               Min = integer_to_list(lists:min(Versions)),
               Max = integer_to_list(lists:max(Versions)),
-              Clause = ["vsn_range(", API, ") -> {", Min, ", ", Max, "}"],
+              Clause = ["vsn_range(", API, ") -> {", Min, ", ", Max, "};\n"],
               [Clause | Acc];
             {_API, "rsp"} ->
               Acc
           end
       end,
   Clauses = lists:foldr(F, [], GroupedTypes),
-  [infix(Clauses, ";\n"), ".\n\n"].
+  [Clauses, "vsn_range(_) -> false.\n\n"].
 
 generate_req_clauses(PerNameTypes) ->
   generate_schema_clauses(PerNameTypes, "req").

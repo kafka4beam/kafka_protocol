@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2014-2018, Klarna AB
+%%%   Copyright (c) 2018, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -21,8 +21,7 @@
         , list_offsets/5
         ]).
 
--export([ fetch/7
-        , fetch/8
+-export([ fetch/5
         ]).
 
 -export([ produce/4
@@ -96,7 +95,7 @@ list_offsets(Vsn, Topic, Partition, Time) ->
 
 %% @doc Help function to contruct a `list_offset' request against one single
 %% topic-partition. In transactional mode,
-%% set `IsolationLevel = ?kpro_read_uncommitted' to list uncommited offsets.
+%% set `IsolationLevel = ?kpro_read_uncommitted' to list uncommitted offsets.
 -spec list_offsets(vsn(), topic(), partition(),
                    latest | earliest | msg_ts(),
                    isolation_level()) -> req().
@@ -127,33 +126,43 @@ list_offsets(Vsn, Topic, Partition, Time, IsolationLevel) ->
   make(list_offsets, Vsn, Fields).
 
 %% @doc Help function to construct a `fetch' request
-%% against one single topic-partition.
-fetch(Vsn, Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes) ->
-  fetch(Vsn, Topic, Partition, Offset, MaxWaitTime, MinBytes, MaxBytes,
-        ?kpro_read_committed).
-
-%% @doc Help function to construct a `fetch' request
 %% against one single topic-partition. In transactional mode, set
 %% `IsolationLevel = kpro_read_uncommitted' to fetch uncommitted messages.
--spec fetch(vsn(), topic(), partition(), offset(), wait(), count(), count(),
-            isolation_level()) -> req().
-fetch(Vsn, Topic, Partition, Offset, MaxWaitTime,
-      MinBytes, MaxBytes, IsolationLevel) ->
+-spec fetch(vsn(), topic(), partition(), offset(),
+            #{ max_wait_time => wait()
+             , min_bytes => count()
+             , max_bytes => count()
+             , isolation_level => isolation_level()
+             , session_id => kpro:int32()
+             , epoch => kpro:int32()
+             }) -> req().
+fetch(Vsn, Topic, Partition, Offset, Opts) ->
+  MaxWaitTime = maps:get(max_wait_time, Opts, timer:seconds(1)),
+  MinBytes = maps:get(min_bytes, Opts, 0),
+  MaxBytes = maps:get(max_bytes, Opts, 1 bsl 20), %% 1M
+  IsolationLevel = maps:get(isolation_level, Opts, ?kpro_read_committed),
+  SessionID = maps:get(session_id, Opts, 0),
+  Epoch = maps:get(epoch, Opts, -1),
   Fields =
     [{replica_id, ?KPRO_REPLICA_ID},
      {max_wait_time, MaxWaitTime},
      {max_bytes, MaxBytes},
      {min_bytes, MinBytes},
      {isolation_level, IsolationLevel},
+     {session_id, SessionID},
+     {epoch, Epoch},
      {topics,[[{topic, Topic},
                {partitions,
                 [[{partition, Partition},
                   {fetch_offset, Offset},
                   {max_bytes, MaxBytes},
                   {log_start_offset, -1} %% irelevant to clients
-                 ]]}]]}],
+                 ]]}]]},
+     % we alwyas fetch from one single topic-partition
+     % never need to forget any
+     {forgetten_topics_data, []}
+    ],
   make(fetch, Vsn, Fields).
-
 
 %% @doc Help function to construct a produce request.
 produce(Vsn, Topic, Partition, Batch) ->
@@ -167,7 +176,7 @@ produce(Vsn, Topic, Partition, Batch) ->
 %%     Current system time will be taken if `ts' is missing in batch input.
 %% 2. `first_sequence' must exist in `Opts'.
 %%     It should be the sequence number for the fist message in batch.
-%%     Maintained by producr, sequence numbers should start from zero and be
+%%     Maintained by producer, sequence numbers should start from zero and be
 %%     monotonically increasing, with one sequence number per topic-partition.
 %% 3. `txn_ctx' (which is of spec `kpro:txn_ctx()') must exist in `Opts'
 -spec produce(vsn(), topic(), partition(),
@@ -179,10 +188,10 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
   TxnCtx = maps:get(txn_ctx, Opts, false),
   FirstSequence = maps:get(first_sequence, Opts, -1),
   EncodedBatch =
-    case TxnCtx of
-      false ->
+    case TxnCtx =:= false of
+      true ->
         kpro_batch:encode(Batch, Compression);
-      TxnCtx ->
+      false ->
         true = FirstSequence >= 0, %% assert
         kpro_batch:encode_tx(Batch, Compression, FirstSequence, TxnCtx)
     end,
@@ -343,9 +352,14 @@ encode_struct(API, Vsn, Fields) ->
 enc_struct([], _Values, _Stack) -> [];
 enc_struct([{Name, FieldSc} | Schema], Values, Stack) ->
   NewStack = [Name | Stack],
-  Value0 = kpro_lib:find(Name, Values,
-                         {field_missing, [ {stack, lists:reverse(NewStack)}
-                                         , {input, Values}]}),
+  Value0 =
+    try
+      kpro_lib:find(Name, Values)
+    catch
+      error : {no_such_field, _} ->
+        erlang:error({field_missing, [ {stack, lists:reverse(NewStack)}
+                                     , {input, Values}]})
+    end,
   Value = translate(NewStack, Value0),
   [ enc_struct_field(FieldSc, Value, NewStack)
   | enc_struct(Schema, Values, Stack)
@@ -360,7 +374,7 @@ enc_struct_field({array, Schema}, Values, Stack) ->
       | [enc_struct_field(Schema, Value, Stack) || Value <- Values]
       ];
     false ->
-      erlang:throw({not_array, Stack})
+      erlang:throw({not_array, Stack, Values})
   end;
 enc_struct_field(Schema, Value, Stack) when ?IS_STRUCT(Schema) ->
   enc_struct(Schema, Value, Stack);

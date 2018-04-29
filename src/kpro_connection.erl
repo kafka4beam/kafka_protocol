@@ -189,7 +189,7 @@ do_init(State0, Sock, Host, Config) ->
   %% idea is from github.com/epgsql/epgsql
   {ok, [{recbuf, RecBufSize}, {sndbuf, SndBufSize}]} =
     inet:getopts(Sock, [recbuf, sndbuf]),
-    ok = inet:setopts(Sock, [{buffer, max(RecBufSize, SndBufSize)}]),
+  ok = inet:setopts(Sock, [{buffer, max(RecBufSize, SndBufSize)}]),
   SslOpts = maps:get(ssl, Config, false),
   Mod = get_tcp_mod(SslOpts),
   NewSock = maybe_upgrade_to_ssl(Sock, Mod, SslOpts, Timeout),
@@ -247,7 +247,7 @@ inactive_request_sync(#kpro_req{api = API, vsn = Vsn} = Req,
     ok = Mod:send(Sock, ReqBin),
     {ok, RspBin} = Mod:recv(Sock, _Len = 0, Timeout),
     {CorrId, Body} = decode_corr_id(RspBin),
-    kpro_rsp_lib:decode(API, Vsn, Body, _IgnoredRef = make_ref())
+    kpro_rsp_lib:decode(API, Vsn, Body, _DummyRef = false)
   catch
     error : Reason ->
       Stack = erlang:get_stacktrace(),
@@ -586,8 +586,7 @@ get_client_id(Config) ->
     false -> ClientId
   end.
 
-find(FieldName, Struct) ->
-  kpro_lib:find(FieldName, Struct, {no_such_field, FieldName}).
+find(FieldName, Struct) -> kpro_lib:find(FieldName, Struct).
 
 decode_corr_id(<<CorrId:32/unsigned-integer, Body/binary>>) -> {CorrId, Body}.
 

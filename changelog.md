@@ -17,3 +17,20 @@
   - Fix compressed message wrapper timestamp handling, use the max ts in compressed batch
   - Fix wrapper message offset (always set to 0) to work with kafka 0.11
   - Fix snappy decompression, version 1 record (MagicByte=1) may not have java snappy packing
+* 2.0.0
+  - Supported kafka 1.1 protocol
+  - API keys are generated from bnf
+  - Error codes are generated from a eterm.
+  - Schema getters changed from `get(API_request, Vsn)` to `req(API, Vsn)`,
+    and `get(API_response, Vsn)` to `rsp(API, Vsn)`.
+  - `kpro:struct()` is now a `map()`, but `list()` is still supported as encoder input
+  - Added socket implementation `kpro_connection.erl` (a copy of `brod_sock.erl`).
+  - Basic connection management APIs:
+      * connect to any node in a give cluster
+      * discover and connect partition-leader
+      * discover and connect group-coordinator
+      * discover and connect transactional-coordinator
+      * discover and connect cluster-controller
+  - Transactional RPC primitives `kpro:txn_xxx`
+  - Changed socket option from `{packet, raw}` to `{packet, 4}`
+

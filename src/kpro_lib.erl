@@ -1,9 +1,26 @@
+%%%
+%%%   Copyright (c) 2018, Klarna AB
+%%%
+%%%   Licensed under the Apache License, Version 2.0 (the "License");
+%%%   you may not use this file except in compliance with the License.
+%%%   You may obtain a copy of the License at
+%%%
+%%%       http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%%   Unless required by applicable law or agreed to in writing, software
+%%%   distributed under the License is distributed on an "AS IS" BASIS,
+%%%   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%%   See the License for the specific language governing permissions and
+%%%   limitations under the License.
+%%%
+
 -module(kpro_lib).
 
 -export([ copy_bytes/2
         , data_size/1
         , decode/2
         , encode/2
+        , find/2
         , find/3
         , get_prelude_schema/2
         , get_req_schema/2
@@ -28,13 +45,17 @@
 
 %%%_* APIs =====================================================================
 
-%% @doc Function pipeline. The fist function takes no args, all succeeding
-%% functions take one arg. All functions should retrun either
-%% `ok' | `{ok, Result}' | `{error, Reason}'. `Result' is the input arg of
-%% the next function (or the result of pipeline).
-%% NOTE: If a funcition returns `ok' the next should be an arity-0 fun.
-%% Any `{error, Reason}' return value would cause the pipeline to abort.
-%% NOTE: The pipe funcions are delegated to an agent process to evaluate
+%% @doc Function pipeline.
+%% The first function takes no args, all succeeding ones shoud be arity-0 or 1
+%% functions. All functions should retrun
+%% `ok' | `{ok, Result}' | `{error, Reason}'.
+%% where `Result' is the input arg of the next function,
+%% or the result of pipeline if it's the last pipe node.
+%%
+%% NOTE: If a funcition returns `ok' the next should be an arity-0 function.
+%%       Any `{error, Reason}' return value would cause the pipeline to abort.
+%%
+%% NOTE: The pipe funcions are delegated to an agent process to evaluate,
 %%       only exceptions and process links are propagated back to caller
 %%       other side-effects like monitor references are not handled.
 ok_pipe(FunList, Timeout) ->
@@ -46,15 +67,19 @@ ok_pipe(FunList) ->
 
 %% @doc Parse comma separated endpoints in a string into a list of
 %% `{Host::string(), Port::integer()}' pairs.
-%% Endpoints may or may not start with protocol prefix (non case sensitive):
+%% Endpoints may start with protocol prefix (non case sensitive):
 %% `PLAINTEXT://', `SSL://', `SASL_PLAINTEXT://' or `SASL_SSL://'.
 %% The first arg is to filter desired endpoints from parse result.
 -spec parse_endpoints(kpro:protocol() | undefined, string()) ->
         [kpro:endpoint()].
 parse_endpoints(Protocol, Str) ->
-  Eps0 = string:tokens(Str, ",\n"),
-  L = [parse_endpoint(string:to_lower(Ep)) || Ep <- Eps0, Ep =/= ""],
-  [EP || {P, EP} <- L, Protocol =:= P].
+  lists:foldr(
+    fun(EP, Acc) ->
+        case EP =/= "" andalso parse_endpoint(string:to_lower(EP)) of
+          {Protocol, Endpoint} -> [Endpoint | Acc];
+          _ -> Acc
+        end
+    end, [], string:tokens(Str, ",\n")).
 
 %% @doc Return number of bytes in the given `iodata()'.
 -spec data_size(iodata()) -> count().
@@ -82,7 +107,7 @@ encode(string, B) when is_binary(B) ->
   <<Length:16/?INT, B/binary>>;
 encode(bytes, ?null) -> <<-1:32/?INT>>;
 encode(bytes, B) when is_binary(B) orelse is_list(B) ->
-  Size = kpro_lib:data_size(B),
+  Size = data_size(B),
   case Size =:= 0 of
     true  -> <<-1:32/?INT>>;
     false -> [<<Size:32/?INT>>, B]
@@ -152,21 +177,37 @@ get_prelude_schema(Tag, Vsn) ->
   F = fun() -> kpro_prelude_schema:get(Tag, Vsn) end,
   get_schema(F, {Tag, Vsn}).
 
--spec find(kpro:field_name(), kpro:struct(), term()) -> kpro:field_value().
-find(Field, Struct, Error) when is_map(Struct) ->
+%% @doc Find struct filed value.
+%% Error exception `{not_struct, TheInput}' is raised when
+%% the input is not a `kpro:struct()'.
+%% Error exception `{no_such_field, FieldName}' is raised when
+%% the field is not found.
+-spec find(kpro:field_name(), kpro:struct()) -> kpro:field_value().
+find(Field, Struct) when is_map(Struct) ->
   try
     maps:get(Field, Struct)
   catch
     error : {badkey, _} ->
-      erlang:error(Error)
+      erlang:error({no_such_field, Field})
   end;
-find(Field, Struct, Error) when is_list(Struct) ->
+find(Field, Struct) when is_list(Struct) ->
   case lists:keyfind(Field, 1, Struct) of
     {_, Value} -> Value;
-    false -> erlang:error(Error)
+    false -> erlang:error({no_such_field, Field})
   end;
-find(_Field, Other, _Error) ->
+find(_Field, Other) ->
   erlang:error({not_struct, Other}).
+
+%% @doc Find struct field value, return `Default' if the field is not found.
+-spec find(kpro:filed_name(), kpro:struct(), kpro:field_value()) ->
+        kpro:field_value().
+find(Field, Struct, Default) ->
+  try
+    find(Field, Struct)
+  catch
+    error : {no_such_field, _} ->
+      Default
+  end.
 
 %% @doc Equivalent to `maps:update_with/4' (since otp 19).
 update_map(Key, Fun, Init, Map) ->
@@ -175,10 +216,10 @@ update_map(Key, Fun, Init, Map) ->
     _ -> Map#{Key => Init}
   end.
 
-%% @doc delegate function evaluation to a agent process
+%% @doc delegate function evaluation to an agent process
 %% abort if it does not finish in time.
 %% exceptions and linked processes are caught in agent process
-%% adn propagated to parent process
+%% and propagated to parent process
 with_timeout(F0, Timeout) ->
   Parent = self(),
   ResultRef = make_ref(),
@@ -234,7 +275,7 @@ with_timeout(F0, Timeout) ->
         false | kpro:struct().
 keyfind(FieldName, FieldValue, Structs) ->
   Pred = fun(Struct) ->
-             find(FieldName, Struct, {no_such_field, FieldName}) =:= FieldValue
+             find(FieldName, Struct) =:= FieldValue
          end,
   find_first(Pred, Structs).
 
