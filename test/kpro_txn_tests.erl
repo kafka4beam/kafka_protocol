@@ -1,3 +1,18 @@
+%%%   Copyright (c) 2018, Klarna AB
+%%%
+%%%   Licensed under the Apache License, Version 2.0 (the "License");
+%%%   you may not use this file except in compliance with the License.
+%%%   You may obtain a copy of the License at
+%%%
+%%%       http://www.apache.org/licenses/LICENSE-2.0
+%%%
+%%%   Unless required by applicable law or agreed to in writing, software
+%%%   distributed under the License is distributed on an "AS IS" BASIS,
+%%%   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%%%   See the License for the specific language governing permissions and
+%%%   limitations under the License.
+%%%
+
 % This eunit module tests below APIs:
 % find_coordinator (txn)
 % init_producer_id,
@@ -12,32 +27,6 @@
 -include("kpro_private.hrl").
 
 -define(TIMEOUT, 5000).
-
-%% this is just an attempt to warm-up kafka
-warm_up_test() ->
-  {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
-  {_MinProduceVsn, MaxProduceVsn} = maps:get(produce, Versions),
-  case MaxProduceVsn >= ?MIN_MAGIC_2_PRODUCE_API_VSN of
-    true ->
-      TxnId = make_transactional_id(),
-      % find_coordinator (txn)
-      {ok, Conn} =
-        case connect_coordinator(TxnId) of
-          {ok, Success} -> {ok, Success};
-          {error, _Failure} ->
-            % kafka will have to create the internal topic for
-            % transaction state logs when it receives
-            % `find_coordinator' request for the fist time.
-            % This connect call may fail with a 'coordinator_not_available'
-            % reason, here we add a delayed retry to hope for the best
-            timer:sleep(2000),
-            connect_coordinator(TxnId)
-        end,
-      _ = kpro:txn_init_ctx(Conn, TxnId),
-      ok = kpro:close_connection(Conn);
-    false ->
-      io:format(user, " skipped (vsn = ~p)", [MaxProduceVsn])
-  end.
 
 %% basic test of begin -> write -> commit
 txn_produce_test() ->
@@ -54,8 +43,11 @@ test_txn_produce(ProduceVsn, FetchVsn) ->
   Partition = partition(),
   FetchReqFun =
     fun(Offset, IsolationLevel) ->
-        kpro_req_lib:fetch(FetchVsn, Topic, Partition,
-                           Offset, 500, 0, 10000, IsolationLevel)
+        kpro_req_lib:fetch(FetchVsn, Topic, Partition, Offset,
+                           #{ max_wait_time => 500
+                            , min_bytes => 0
+                            , max_bytes => 10000
+                            , isolation_level => IsolationLevel})
     end,
   TxnId = make_transactional_id(),
   % find_coordinator (txn)
@@ -96,8 +88,11 @@ test_txn_fetch_produce_test(ProduceVsn, FetchVsn) ->
   Partition = partition(),
   FetchReqFun =
     fun(Offset, read_committed) -> % this test case tests read_committed only
-        kpro_req_lib:fetch(FetchVsn, Topic, Partition,
-                           Offset, 500, 0, 10000, read_committed)
+        kpro_req_lib:fetch(FetchVsn, Topic, Partition, Offset,
+                           #{ max_wait_time => 500
+                            , min_bytes => 0
+                            , max_bytes => 10000
+                            , isolation_level => read_committed})
     end,
   GroupId = make_group_id(),
   {ok, GroupConn} = connect_group_coordinator(GroupId),
@@ -142,8 +137,12 @@ test_txn_produce_2(ProduceVsn, FetchVsn) ->
   Partition = partition(),
   FetchReqFun =
     fun(Offset, IsolationLevel) ->
-        kpro_req_lib:fetch(FetchVsn, Topic, Partition,
-                           Offset, 500, 0, 10000, IsolationLevel)
+        kpro_req_lib:fetch(FetchVsn, Topic, Partition, Offset,
+                           #{ max_wait_time => 500
+                            , min_bytes => 0
+                            , max_bytes => 10000
+                            , isolation_level => IsolationLevel
+                            })
     end,
   TxnId = make_transactional_id(),
   % find_coordinator (txn)
@@ -262,10 +261,23 @@ make_random_batch() ->
   ].
 
 connect_coordinator(ProducerId) ->
+  connect_coordinator(ProducerId, 5, false).
+
+connect_coordinator(_ProducerId, 0, Reason) ->
+  erlang:error(Reason);
+connect_coordinator(ProducerId, TryCount, _LastFailure) ->
   Cluster = kpro_test_lib:get_endpoints(ssl),
   ConnCfg = kpro_test_lib:connection_config(ssl),
   Args = #{type => txn, id => ProducerId},
-  kpro:connect_coordinator(Cluster, ConnCfg, Args).
+  case kpro:connect_coordinator(Cluster, ConnCfg, Args) of
+    {ok, Conn} ->
+      {ok, Conn};
+    {error, Reason} ->
+      io:format(user, "\nfailed to connect txn coordinator, reason: ~p\n",
+                [Reason]),
+      timer:sleep(1000),
+      connect_coordinator(ProducerId, TryCount - 1, Reason)
+  end.
 
 connect_group_coordinator(GroupId) ->
   Cluster = kpro_test_lib:get_endpoints(plaintext),

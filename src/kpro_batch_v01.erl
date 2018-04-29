@@ -177,7 +177,7 @@ do_encode_messages(KvList) ->
   {Stream, _Offset, MaxTs, KvCount} =
     foldl_kvlist(F, {[], _Offset0 = 0, ?NO_TIMESTAMP, _KvCount = 0}, KvList),
   WrapperTs = case KvCount > 0 andalso MaxTs =/= ?NO_TIMESTAMP of
-                true  -> false; %% some are {T, K} some are {T, K, V}
+                true  -> false; %% some are {K, V} some are {T, K, V}
                 false -> MaxTs
               end,
   {lists:reverse(Stream), WrapperTs}.
@@ -213,9 +213,9 @@ compress(Method, IoData, WrapperMsgTs) ->
   Value = kpro_compress:compress(Method, IoData),
   Codec = kpro_compress:method_to_codec(Method),
   %% Wrapper message offset for 0.10 or prior is ignored.
-  %% For 0.11 or later, it has to be one of:
-  %%  - 0: a special acceptable case
-  %%  - Offset of the last message in the inner batch
+  %% For 0.11 or later, broker accepts only one of below:
+  %%  - 0: special treat for C++ client, we use it here for simplicity
+  %%  - Relative offset of the last message in the inner batch
   %%  - The absolute offset in kafka which is unknown to clients
   WrapperOffset = 0,
   encode_message(Codec, WrapperMsgTs, Key, Value, WrapperOffset).

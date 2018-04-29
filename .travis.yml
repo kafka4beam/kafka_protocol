@@ -28,8 +28,8 @@ script:
   - make xref
   - make edoc
   - make dialyze
-  - make KAFKA_VERSION=1.1 testbed && make eunit
-  - make KAFKA_VERSION=0.11 testbed && make eunit
-  - make KAFKA_VERSION=0.10 testbed && make eunit
-  - make KAFKA_VERSION=0.9 testbed && export KPRO_TEST_KAFKA_09=1 && make eunit
+  - make KAFKA_VERSION=1.1 testbed > /dev/null && make eunit
+  - make KAFKA_VERSION=0.11 testbed > /dev/null && make eunit
+  - make KAFKA_VERSION=0.10 testbed > /dev/null && make eunit
+  - make KAFKA_VERSION=0.9 testbed > /dev/null && export KPRO_TEST_KAFKA_09=1 && make eunit
 

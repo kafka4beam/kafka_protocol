@@ -47,7 +47,7 @@ connect_any(Endpoints0, Config) ->
   Endpoints = random_order(Endpoints0),
   connect_any(Endpoints, Config, []).
 
-%% @doc Evaluate give function with a connection to any of the nodes in
+%% @doc Evaluate given function with a connection to any of the nodes in
 %% in the given endpoints.
 %% Raise a 'throw' exception if failed to connect all endpoints.
 -spec with_connection([endpoint()], config(),
@@ -68,8 +68,8 @@ with_connection(Endpoints, Config, Fun) ->
 
 %% @doc Connect partition leader.
 %% If the fist arg is not an already established metadata connection
-%% but a bootstraping endpoint list, this function will first try to
-%% establish a temp connection to any of the bootstraping endpoints.
+%% but a bootstrapping endpoint list, this function will first try to
+%% establish a temp connection to any of the bootstrapping endpoints.
 %% Then send metadata request to discover partition leader broker
 %% Finally connect to the leader broker.
 -spec connect_partition_leader(connection() | [endpoint()], config(),
@@ -82,7 +82,7 @@ connect_partition_leader(Bootstrap, Config, Topic, Partition, Opts) ->
   discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
 
 %% @doc Connect group or transaction coordinator.
-%% If the first arg is not a connection pid but a list of bootstraping
+%% If the first arg is not a connection pid but a list of bootstrapping
 %% endpoints, it will frist try to connect to any of the nodes
 %% NOTE: 'txn' type only applicable to kafka 0.11 or later
 -spec connect_coordinator(connection() | [endpoint()], config(),
@@ -239,7 +239,6 @@ discover_controller(Conn, Timeout) ->
     ],
   kpro_lib:ok_pipe(FL, Timeout).
 
-
 %% Discover broker and connect to it. The broker can be:
 %% * Partition leader
 %% * Cluster controller
@@ -268,12 +267,9 @@ api_vsn_range_intersection(undefined) ->
   %% always use minimum supported version in this case
   lists:foldl(
     fun(API, Acc) ->
-        try kpro_api_vsn:kafka_09_range(API) of
-          {Min, _Max} ->
-            Acc#{API => {Min, Min}}
-        catch
-          error : function_clause ->
-            Acc
+        case kpro_api_vsn:kafka_09_range(API) of
+          false -> Acc;
+          {Min, _Max} -> Acc#{API => {Min, Min}}
         end
     end, #{}, kpro_schema:all_apis());
 api_vsn_range_intersection(Vsns) ->
@@ -287,13 +283,7 @@ api_vsn_range_intersection(Vsns) ->
 
 %% Intersect received api version range with supported range.
 api_vsn_range_intersection(API, MinReceived, MaxReceived) ->
-  Supported = try
-                kpro_api_vsn:range(API)
-              catch
-                error : function_clause ->
-                  false
-              end,
-  case Supported of
+  case kpro_api_vsn:range(API) of
     {MinSupported, MaxSupported} ->
       Min = max(MinSupported, MinReceived),
       Max = min(MaxSupported, MaxReceived),
@@ -312,7 +302,7 @@ connect_any([{Host, Port} | Rest], Config, Errors) ->
       connect_any(Rest, Config, [{{Host, Port}, Error} | Errors])
   end.
 
-%% Avoid always pounding the first endpoint in bootstraping list.
+%% Avoid always pounding the first endpoint in bootstrapping list.
 random_order(L) ->
   RandL = [rand:uniform(1000) || _ <- L],
   RI = lists:sort(lists:zip(RandL, L)),

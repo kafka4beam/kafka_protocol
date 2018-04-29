@@ -105,7 +105,7 @@ public class KafkaProtocolBnf {
         b.append("# generated code, do not edit!\n\n");
         for (ApiKeys key : ApiKeys.values()) {
             // Requests
-            if(key.clusterAction) {
+            if (key.clusterAction) {
               continue;
             }
             b.append("#ApiKey: ");

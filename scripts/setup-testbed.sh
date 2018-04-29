@@ -2,7 +2,7 @@
 
 cd $(dirname "$0")
 
-# test against 1.0.0 by default
+# test against 1.1.0 by default
 VERSION="${1:-1.1.0}"
 
 case $VERSION in

@@ -81,6 +81,7 @@
 
 -define(MIN_MAGIC_2_PRODUCE_API_VSN, 3). %% since kafka 0.11
 -define(MIN_MAGIC_2_FETCH_API_VSN, 4). %% since kafka 0.11
+-define(MIN_INCREMENTAL_FETCH_API_VSN, 7). %% since kafka 1.1.0
 
 -endif.
 

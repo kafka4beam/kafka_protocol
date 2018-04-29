@@ -23,7 +23,6 @@ COPY server.properties /etc/kafka/server.properties
 COPY server.jks /etc/kafka/server.jks
 COPY truststore.jks /etc/kafka/truststore.jks
 COPY jaas.conf /etc/kafka/jaas.conf
-#COPY log4j.properties /opt/kafka/config/log4j.properties
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 

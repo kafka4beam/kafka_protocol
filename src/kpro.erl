@@ -240,7 +240,7 @@
 -type batch_meta() :: ?KPRO_NO_BATCH_META %% magic 0-1
                     | #{batch_meta_key() => batch_meta_val()}.
 -type batch_decode_result() :: ?incomplete_batch(int32())
-                             | {batch_meta(), [message()]}.
+                             | [{batch_meta(), [message()]}].
 %% offset or offset + associated user-data to commit
 -type offset_ud() :: offset() %% no user data
                    | {offset(), binary()}.
@@ -251,24 +251,20 @@
 %% Offset => int64
 %% Length => int32
 %% We need to at least fetch 12 bytes in order to fetch:
-%%  - one complete message when it's magic v0-1 not compressed
-%%  - one comprete batch when it's v0-1 compressed batch
-%%    v0-1 compressed batch is embedded in a wrapper message (i.e. recursive)
-%%  - one complete batch when it is v2.
-%%    v2 batch is flat and trailing the batch header.
+%%  - One complete non-compressed message when it is magic v0-1
+%%  - Or one complete compressed batch when it is magic v0-1
+%%    (magic v0-1 compressed batch is embedded in a wrapper message in a
+%%     'recursive' manner)
+%%  - Or one omplete batch when it is a magic v2 batch
 -define(BATCH_LEADING_BYTES, 12).
 
 %%%_* APIs =====================================================================
 
-%% @doc Parse comma separated endpoints in a string into a list of
-%% `{Host::string(), Port::integer()}' pairs.
+%% @see kpro_lib:parse_endpoints/2.
 parse_endpoints(String) ->
   parse_endpoints(undefined, String).
 
-%% @doc Same return value as `parse_endpoints/1'.
-%% Endpoints may or may not start with protocol prefix (non case sensitive):
-%% `PLAINTEXT://', `SSL://', `SASL_PLAINTEXT://' or `SASL_SSL://'.
-%% The first arg is to filter desired endpoints from parse result.
+%% @see kpro_lib:parse_endpoints/2.
 -spec parse_endpoints(protocol() | undefined, string()) -> [endpoint()].
 parse_endpoints(Protocol, String) ->
   kpro_lib:parse_endpoints(Protocol, String).
@@ -292,11 +288,11 @@ encode_request(ClientId, CorrId, Req) ->
   kpro_req_lib:encode(ClientId, CorrId, Req).
 
 %% @doc The messageset is not decoded upon receiving (in socket process).
-%% Pass the message set as binary to the consumer process and decode there
+%% Pass the message set as binary to the consumer process and decode there.
 %% Return `?incomplete_batch(ExpectedSize)' if the fetch size is not big
-%% enough for even one single message. Otherwise return `{Meta, Messages}'
+%% enough for even one single message. Otherwise return `[{Meta, Messages}]'
 %% where `Meta' is either `?KPRO_NO_BATCH_META' for magic-version 0-1 or
-%% `#kafka_batch_meta{}' for magic-version 2 or above.
+%% `kpro:batch_meta()' for magic-version 2 or above.
 -spec decode_batches(binary()) -> kpro:batch_decode_result().
 decode_batches(<<_:64/?INT, L:32, T/binary>> = Bin) when size(T) >= L ->
   kpro_batch:decode(Bin);
@@ -336,12 +332,12 @@ close_connection(Connection) ->
 
 %% @doc Connect partition leader.
 %% If the fist arg is not an already established metadata connection
-%% but a bootstraping endpoint list, this function will first try to
-%% establish a temp connection to any of the bootstraping endpoints.
+%% but a bootstrapping endpoint list, this function will first try to
+%% establish a temp connection to any of the bootstrapping endpoints.
 %% Then send metadata request to discover partition leader broker
 %% Finally connect to the leader broker.
 %% NOTE: Connection process is linked to caller unless `nolink => true'
-%%       is set in connection connection config.
+%%       is set in connection config.
 -spec connect_partition_leader(connection() | [endpoint()], conn_config(),
                                topic(), partition()) ->
         {ok, connection()} | {error, any()}.
@@ -371,7 +367,7 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
 connect_controller(Bootstrap, ConnConfig) ->
   connect_controller(Bootstrap, ConnConfig, #{}).
 
-%% @doc Conect to the controller broker of the kafka cluster.
+%% @doc Connect to the controller broker of the kafka cluster.
 -spec connect_controller(connection() | [endpoint()], conn_config(),
                          #{timeout => timeout()}) ->
         {ok, connection()} | {error, any()}.
@@ -379,7 +375,7 @@ connect_controller(Bootstrap, ConnConfig, Opts) ->
   kpro_brokers:connect_controller(Bootstrap, ConnConfig, Opts).
 
 %% @doc Connect to group or transaction coordinator.
-%% If the first arg is not a connection pid but a list of bootstraping
+%% If the first arg is not a connection pid but a list of bootstrapping
 %% endpoints, it will frist try to connect to any of the nodes
 %% NOTE: 'txn' type only applicable to kafka 0.11 or later
 -spec connect_coordinator(connection() | [endpoint()], conn_config(),
@@ -412,27 +408,20 @@ get_api_versions(Connection) ->
 get_api_vsn_range(Connection, API) ->
   kpro_brokers:get_api_vsn_range(Connection, API).
 
-%% @doc Find field value in a struct, raise an 'error' exception if not found.
+%% @see kpro_lib:find/2.
 -spec find(field_name(), struct()) -> field_value().
-find(Field, Struct) ->
-  kpro_lib:find(Field, Struct, {no_such_field, Field}).
+find(Field, Struct) -> kpro_lib:find(Field, Struct).
 
-%% @doc Find field value in a struct, reutrn default if not found.
+%% @see kpro_lib:find/3
 -spec find(field_name(), struct(), field_value()) -> field_value().
-find(Field, Struct, Default) ->
-  try
-    find(Field, Struct)
-  catch
-    error : {no_such_field, _} ->
-      Default
-  end.
+find(Field, Struct, Default) -> kpro_lib:find(Field, Struct, Default).
 
 %%%_* Transactional APIs =======================================================
 
 %% @doc Initialize a transaction context, the connection should be established
 %% towards transactional coordinator broker.
-%% By default the request timeout `timeout' is 5 seconds. This is is for client
-%% to abort waitting for response and consider it an error `{error, timeout}'.
+%% By default the request timeout `timeout' is 5 seconds. This is for client
+%% to abort waiting for response and consider it an error `{error, timeout}'.
 %% Transaction timeout `txn_timeout' is `-1' by default, which means use kafka
 %% broker setting. The default timeout in kafka broker is 1 minute.
 %% `txn_timeout' is for kafka transaction coordinator to abort transaction if

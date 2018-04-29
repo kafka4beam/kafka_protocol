@@ -34,10 +34,15 @@ alter_configs,
 alter_replica_log_dirs,
 describe_log_dirs,
 sasl_authenticate,
-create_partitions].
+create_partitions,
+create_delegation_token,
+renew_delegation_token,
+expire_delegation_token,
+describe_delegation_token,
+delete_groups].
 
 vsn_range(produce) -> {0, 5};
-vsn_range(fetch) -> {0, 6};
+vsn_range(fetch) -> {0, 7};
 vsn_range(list_offsets) -> {0, 2};
 vsn_range(metadata) -> {0, 5};
 vsn_range(offset_commit) -> {0, 3};
@@ -62,12 +67,18 @@ vsn_range(txn_offset_commit) -> {0, 0};
 vsn_range(describe_acls) -> {0, 0};
 vsn_range(create_acls) -> {0, 0};
 vsn_range(delete_acls) -> {0, 0};
-vsn_range(describe_configs) -> {0, 0};
+vsn_range(describe_configs) -> {0, 1};
 vsn_range(alter_configs) -> {0, 0};
 vsn_range(alter_replica_log_dirs) -> {0, 0};
 vsn_range(describe_log_dirs) -> {0, 0};
 vsn_range(sasl_authenticate) -> {0, 0};
-vsn_range(create_partitions) -> {0, 0}.
+vsn_range(create_partitions) -> {0, 0};
+vsn_range(create_delegation_token) -> {0, 0};
+vsn_range(renew_delegation_token) -> {0, 0};
+vsn_range(expire_delegation_token) -> {0, 0};
+vsn_range(describe_delegation_token) -> {0, 0};
+vsn_range(delete_groups) -> {0, 0};
+vsn_range(_) -> false.
 
 api_key(produce) -> 0;
 api_key(0) -> produce;
@@ -132,7 +143,18 @@ api_key(35) -> describe_log_dirs;
 api_key(sasl_authenticate) -> 36;
 api_key(36) -> sasl_authenticate;
 api_key(create_partitions) -> 37;
-api_key(37) -> create_partitions.
+api_key(37) -> create_partitions;
+api_key(create_delegation_token) -> 38;
+api_key(38) -> create_delegation_token;
+api_key(renew_delegation_token) -> 39;
+api_key(39) -> renew_delegation_token;
+api_key(expire_delegation_token) -> 40;
+api_key(40) -> expire_delegation_token;
+api_key(describe_delegation_token) -> 41;
+api_key(41) -> describe_delegation_token;
+api_key(delete_groups) -> 42;
+api_key(42) -> delete_groups;
+api_key(API) -> erlang:error({not_supported, API}).
 
 req(produce, V) when V >= 0, V =< 2 ->
   [{acks,int16},
@@ -185,6 +207,32 @@ req(fetch, V) when V >= 5, V =< 6 ->
                                        {fetch_offset,int64},
                                        {log_start_offset,int64},
                                        {max_bytes,int32}]}}]}}];
+req(fetch, 7) ->
+  [{replica_id,int32},
+   {max_wait_time,int32},
+   {min_bytes,int32},
+   {max_bytes,int32},
+   {isolation_level,int8},
+   {session_id,int32},
+   {epoch,int32},
+   {topics,
+       {array,
+           [{topic,string},
+            {partitions,
+                {array,
+                    [{partition,int32},
+                     {fetch_offset,int64},
+                     {log_start_offset,int64},
+                     {max_bytes,int32}]}}]}},
+   {forgetten_topics_data,
+       {array,
+           [{topic,string},
+            {partitions,
+                {array,
+                    [{partition,int32},
+                     {fetch_offset,int64},
+                     {log_start_offset,int64},
+                     {max_bytes,int32}]}}]}}];
 req(list_offsets, 0) ->
   [{replica_id,int32},
    {topics,{array,[{topic,string},
@@ -351,6 +399,11 @@ req(describe_configs, 0) ->
   [{resources,{array,[{resource_type,int8},
                       {resource_name,string},
                       {config_names,{array,string}}]}}];
+req(describe_configs, 1) ->
+  [{resources,{array,[{resource_type,int8},
+                      {resource_name,string},
+                      {config_names,{array,string}}]}},
+   {include_synonyms,boolean}];
 req(alter_configs, 0) ->
   [{resources,
        {array,
@@ -375,7 +428,18 @@ req(create_partitions, 0) ->
             {new_partitions,
                 [{count,int32},{assignment,{array,{array,int32}}}]}]}},
    {timeout,int32},
-   {validate_only,boolean}].
+   {validate_only,boolean}];
+req(create_delegation_token, 0) ->
+  [{renewers,{array,[{principal_type,string},{name,string}]}},
+   {max_life_time,int64}];
+req(renew_delegation_token, 0) ->
+  [{hmac,bytes},{renew_time_period,int64}];
+req(expire_delegation_token, 0) ->
+  [{hmac,bytes},{expiry_time_period,int64}];
+req(describe_delegation_token, 0) ->
+  [{owners,{array,[{principal_type,string},{name,string}]}}];
+req(delete_groups, 0) ->
+  [{groups,{array,string}}].
 
 rsp(produce, 0) ->
   [{responses,
@@ -461,6 +525,26 @@ rsp(fetch, 4) ->
                      {record_set,records}]}}]}}];
 rsp(fetch, V) when V >= 5, V =< 6 ->
   [{throttle_time_ms,int32},
+   {responses,
+       {array,
+           [{topic,string},
+            {partition_responses,
+                {array,
+                    [{partition_header,
+                         [{partition,int32},
+                          {error_code,int16},
+                          {high_watermark,int64},
+                          {last_stable_offset,int64},
+                          {log_start_offset,int64},
+                          {aborted_transactions,
+                              {array,
+                                  [{producer_id,int64},
+                                   {first_offset,int64}]}}]},
+                     {record_set,records}]}}]}}];
+rsp(fetch, 7) ->
+  [{throttle_time_ms,int32},
+   {error_code,int16},
+   {session_id,int32},
    {responses,
        {array,
            [{topic,string},
@@ -818,6 +902,26 @@ rsp(describe_configs, 0) ->
                      {read_only,boolean},
                      {is_default,boolean},
                      {is_sensitive,boolean}]}}]}}];
+rsp(describe_configs, 1) ->
+  [{throttle_time_ms,int32},
+   {resources,
+       {array,
+           [{error_code,int16},
+            {error_message,nullable_string},
+            {resource_type,int8},
+            {resource_name,string},
+            {config_entries,
+                {array,
+                    [{config_name,string},
+                     {config_value,nullable_string},
+                     {read_only,boolean},
+                     {config_source,int8},
+                     {is_sensitive,boolean},
+                     {config_synonyms,
+                         {array,
+                             [{config_name,string},
+                              {config_value,nullable_string},
+                              {config_source,int8}]}}]}}]}}];
 rsp(alter_configs, 0) ->
   [{throttle_time_ms,int32},
    {resources,{array,[{error_code,int16},
@@ -850,7 +954,35 @@ rsp(create_partitions, 0) ->
   [{throttle_time_ms,int32},
    {topic_errors,{array,[{topic,string},
                          {error_code,int16},
-                         {error_message,nullable_string}]}}].
+                         {error_message,nullable_string}]}}];
+rsp(create_delegation_token, 0) ->
+  [{error_code,int16},
+   {owner,[{principal_type,string},{name,string}]},
+   {issue_timestamp,int64},
+   {expiry_timestamp,int64},
+   {max_timestamp,int64},
+   {token_id,string},
+   {hmac,bytes},
+   {throttle_time_ms,int32}];
+rsp(renew_delegation_token, 0) ->
+  [{error_code,int16},{expiry_timestamp,int64},{throttle_time_ms,int32}];
+rsp(expire_delegation_token, 0) ->
+  [{error_code,int16},{expiry_timestamp,int64},{throttle_time_ms,int32}];
+rsp(describe_delegation_token, 0) ->
+  [{error_code,int16},
+   {token_details,
+       {array,
+           [{owner,[{principal_type,string},{name,string}]},
+            {issue_timestamp,int64},
+            {expiry_timestamp,int64},
+            {max_timestamp,int64},
+            {token_id,string},
+            {hmac,bytes},
+            {renewers,{array,[{principal_type,string},{name,string}]}}]}},
+   {throttle_time_ms,int32}];
+rsp(delete_groups, 0) ->
+  [{throttle_time_ms,int32},
+   {group_error_codes,{array,[{group_id,string},{error_code,int16}]}}].
 ec(0) -> no_error;
 ec(-1) -> unknown_server_error;
 ec(1) -> offset_out_of_range;

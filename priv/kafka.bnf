@@ -368,6 +368,44 @@ FetchRequestV6 => replica_id max_wait_time min_bytes max_bytes isolation_level [
 # max_bytes: Maximum bytes to fetch.
 
 
+FetchRequestV7 => replica_id max_wait_time min_bytes max_bytes isolation_level session_id epoch [topics] [forgetten_topics_data]
+  replica_id => INT32
+  max_wait_time => INT32
+  min_bytes => INT32
+  max_bytes => INT32
+  isolation_level => INT8
+  session_id => INT32
+  epoch => INT32
+  topics => topic [partitions]
+    topic => STRING
+    partitions => partition fetch_offset log_start_offset max_bytes
+      partition => INT32
+      fetch_offset => INT64
+      log_start_offset => INT64
+      max_bytes => INT32
+  forgetten_topics_data => topic [partitions]
+    topic => STRING
+    partitions => INT32
+
+# replica_id: Broker id of the follower. For normal consumers, use -1.
+# max_wait_time: Maximum time in ms to wait for the response.
+# min_bytes: Minimum bytes to accumulate in the response.
+# max_bytes: Maximum bytes to accumulate in the response. Note that this is not an absolute maximum, if the first message in the first non-empty partition of the fetch is larger than this value, the message will still be returned to ensure that progress can be made.
+# isolation_level: This setting controls the visibility of transactional records. Using READ_UNCOMMITTED (isolation_level = 0) makes all records visible. With READ_COMMITTED (isolation_level = 1), non-transactional and COMMITTED transactional records are visible. To be more concrete, READ_COMMITTED returns all data from offsets smaller than the current LSO (last stable offset), and enables the inclusion of the list of aborted transactions in the result, which allows consumers to discard ABORTED transactional records
+# session_id: The fetch session ID
+# epoch: The fetch epoch
+# topics: Topics to fetch in the order provided.
+# topic: Name of topic
+# partitions: Partitions to fetch.
+# partition: Topic partition id
+# fetch_offset: Message offset.
+# log_start_offset: Earliest available offset of the follower replica. The field is only used when request is sent by follower. 
+# max_bytes: Maximum bytes to fetch.
+# forgetten_topics_data: Topics to remove from the fetch session.
+# topic: Name of topic
+# partitions: Partitions to remove from the fetch session.
+
+
 FetchResponseV0 => [responses]
   responses => topic [partition_responses]
     topic => STRING
@@ -507,6 +545,37 @@ FetchResponseV6 => throttle_time_ms [responses]
       record_set => RECORDS
 
 # throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
+# topic: Name of topic
+# partition: Topic partition id
+# error_code: Response error code
+# high_watermark: Last committed offset.
+# last_stable_offset: The last stable offset (or LSO) of the partition. This is the last offset such that the state of all transactional records prior to this offset have been decided (ABORTED or COMMITTED)
+# log_start_offset: Earliest available offset.
+# producer_id: The producer id associated with the aborted transactions
+# first_offset: The first offset in the aborted transaction
+
+
+FetchResponseV7 => throttle_time_ms error_code session_id [responses]
+  throttle_time_ms => INT32
+  error_code => INT16
+  session_id => INT32
+  responses => topic [partition_responses]
+    topic => STRING
+    partition_responses => partition_header record_set
+      partition_header => partition error_code high_watermark last_stable_offset log_start_offset [aborted_transactions]
+        partition => INT32
+        error_code => INT16
+        high_watermark => INT64
+        last_stable_offset => INT64
+        log_start_offset => INT64
+        aborted_transactions => producer_id first_offset
+          producer_id => INT64
+          first_offset => INT64
+      record_set => RECORDS
+
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
+# error_code: Response error code
+# session_id: The fetch session ID
 # topic: Name of topic
 # partition: Topic partition id
 # error_code: Response error code
@@ -1443,7 +1512,7 @@ DescribeGroupsResponseV0 => [groups]
 
 # error_code: Response error code
 # group_id: The unique group identifier
-# state: The current state of the group (one of: Dead, Stable, AwaitingSync, PreparingRebalance, or empty if there is no active group)
+# state: The current state of the group (one of: Dead, Stable, CompletingRebalance, PreparingRebalance, or empty if there is no active group)
 # protocol_type: The current group protocol type (will be empty if there is no active group)
 # protocol: The current group protocol (only provided if the group is Stable)
 # members: Current group members (only provided if the group is not Dead)
@@ -1472,7 +1541,7 @@ DescribeGroupsResponseV1 => throttle_time_ms [groups]
 # throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
 # error_code: Response error code
 # group_id: The unique group identifier
-# state: The current state of the group (one of: Dead, Stable, AwaitingSync, PreparingRebalance, or empty if there is no active group)
+# state: The current state of the group (one of: Dead, Stable, CompletingRebalance, PreparingRebalance, or empty if there is no active group)
 # protocol_type: The current group protocol type (will be empty if there is no active group)
 # protocol: The current group protocol (only provided if the group is Stable)
 # members: Current group members (only provided if the group is not Dead)
@@ -2029,6 +2098,16 @@ DescribeConfigsRequestV0 => [resources]
 # resources: An array of config resources to be returned.
 
 
+DescribeConfigsRequestV1 => [resources] include_synonyms
+  resources => resource_type resource_name [config_names]
+    resource_type => INT8
+    resource_name => STRING
+    config_names => STRING
+  include_synonyms => BOOLEAN
+
+# resources: An array of config resources to be returned.
+
+
 DescribeConfigsResponseV0 => throttle_time_ms [resources]
   throttle_time_ms => INT32
   resources => error_code error_message resource_type resource_name [config_entries]
@@ -2042,6 +2121,29 @@ DescribeConfigsResponseV0 => throttle_time_ms [resources]
       read_only => BOOLEAN
       is_default => BOOLEAN
       is_sensitive => BOOLEAN
+
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
+# error_code: Response error code
+# error_message: Response error message
+
+
+DescribeConfigsResponseV1 => throttle_time_ms [resources]
+  throttle_time_ms => INT32
+  resources => error_code error_message resource_type resource_name [config_entries]
+    error_code => INT16
+    error_message => NULLABLE_STRING
+    resource_type => INT8
+    resource_name => STRING
+    config_entries => config_name config_value read_only config_source is_sensitive [config_synonyms]
+      config_name => STRING
+      config_value => NULLABLE_STRING
+      read_only => BOOLEAN
+      config_source => INT8
+      is_sensitive => BOOLEAN
+      config_synonyms => config_name config_value config_source
+        config_name => STRING
+        config_value => NULLABLE_STRING
+        config_source => INT8
 
 # throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
 # error_code: Response error code
@@ -2183,5 +2285,141 @@ CreatePartitionsResponseV0 => throttle_time_ms [topic_errors]
 # topic: Name of topic
 # error_code: Response error code
 # error_message: Response error message
+
+
+#ApiKey: CreateDelegationToken, 38
+CreateDelegationTokenRequestV0 => [renewers] max_life_time
+  renewers => principal_type name
+    principal_type => STRING
+    name => STRING
+  max_life_time => INT64
+
+# renewers: An array of token renewers. Renewer is an Kafka PrincipalType and name string, who is allowed to renew this token before the max lifetime expires.
+# principal_type: principalType of the Kafka principal
+# name: name of the Kafka principal
+# max_life_time: Max lifetime period for token in milli seconds. if value is -1, then max lifetime  will default to a server side config value.
+
+
+CreateDelegationTokenResponseV0 => error_code owner issue_timestamp expiry_timestamp max_timestamp token_id hmac throttle_time_ms
+  error_code => INT16
+  owner => principal_type name
+    principal_type => STRING
+    name => STRING
+  issue_timestamp => INT64
+  expiry_timestamp => INT64
+  max_timestamp => INT64
+  token_id => STRING
+  hmac => BYTES
+  throttle_time_ms => INT32
+
+# error_code: Response error code
+# owner: token owner.
+# principal_type: principalType of the Kafka principal
+# name: name of the Kafka principal
+# issue_timestamp: timestamp (in msec) when this token was generated.
+# expiry_timestamp: timestamp (in msec) at which this token expires.
+# max_timestamp: max life time of this token.
+# token_id: UUID to ensure uniqueness.
+# hmac: HMAC of the delegation token.
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
+
+
+#ApiKey: RenewDelegationToken, 39
+RenewDelegationTokenRequestV0 => hmac renew_time_period
+  hmac => BYTES
+  renew_time_period => INT64
+
+# hmac: HMAC of the delegation token to be renewed.
+# renew_time_period: Renew time period in milli seconds.
+
+
+RenewDelegationTokenResponseV0 => error_code expiry_timestamp throttle_time_ms
+  error_code => INT16
+  expiry_timestamp => INT64
+  throttle_time_ms => INT32
+
+# error_code: Response error code
+# expiry_timestamp: timestamp (in msec) at which this token expires..
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
+
+
+#ApiKey: ExpireDelegationToken, 40
+ExpireDelegationTokenRequestV0 => hmac expiry_time_period
+  hmac => BYTES
+  expiry_time_period => INT64
+
+# hmac: HMAC of the delegation token to be expired.
+# expiry_time_period: expiry time period in milli seconds.
+
+
+ExpireDelegationTokenResponseV0 => error_code expiry_timestamp throttle_time_ms
+  error_code => INT16
+  expiry_timestamp => INT64
+  throttle_time_ms => INT32
+
+# error_code: Response error code
+# expiry_timestamp: timestamp (in msec) at which this token expires..
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
+
+
+#ApiKey: DescribeDelegationToken, 41
+DescribeDelegationTokenRequestV0 => [owners]
+  owners => principal_type name
+    principal_type => STRING
+    name => STRING
+
+# owners: An array of token owners.
+# principal_type: principalType of the Kafka principal
+# name: name of the Kafka principal
+
+
+DescribeDelegationTokenResponseV0 => error_code [token_details] throttle_time_ms
+  error_code => INT16
+  token_details => owner issue_timestamp expiry_timestamp max_timestamp token_id hmac [renewers]
+    owner => principal_type name
+      principal_type => STRING
+      name => STRING
+    issue_timestamp => INT64
+    expiry_timestamp => INT64
+    max_timestamp => INT64
+    token_id => STRING
+    hmac => BYTES
+    renewers => principal_type name
+      principal_type => STRING
+      name => STRING
+  throttle_time_ms => INT32
+
+# error_code: Response error code
+# owner: token owner.
+# principal_type: principalType of the Kafka principal
+# name: name of the Kafka principal
+# issue_timestamp: timestamp (in msec) when this token was generated.
+# expiry_timestamp: timestamp (in msec) at which this token expires.
+# max_timestamp: max life time of this token.
+# token_id: UUID to ensure uniqueness.
+# hmac: HMAC of the delegation token to be expired.
+# renewers: An array of token renewers. Renewer is an Kafka PrincipalType and name string, who is allowed to renew this token before the max lifetime expires.
+# principal_type: principalType of the Kafka principal
+# name: name of the Kafka principal
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
+
+
+#ApiKey: DeleteGroups, 42
+DeleteGroupsRequestV0 => [groups]
+  groups => STRING
+
+# groups: An array of groups to be deleted.
+
+
+DeleteGroupsResponseV0 => throttle_time_ms [group_error_codes]
+  throttle_time_ms => INT32
+  group_error_codes => group_id error_code
+    group_id => STRING
+    error_code => INT16
+
+# throttle_time_ms: Duration in milliseconds for which the request was throttled due to quota violation (Zero if the request did not violate any quota)
+# group_error_codes: An array of per group error codes.
+# group_id: The unique group identifier
+# error_code: Response error code
 
 

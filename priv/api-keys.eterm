@@ -30,3 +30,8 @@
 {describe_log_dirs, 35}.
 {sasl_authenticate, 36}.
 {create_partitions, 37}.
+{create_delegation_token, 38}.
+{renew_delegation_token, 39}.
+{expire_delegation_token, 40}.
+{describe_delegation_token, 41}.
+{delete_groups, 42}.

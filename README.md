@@ -5,15 +5,15 @@ This library provides:
 * Basic kafka connection management APIs
 * Kafka protocol wire format encode/decode functions
 * Kafka RPC primitives
-* Utility functions to help buding requests and parsing responses
+* Utility functions to help building requests and parsing responses
 
 See [brod](https://github.com/klarna/brod) for a complete kafka client implementation.
 
 ## Test (`make eunit`)
 
-To make a kakfa-1.1.0 testbed localy (requires docker) run `make testbed`
+To make a kakfa-1.1.0 testbed locally (requires docker) run `make testbed`
 To test against other kafka-version (e.g. 0.9.0.0) run `make KAFKA_VERSION=0.9 testbed`
-To test with a existing kafka cluster set below os variables:
+To test with an existing kafka cluster set below environment variables:
 
 - `KPRO_TEST_KAFKA_09`" Set to 'TRUE' or 'true' or '1' to test against a kafka 0.9 cluster.
 - `KPRO_TEST_KAFKA_ENDPOINTS`: Comma separated endpoints, e.g. `plaintext://localhost:9092,ssl://localhost:9093,sasl_ssl://localhost:9094`
@@ -39,7 +39,7 @@ The schemas of all API requests and respones can be found in `src/kpro_schema.er
 which is generated from `priv/kafka.bnf`.
 
 The root level `schema` is always a `struct`.
-A `struct` consists of fields having lower level (maybe recursive) `schema`
+A `struct` consists of fields having lower level (maybe nested) `schema`
 
 Struct fileds are documented in `priv/kafka.bnf` as comments,
 but the comments are not generated as Erlang comments in `kpro_schema.erl`

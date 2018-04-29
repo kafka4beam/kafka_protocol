@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2014-2018, Klarna AB
+%%%   Copyright (c) 2018, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -26,8 +26,9 @@
 
 -define(IS_STRUCT_SCHEMA(Schema), is_list(Schema)).
 
-%% @doc Decode message body binary (without the leading 4-byte correlation ID.
--spec decode(kpro:api(), kpro:vsn(), binary(), reference()) -> kpro:rsp().
+%% @doc Decode message body binary (without the leading 4-byte correlation ID).
+-spec decode(kpro:api(), kpro:vsn(), binary(),
+             false | reference()) -> kpro:rsp().
 decode(API, Vsn, Body, Ref) ->
   {Message, <<>>} =
     try
@@ -62,39 +63,36 @@ parse(#kpro_rsp{ api = fetch
                , vsn = Vsn
                , msg = Msg
                }) ->
-  PartitionRsp = get_partition_rsp(Msg),
-  Header = kpro:find(partition_header, PartitionRsp),
-  Records = kpro:find(record_set, PartitionRsp),
-  #{ header => Header
-   , batches => decode_batches(Vsn, Records)
+  ErrorCode = kpro:find(error_code, Msg, ?kpro_no_error),
+  SessionID = kpro:find(session_id, Msg, 0),
+  {Header, Batches} =
+    case kpro:find(responses, Msg) of
+      [] ->
+        %% a session init without data
+        {undefined, []};
+      _ ->
+        PartitionRsp = get_partition_rsp(Msg),
+        Header0 = kpro:find(partition_header, PartitionRsp),
+        Records = kpro:find(record_set, PartitionRsp),
+        {Header0, decode_batches(Vsn, Records)}
+    end,
+  #{ error_code => ErrorCode
+   , session_id => SessionID
+   , header => Header
+   , batches => Batches
    };
 parse(#kpro_rsp{ api = create_topics
                , msg = Msg
                }) ->
-  Errors = kpro:find(topic_errors, Msg),
-  Pred = fun(#{error_code := EC}) -> EC =/= ?kpro_no_error end,
-  case lists:filter(Pred, Errors) of
-    [] -> ok;
-    Errs -> {error, Errs}
-  end;
+  error_if_any(kpro:find(topic_errors, Msg));
 parse(#kpro_rsp{ api = delete_topics
                , msg = Msg
                }) ->
-  Errors = kpro:find(topic_error_codes, Msg),
-  Pred = fun(#{error_code := EC}) -> EC =/= ?kpro_no_error end,
-  case lists:filter(Pred, Errors) of
-    [] -> ok;
-    Errs -> {error, Errs}
-  end;
+  error_if_any(kpro:find(topic_error_codes, Msg));
 parse(#kpro_rsp{ api = create_partitions
                , msg = Msg
                }) ->
-  Errors = kpro:find(topic_errors, Msg),
-  Pred = fun(#{error_code := EC}) -> EC =/= ?kpro_no_error end,
-  case lists:filter(Pred, Errors) of
-    [] -> ok;
-    Errs -> {error, Errs}
-  end;
+  error_if_any(kpro:find(topic_errors, Msg));
 parse(Rsp) ->
   %% Not supported yet
   Rsp.
@@ -109,6 +107,15 @@ dec_struct([{Name, FieldSc} | Schema], Fields, Stack, Bin) ->
   dec_struct(Schema, Fields#{Name => Value}, Stack, Rest).
 
 %%%_* Internal functions =======================================================
+
+%% Return ok if all error codes are 'no_error'
+%% otherwise return {error, Errors} where Errors is a list of error codes
+error_if_any(Errors) ->
+  Pred = fun(Struct) -> kpro:find(error_code, Struct) =/= ?kpro_no_error end,
+  case lists:filter(Pred, Errors) of
+    [] -> ok;
+    Errs -> {error, Errs}
+  end.
 
 decode_batches(Vsn, <<>>) when Vsn >= ?MIN_MAGIC_2_FETCH_API_VSN ->
   %% when it's magic v2, there is no incomplete batch
@@ -163,7 +170,7 @@ translate([api_key | _], ApiKey) ->
   try
     kpro_schema:api_key(ApiKey)
   catch
-    error : function_clause ->
+    error : {not_supported, _}->
       %% Not supported, perhaps a broker-only API, discard
       ApiKey
   end;
