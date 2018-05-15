@@ -33,4 +33,5 @@
       * discover and connect cluster-controller
   - Transactional RPC primitives `kpro:txn_xxx`
   - Changed socket option from `{packet, raw}` to `{packet, 4}`
+  - Add sasl-scram support
 

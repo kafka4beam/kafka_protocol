@@ -15,6 +15,7 @@
 -module(kpro_connection_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("kpro_private.hrl").
 
 plaintext_test() ->
   Config = kpro_test_lib:connection_config(plaintext),
@@ -27,22 +28,30 @@ ssl_test() ->
   ok = kpro_connection:stop(Pid).
 
 sasl_test() ->
-  case kpro_test_lib:is_kafka_09() of
-    true ->
+  Config0 = kpro_test_lib:connection_config(ssl),
+  case kpro_test_lib:get_kafka_version() of
+    ?KAFKA_0_9 ->
       ok;
-    false ->
-      Config0 = kpro_test_lib:connection_config(ssl),
+    ?KAFKA_0_10 ->
+      Config = Config0#{sasl => kpro_test_lib:sasl_config(plain)},
+      {ok, Pid} = connect(Config),
+      ok = kpro_connection:stop(Pid);
+    _ ->
       Config = Config0#{sasl => kpro_test_lib:sasl_config()},
       {ok, Pid} = connect(Config),
       ok = kpro_connection:stop(Pid)
   end.
 
 sasl_file_test() ->
-  case kpro_test_lib:is_kafka_09() of
-    true ->
+  Config0 = kpro_test_lib:connection_config(ssl),
+  case kpro_test_lib:get_kafka_version() of
+    ?KAFKA_0_9 ->
       ok;
-    false ->
-      Config0 = kpro_test_lib:connection_config(ssl),
+    ?KAFKA_0_10 ->
+      Config = Config0#{sasl => kpro_test_lib:sasl_config(plain_file)},
+      {ok, Pid} = connect(Config),
+      ok = kpro_connection:stop(Pid);
+    _ ->
       Config = Config0#{sasl => kpro_test_lib:sasl_config(file)},
       {ok, Pid} = connect(Config),
       ok = kpro_connection:stop(Pid)

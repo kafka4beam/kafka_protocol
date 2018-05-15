@@ -40,16 +40,11 @@
              , connection/0
              ]).
 
--include("kpro.hrl").
+-include("kpro_private.hrl").
 
 -define(DEFAULT_CONNECT_TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_REQUEST_TIMEOUT, timer:minutes(4)).
 -define(SIZE_HEAD_BYTES, 4).
-
-%% try not to use 0 corr ID for the first few requests
-%% as they are usually used by upper level callers
--define(SASL_AUTH_CORRID, ((1 bsl 31) - 1)).
--define(API_VERSIONS_CORRID, ((1 bsl 31) - 2)).
 
 -type cfg_key() :: connect_timeout
                  | client_id
@@ -195,12 +190,18 @@ do_init(State0, Sock, Host, Config) ->
   NewSock = maybe_upgrade_to_ssl(Sock, Mod, SslOpts, Timeout),
   %% from now on, it's all packet-4 messages
   ok = setopts(NewSock, Mod, [{packet, 4}]),
-  ok = sasl_auth(Host, NewSock, Mod, ClientId, Timeout, get_sasl_opt(Config)),
   Versions =
     case Config of
       #{query_api_versions := false} -> ?undef;
       _ -> query_api_versions(NewSock, Mod, ClientId, Timeout)
     end,
+  HandshakeVsn = case Versions of
+                   #{sasl_handshake := {_, V}} -> V;
+                   _ -> 0
+                 end,
+  SaslOpts = get_sasl_opt(Config),
+  ok = kpro_sasl:auth(Host, NewSock, Mod, ClientId,
+                      Timeout, SaslOpts, HandshakeVsn),
   State = State0#state{mod = Mod, sock = NewSock, api_vsns = Versions},
   proc_lib:init_ack(Parent, {ok, self()}),
   ReqTimeout = get_request_timeout(Config),
@@ -213,13 +214,11 @@ do_init(State0, Sock, Host, Config) ->
 
 query_api_versions(Sock, Mod, ClientId, Timeout) ->
   Req = kpro_req_lib:make(api_versions, 0, []),
-  Rsp = inactive_request_sync(Req, Sock, Mod, ClientId, ?API_VERSIONS_CORRID,
-                              Timeout, failed_to_query_api_versions),
-  #kpro_rsp{api = api_versions, vsn = 0, msg = Body} = Rsp,
-  ErrorCode = find(error_code, Body),
+  Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
+  ErrorCode = find(error_code, Rsp),
   case ErrorCode =:= ?kpro_no_error of
     true ->
-      Versions = find(api_versions, Body),
+      Versions = find(api_versions, Rsp),
       F = fun(V, Acc) ->
           API = find(api_key, V),
           MinVsn = find(min_version, V),
@@ -238,22 +237,6 @@ query_api_versions(Sock, Mod, ClientId, Timeout) ->
       erlang:error({failed_to_query_api_versions, ErrorCode})
   end.
 
-% Send request to active = false socket, and wait for response.
-inactive_request_sync(#kpro_req{api = API, vsn = Vsn} = Req,
-                      Sock, Mod, ClientId, CorrId, Timeout, ErrorTag) ->
-  ReqBin = kpro_req_lib:encode(ClientId, CorrId, Req),
-  ok = setopts(Sock, Mod, [{active, false}]),
-  try
-    ok = Mod:send(Sock, ReqBin),
-    {ok, RspBin} = Mod:recv(Sock, _Len = 0, Timeout),
-    {CorrId, Body} = decode_corr_id(RspBin),
-    kpro_rsp_lib:decode(API, Vsn, Body, _DummyRef = false)
-  catch
-    error : Reason ->
-      Stack = erlang:get_stacktrace(),
-      erlang:raise(error, {ErrorTag, Reason}, Stack)
-  end.
-
 get_tcp_mod(_SslOpts = true)  -> ssl;
 get_tcp_mod(_SslOpts = [_|_]) -> ssl;
 get_tcp_mod(_)                -> gen_tcp.
@@ -269,45 +252,6 @@ maybe_upgrade_to_ssl(Sock, _Mod = ssl, SslOpts0, Timeout) ->
   end;
 maybe_upgrade_to_ssl(Sock, _Mod, _SslOpts, _Timeout) ->
   Sock.
-
-sasl_auth(_Host, _Sock, _Mod, _ClientId, _Timeout, ?undef) ->
-  %% no auth
-  ok;
-sasl_auth(_Host, Sock, Mod, ClientId, Timeout,
-          {_Method = plain, SaslUser, SaslPassword}) ->
-  Req = kpro_req_lib:make(sasl_handshake, 0, [{mechanism, <<"PLAIN">>}]),
-  Rsp = inactive_request_sync(Req, Sock, Mod, ClientId, ?SASL_AUTH_CORRID,
-                              Timeout, sasl_auth_error),
-  #kpro_rsp{api = sasl_handshake, vsn = 0, msg = Body} = Rsp,
-  ErrorCode = find(error_code, Body),
-  case ErrorCode =:= ?kpro_no_error of
-    true ->
-      ok = Mod:send(Sock, sasl_plain_token(SaslUser, SaslPassword)),
-      case Mod:recv(Sock, _Len = 0, Timeout) of
-        {ok, <<>>} ->
-          ok;
-        {error, closed} ->
-          erlang:error({sasl_auth_error, bad_credentials});
-        Unexpected ->
-          erlang:error({sasl_auth_error, Unexpected})
-      end;
-    false ->
-      erlang:error({sasl_auth_error, ErrorCode})
-  end;
-sasl_auth(Host, Sock, Mod, ClientId, Timeout,
-          {callback, ModuleName, Opts}) ->
-  case kpro_auth_backend:auth(ModuleName, Host, Sock, Mod,
-                              ClientId, Timeout, Opts) of
-    ok ->
-      ok;
-    {error, Reason} ->
-      erlang:error({sasl_auth_error, Reason})
-  end.
-
-sasl_plain_token(User, Password) ->
-  [0, unicode:characters_to_binary(User),
-   0, unicode:characters_to_binary(Password)
-  ].
 
 setopts(Sock, _Mod = gen_tcp, Opts) -> inet:setopts(Sock, Opts);
 setopts(Sock, _Mod = ssl, Opts)     ->  ssl:setopts(Sock, Opts).
@@ -370,7 +314,7 @@ handle_msg({_, Sock, Bin}, #state{ sock     = Sock
                                  , mod      = Mod
                                  } = State, Debug) when is_binary(Bin) ->
   ok = setopts(Sock, Mod, [{active, once}]),
-  {CorrId, Body} = decode_corr_id(Bin),
+  {CorrId, Body} = kpro_lib:decode_corr_id(Bin),
   {Caller, Ref, API, Vsn} = kpro_sent_reqs:get_req(Requests, CorrId),
   Rsp = kpro_rsp_lib:decode(API, Vsn, Body, Ref),
   ok = cast(Caller, {msg, self(), Rsp}),
@@ -555,11 +499,15 @@ hint_msg(_, _, _) ->
 -spec get_sasl_opt(config()) -> cfg_val().
 get_sasl_opt(Config) ->
   case maps:get(sasl, Config, ?undef) of
-    {plain, User, PassFun} when is_function(PassFun) ->
-      {plain, User, PassFun()};
-    {plain, File} ->
+    {Mechanism, User, Pass0} when ?IS_PLAIN_OR_SCRAM(Mechanism) ->
+      Pass = case is_function(Pass0) of
+               true  -> Pass0();
+               false -> Pass0
+             end,
+      {Mechanism, User, Pass};
+    {Mechanism, File} when ?IS_PLAIN_OR_SCRAM(Mechanism) ->
       {User, Pass} = read_sasl_file(File),
-      {plain, User, Pass};
+      {Mechanism, User, Pass};
     Other ->
       Other
   end.
@@ -587,8 +535,6 @@ get_client_id(Config) ->
   end.
 
 find(FieldName, Struct) -> kpro_lib:find(FieldName, Struct).
-
-decode_corr_id(<<CorrId:32/unsigned-integer, Body/binary>>) -> {CorrId, Body}.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

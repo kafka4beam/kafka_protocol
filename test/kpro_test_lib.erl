@@ -35,10 +35,19 @@
         ]).
 
 -export([ is_kafka_09/0
+        , get_kafka_version/0
         ]).
+
+-include("kpro_private.hrl").
 
 -type conn() :: kpro_connection:connection().
 -type config() :: kpro_connection:config().
+
+get_kafka_version() ->
+  case is_kafka_09() of
+    true -> ?KAFKA_0_9;
+    false -> with_connection(fun get_kafka_version/1)
+  end.
 
 is_kafka_09() ->
   case osenv("KPRO_TEST_KAFKA_09") of
@@ -68,21 +77,32 @@ get_topic() ->
   end.
 
 sasl_config() ->
-  {plain, F} = sasl_config(file),
-  {ok, Lines0} = file:read_file(F),
-  Lines = binary:split(Lines0, <<"\n">>, [global]),
-  [User, Pass] = lists:filter(fun(Line) -> Line =/= <<>> end, Lines),
-  {plain, User, Pass}.
+  sasl_config(rand_sasl()).
 
+sasl_config(plain_file) ->
+  {plain, get_sasl_file()};
 sasl_config(file) ->
+  {rand_sasl(), get_sasl_file()};
+sasl_config(Mechanism) ->
+  {User, Pass} = read_user_pass(),
+  {Mechanism, User, Pass}.
+
+get_sasl_file() ->
   case osenv("KPRO_TEST_KAFKA_SASL_PLAIN_USER_PASS_FILE") of
     undefined ->
       F = "/tmp/kpro-test-sasl-plain-user-pass",
       ok = file:write_file(F, "alice\necila\n"),
-      {plain, F};
+      F;
     File ->
-      {plain, File}
+      File
   end.
+
+read_user_pass() ->
+  F = get_sasl_file(),
+  {ok, Lines0} = file:read_file(F),
+  Lines = binary:split(Lines0, <<"\n">>, [global]),
+  [User, Pass] = lists:filter(fun(Line) -> Line =/= <<>> end, Lines),
+  {User, Pass}.
 
 -spec with_connection(fun((conn()) -> any())) -> any().
 with_connection(WithConnFun) ->
@@ -126,7 +146,7 @@ do_connection_config(ssl) ->
   #{ssl => ssl_options()};
 do_connection_config(sasl_ssl) ->
   #{ ssl => ssl_options()
-   , sasl => sasl_config()
+   , sasl => sasl_config(plain)
    }.
 
 default_ssl_options() ->
@@ -145,10 +165,16 @@ osenv(Name) ->
   end.
 
 %% Guess protocol name from connection config.
-guess_protocol(#{sasl := _}) -> sasl_ssl; %% we only test sasl on ssl
-guess_protocol(#{ssl := false}) -> plaintext;
-guess_protocol(#{ssl := _}) -> ssl;
-guess_protocol(_) -> plaintext.
+guess_protocol(#{sasl := _} = Config) ->
+  case maps:get(ssl, Config, false) of
+    false -> erlang:error(<<"sasl_plaintext not supported in tests">>);
+    _ -> sasl_ssl
+  end;
+guess_protocol(Config) ->
+  case maps:get(ssl, Config, false) of
+    false -> plaintext;
+    _ -> ssl
+  end.
 
 default_endpoints(plaintext) -> [{"localhost", 9092}];
 default_endpoints(ssl) -> [{"localhost", 9093}];
@@ -160,6 +186,39 @@ with_connection_pid(Conn, Fun) ->
   after
     unlink(Conn),
     kpro:close_connection(Conn)
+  end.
+
+rand_sasl() -> rand_elem([plain, scram_sha_256, scram_sha_512]).
+
+rand_elem(L) -> lists:nth(rand:uniform(length(L)), L).
+
+%% With a plaintext connection, try to query API versions
+%% and guess kafka version from max API versions
+%% NOTE: Assuming it's kafka 0.10 or later
+get_kafka_version(Conn) ->
+  {ok, Vsns} = kpro_connection:get_api_vsns(Conn),
+  Signatures =
+    [ {sasl_authenticate, no_such_api, ?KAFKA_0_10}
+    , {produce, ?MIN_MAGIC_2_PRODUCE_API_VSN, ?KAFKA_0_11}
+    , {delete_groups, no_such_api, ?KAFKA_1_0}
+    ],
+  Match = fun({API, Signature, KafkaVsn}) ->
+              case maps:get(API, Vsns, no_such_api) of
+                {_, Signature} -> KafkaVsn;
+                Signature -> KafkaVsn;
+                _ -> false
+              end
+          end,
+  case get_first(Match, Signatures) of
+    false -> ?KAFKA_1_1;
+    GotIt -> GotIt
+  end.
+
+get_first(_Match, []) -> false;
+get_first(Match, [Signature | Rest]) ->
+  case Match(Signature) of
+    false -> get_first(Match, Rest);
+    GotIt -> GotIt
   end.
 
 %%%_* Emacs ====================================================================

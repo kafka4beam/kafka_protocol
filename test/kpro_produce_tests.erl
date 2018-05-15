@@ -66,7 +66,7 @@ non_monotoic_ts_in_batch_test() ->
                 }
              ],
       Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Msgs),
-      with_connection(#{ssl => true, sasl => kpro_test_lib:sasl_config(file)},
+      with_connection(#{ssl => true, sasl => kpro_test_lib:sasl_config(plain)},
         fun(Pid) ->
           {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
           ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)

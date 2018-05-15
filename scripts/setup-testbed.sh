@@ -55,9 +55,8 @@ sudo docker run -d \
                 -e PLAINTEXT_PORT=9092 \
                 -e SSL_PORT=9093 \
                 -e SASL_SSL_PORT=9094 \
-                -p 9092:9092 \
-                -p 9093:9093 \
-                -p 9094:9094 \
+                -e SASL_PLAINTEXT_PORT=9095 \
+                -p 9092-9095:9092-9095 \
                 --link $ZK \
                 --name $KAFKA_1 \
                 $IMAGE run kafka
@@ -85,4 +84,9 @@ create_topic "test-topic"
 
 # this is to warm-up kafka group coordinator for deterministic in tests
 sudo docker exec $KAFKA_1 /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --new-consumer --group test-group --describe > /dev/null 2>&1
+
+# for kafka 0.11 or later, add sasl-scram test credentials
+if [[ "$VERSION" != 0.9* ]] && [[ "$VERSION" != 0.10* ]]; then
+  sudo docker exec $KAFKA_1 /opt/kafka/bin/kafka-configs.sh --zookeeper zookeeper:2181 --alter --add-config 'SCRAM-SHA-256=[iterations=8192,password=ecila],SCRAM-SHA-512=[password=ecila]' --entity-type users --entity-name alice
+fi
 

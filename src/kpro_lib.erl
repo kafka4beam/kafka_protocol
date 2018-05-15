@@ -19,6 +19,7 @@
 -export([ copy_bytes/2
         , data_size/1
         , decode/2
+        , decode_corr_id/1
         , encode/2
         , find/2
         , find/3
@@ -31,6 +32,8 @@
         , ok_pipe/1
         , ok_pipe/2
         , parse_endpoints/2
+        , send_and_recv/5
+        , send_and_recv_raw/4
         , update_map/4
         , with_timeout/2
         ]).
@@ -44,6 +47,39 @@
 -type count() :: non_neg_integer().
 
 %%%_* APIs =====================================================================
+
+%% @doc Send a raw packet to broker and wait for response raw packet.
+-spec send_and_recv_raw(iodata(), port(), module(), timeout()) -> binary().
+send_and_recv_raw(Req, Sock, Mod, Timeout) ->
+  Opts = [{active, false}],
+  case Mod of
+    gen_tcp -> ok = inet:setopts(Sock, Opts);
+    ssl -> ok = ssl:setopts(Sock, Opts)
+  end,
+  ok = Mod:send(Sock, Req),
+  case Mod:recv(Sock, _Len = 0, Timeout) of
+    {ok, Rsp} -> Rsp;
+    {error, Reason} -> erlang:error(Reason)
+  end.
+
+%% @doc Send request to active = false socket, and wait for response.
+-spec send_and_recv(kpro:req(), port(), module(),
+                    kpro:client_id(), timeout()) -> kpro:struct().
+send_and_recv(#kpro_req{api = API, vsn = Vsn} = Req,
+                 Sock, Mod, ClientId, Timeout) ->
+  CorrId = make_corr_id(),
+  ReqBin = kpro_req_lib:encode(ClientId, CorrId, Req),
+  try
+    RspBin = send_and_recv_raw(ReqBin, Sock, Mod, Timeout),
+    {CorrId, Body} = decode_corr_id(RspBin), %% assert match CorrId
+    #kpro_rsp{api = API, vsn = Vsn, msg = Msg} = %% assert match API and Vsn
+      kpro_rsp_lib:decode(API, Vsn, Body, _DummyRef = false),
+    Msg
+  catch
+    error : Reason ->
+      Stack = erlang:get_stacktrace(),
+      erlang:raise(error, {Req, Reason}, Stack)
+  end.
 
 %% @doc Function pipeline.
 %% The first function takes no args, all succeeding ones shoud be arity-0 or 1
@@ -114,6 +150,11 @@ encode(bytes, B) when is_binary(B) orelse is_list(B) ->
   end;
 encode(records, B) ->
   encode(bytes, B).
+
+%% @doc All kafka messages begin with a 32 bit correlation ID.
+-spec decode_corr_id(binary()) -> {kpro:corr_id(), binary()}.
+decode_corr_id(<<ID:32/unsigned-integer, Body/binary>>) ->
+  {ID, Body}.
 
 %% @doc Decode primitives.
 -spec decode(kpro:primitive_type(), binary()) -> {primitive(), binary()}.
@@ -334,6 +375,8 @@ do_ok_pipe([Fun | FunList], {ok, LastOkResult}) ->
   do_ok_pipe(FunList, Fun(LastOkResult));
 do_ok_pipe(_FunList, {error, Reason}) ->
   {error, Reason}.
+
+make_corr_id() -> rand:uniform(1 bsl 31).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

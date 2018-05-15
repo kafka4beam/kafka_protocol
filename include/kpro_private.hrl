@@ -83,6 +83,21 @@
 -define(MIN_MAGIC_2_FETCH_API_VSN, 4). %% since kafka 0.11
 -define(MIN_INCREMENTAL_FETCH_API_VSN, 7). %% since kafka 1.1.0
 
+%% SASL auth mechanisms
+-define(plain, plain).
+-define(scram_sha_256, scram_sha_256).
+-define(scram_sha_512, scram_sha_512).
+-define(IS_SCRAM(Mechanism), (Mechanism =:= ?scram_sha_256 orelse
+                              Mechanism =:= ?scram_sha_512)).
+-define(IS_PLAIN_OR_SCRAM(Mechanism), (Mechanism =:= ?plain orelse
+                                       ?IS_SCRAM(Mechanism))).
+
+-define(KAFKA_0_9,   9).
+-define(KAFKA_0_10, 10).
+-define(KAFKA_0_11, 11).
+-define(KAFKA_1_0, 100).
+-define(KAFKA_1_1, 110).
+
 -endif.
 
 %%%_* Emacs ====================================================================
