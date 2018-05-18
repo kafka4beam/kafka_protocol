@@ -3,9 +3,15 @@ case IsRebar3 of
   true ->
     CONFIG;
   false ->
-    [{snappyer, Tag}] = proplists:get_value(deps, CONFIG),
-    Url = "https://github.com/zmstone/snappyer",
-    Rebar2Deps = [{snappyer, ".*", {git, Url, {tag, Tag}}}],
+    URLs = [ {snappyer, "https://github.com/zmstone/snappyer"}
+           , {crc32cer, "https://github.com/zmstone/crc32cer"}
+           ],
+    Rebar3Deps = proplists:get_value(deps, CONFIG),
+    Rebar2Deps =
+      lists:map(
+        fun({Name, URL}) ->
+          Tag = proplists:get_value(Name, Rebar3Deps),
+          {Name, ".*", {git, URL, {tag, Tag}}}
+        end, URLs),
     lists:keyreplace(deps, 1, CONFIG, {deps, Rebar2Deps})
 end.
-
