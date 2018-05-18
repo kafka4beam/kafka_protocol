@@ -23,8 +23,6 @@
 
 -mode(compile).
 
--include("../include/kpro_private.hrl").
-
 main(_Args) ->
   ok = file:set_cwd(this_dir()),
   {ok, _} = leex:file(kpro_scanner),
@@ -34,6 +32,7 @@ main(_Args) ->
   {ok, DefGroups} = kpro_parser:file("kafka.bnf"),
   ExpandedTypes = [I || I <- lists:map(fun expand/1, DefGroups), is_tuple(I)],
   GroupedTypes = group_per_name(ExpandedTypes, []),
+  ok = generate_ec_hrl_file(),
   ok = generate_schema_module(GroupedTypes).
 
 -define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
@@ -187,10 +186,10 @@ expand_fields([{array, Name} | Rest], Refs) ->
 expand_type({array, Type}, Refs) ->
   %% Array of array
   {array, expand_type(Type, Refs)};
-expand_type(Type, _Refs) when ?IS_KAFKA_PRIMITIVE(Type) ->
-  Type;
 expand_type(Fields, Refs) when is_list(Fields) ->
-  expand_fields(Fields, Refs).
+  expand_fields(Fields, Refs);
+expand_type(Type, _Refs) ->
+  Type.
 
 this_dir() ->
   ThisScript = escript:script_name(),
@@ -221,6 +220,23 @@ generate_ec_clauses() ->
       end, Errors),
   [infix(DecodeClauses, ";\n"), ".\n"].
 
+generate_ec_hrl_file() ->
+  {ok, Errors} = file:consult("error-codes.eterm"),
+  Macros =
+    lists:map(
+      fun({Name, Code, _, _}) ->
+          Lower = string:to_lower(Name),
+          ["-define(", Lower, ",\n",
+           "        ", Lower, "). % ", integer_to_list(Code), "\n"]
+      end, Errors),
+  Filename = filename:join(["..", "include", "kpro_error_codes.hrl"]),
+  file:write_file(Filename, ["%% Generated code, do not edit!\n\n",
+                             "-ifndef(KPRO_ERROR_CODES_HRL).\n",
+                             "-define(KPRO_ERROR_CODES_HRL, true).\n\n",
+                             Macros,
+                             "\n-endif.\n"]).
+
+%%%_* Emacs ====================================================================
 %%% Local Variables:
 %%% allout-layout: t
 %%% erlang-indent-level: 2

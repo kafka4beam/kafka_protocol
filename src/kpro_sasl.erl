@@ -62,7 +62,7 @@ auth(_Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn) ->
                                 [{sasl_auth_bytes, Bytes}]),
         Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
         EC = kpro:find(error_code, Rsp),
-        case EC =:= ?kpro_no_error of
+        case EC =:= ?no_error of
           true -> kpro:find(sasl_auth_bytes, Rsp);
           false -> ?ERROR(kpro:find(error_message, Rsp))
                    end
@@ -118,7 +118,7 @@ handshake(Sock, Mod, Timeout, ClientId, Mechanism, Vsn) ->
   Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
   ErrorCode = kpro:find(error_code, Rsp),
   case ErrorCode of
-    ?kpro_no_error ->
+    ?no_error ->
       ok;
     unsupported_sasl_mechanism ->
       EnabledMechanisms = kpro:find(enabled_mechanisms, Rsp),

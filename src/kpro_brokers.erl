@@ -147,7 +147,7 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
           Brokers = kpro:find(brokers, Meta),
           [TopicMeta] = kpro:find(topic_metadata, Meta),
           ErrorCode = kpro:find(error_code, TopicMeta),
-          case ErrorCode =:= ?kpro_no_error of
+          case ErrorCode =:= ?no_error of
             true  -> {ok, {Brokers, TopicMeta}};
             false -> {error, ErrorCode}
           end
@@ -165,7 +165,7 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
       end
     , fun({Brokers, PartitionMeta}) ->
           ErrorCode = kpro:find(error_code, PartitionMeta),
-          case ErrorCode =:= ?kpro_no_error of
+          case ErrorCode =:= ?no_error of
             true  -> {ok, {Brokers, PartitionMeta}};
             false -> {error, ErrorCode}
           end
@@ -202,7 +202,7 @@ discover_coordinator(Connection, Type, Id, Timeout) ->
     , fun(#kpro_rsp{msg = Rsp}) ->
           ErrorCode = kpro:find(error_code, Rsp),
           ErrMsg = kpro:find(error_message, Rsp, ?kpro_null),
-          case ErrorCode =:= ?kpro_no_error of
+          case ErrorCode =:= ?no_error of
             true ->
               CoorInfo = kpro:find(coordinator, Rsp),
               Host = kpro:find(host, CoorInfo),

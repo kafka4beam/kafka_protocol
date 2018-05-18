@@ -63,7 +63,7 @@ parse(#kpro_rsp{ api = fetch
                , vsn = Vsn
                , msg = Msg
                }) ->
-  ErrorCode = kpro:find(error_code, Msg, ?kpro_no_error),
+  ErrorCode = kpro:find(error_code, Msg, ?no_error),
   SessionID = kpro:find(session_id, Msg, 0),
   {Header, Batches} =
     case kpro:find(responses, Msg) of
@@ -111,7 +111,7 @@ dec_struct([{Name, FieldSc} | Schema], Fields, Stack, Bin) ->
 %% Return ok if all error codes are 'no_error'
 %% otherwise return {error, Errors} where Errors is a list of error codes
 error_if_any(Errors) ->
-  Pred = fun(Struct) -> kpro:find(error_code, Struct) =/= ?kpro_no_error end,
+  Pred = fun(Struct) -> kpro:find(error_code, Struct) =/= ?no_error end,
   case lists:filter(Pred, Errors) of
     [] -> ok;
     Errs -> {error, Errs}
