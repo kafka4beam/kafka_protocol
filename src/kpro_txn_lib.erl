@@ -110,7 +110,7 @@ parse_txn_offset_commit_rsp(#{topics := Topics}) ->
   FP = fun(#{ partition := Partition
             , error_code := EC
             }, Acc) ->
-           case ?kpro_no_error =:= EC of
+           case ?no_error =:= EC of
              true  -> Acc;
              false -> [{Partition, EC} | Acc]
            end
@@ -133,7 +133,7 @@ parse_add_partitions_rsp(#{errors := Errors0}) ->
       fun(#{topic := Topic, partition_errors := PartitionErrors}) ->
           lists:map(
             fun(#{partition := Partition, error_code := ErrorCode}) ->
-                case ErrorCode =:= ?kpro_no_error of
+                case ErrorCode =:= ?no_error of
                   true  -> [];
                   false -> {Topic, Partition, ErrorCode}
                 end
@@ -145,7 +145,7 @@ parse_add_partitions_rsp(#{errors := Errors0}) ->
   end.
 
 make_txn_ctx(Connection, TxnId,
-             #{ error_code := ?kpro_no_error
+             #{ error_code := ?no_error
               , producer_id := ProducerId
               , producer_epoch := ProducerEpoch
               }) ->
@@ -158,7 +158,7 @@ make_txn_ctx(_Connection, _TxnId, #{error_code := EC}) ->
   {error, EC}.
 
 
-ok_or_error_tuple(?kpro_no_error) -> ok;
+ok_or_error_tuple(?no_error) -> ok;
 ok_or_error_tuple(EC) -> {error, EC}.
 
 %%%_* Emacs ====================================================================

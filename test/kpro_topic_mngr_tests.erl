@@ -116,7 +116,7 @@ get_test_topics(Connection) ->
             lists:foldl(
               fun(Topic, Acc) ->
                   ErrorCode = kpro:find(error_code, Topic),
-                  ErrorCode = ?kpro_no_error, %% assert
+                  ErrorCode = ?no_error, %% assert
                   Name = kpro:find(topic, Topic),
                   case lists:prefix(atom_to_list(?MODULE),
                                    binary_to_list(Name)) of

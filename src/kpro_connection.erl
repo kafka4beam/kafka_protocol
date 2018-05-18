@@ -216,7 +216,7 @@ query_api_versions(Sock, Mod, ClientId, Timeout) ->
   Req = kpro_req_lib:make(api_versions, 0, []),
   Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
   ErrorCode = find(error_code, Rsp),
-  case ErrorCode =:= ?kpro_no_error of
+  case ErrorCode =:= ?no_error of
     true ->
       Versions = find(api_versions, Rsp),
       F = fun(V, Acc) ->
