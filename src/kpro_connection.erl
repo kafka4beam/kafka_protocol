@@ -19,6 +19,7 @@
 %% API
 -export([ all_cfg_keys/0
         , get_api_vsns/1
+        , get_endpoint/1
         , get_tcp_sock/1
         , init/4
         , loop/2
@@ -126,6 +127,10 @@ stop(_) ->
         {ok, ?undef | kpro:vsn_ranges()} | {error, any()}.
 get_api_vsns(Pid) ->
   call(Pid, get_api_vsns).
+
+-spec get_endpoint(pid()) -> {ok, kpro:endpoint()} | {error, any()}.
+get_endpoint(Pid) ->
+  call(Pid, get_endpoint).
 
 %% @hidden
 -spec get_tcp_sock(pid()) -> {ok, port()}.
@@ -366,6 +371,9 @@ handle_msg({From, {send, Request}},
   ?MODULE:loop(State#state{requests = NewRequests}, Debug);
 handle_msg({From, get_api_vsns}, State, Debug) ->
   _ = reply(From, {ok, State#state.api_vsns}),
+  ?MODULE:loop(State, Debug);
+handle_msg({From, get_endpoint}, State, Debug) ->
+  _ = reply(From, {ok, State#state.remote}),
   ?MODULE:loop(State, Debug);
 handle_msg({From, get_tcp_sock}, State, Debug) ->
   _ = reply(From, {ok, State#state.sock}),
