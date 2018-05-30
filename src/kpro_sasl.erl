@@ -55,7 +55,7 @@ auth(_Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn) ->
             ?ERROR({Reason, Stack})
         end
     end,
-  %% Embede raw bytes in sasl_auth_bytes field.
+  %% Embed raw bytes in sasl_auth_bytes field.
   SendRecv =
     fun(Bytes) ->
         Req = kpro_req_lib:make(sasl_authenticate, _AuthReqVsn = 0,
@@ -67,18 +67,17 @@ auth(_Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn) ->
           false -> ?ERROR(kpro:find(error_message, Rsp))
                    end
     end,
+  %% For version 0 handshake, the following auth request/responses
+  %% are sent raw (without kafka protocol schema wrapper)
+  %% For version 1 handshake, the following auth request/responses
+  %% are wrapped by kafka protocol schema
+  %% Version 1 has more informative error message comparing to version 0
   case HandshakeVsn =:= 0 of
     true -> do_auth(SendRecvRaw, Opts, HandshakeVsn);
     false -> do_auth(SendRecv, Opts, HandshakeVsn)
   end.
 
 %%%_* Internal functions =======================================================
-
-%% For a version 0 handshake, the following auth request/responses
-%% are sent without kafka protocol schema wrapper
-%% For version 1 handshake, the following auth request/responses
-%% are wrapped by kafka protocol schema
-%% Version 1 has more informative error message comparing to version 0
 
 do_auth(SendRecv, {plain, User, Pass}, Vsn) ->
   Req = sasl_plain_token(User, Pass),

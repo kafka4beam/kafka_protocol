@@ -81,6 +81,7 @@
              , count/0
              , endpoint/0
              , error_code/0
+             , fetch_opts/0
              , field_name/0
              , field_value/0
              , group_id/0
@@ -246,6 +247,8 @@
                    | {offset(), binary()}.
 -type offsets_to_commit() :: #{{topic(), partition()} => offset_ud()}
                            | [{{topic(), partition()}, offset_ud()}].
+
+-type fetch_opts() :: kpro_req_lib:fetch_opts().
 
 %% All versions of kafka messages (records) share the same header:
 %% Offset => int64
