@@ -47,6 +47,9 @@
         , make/3
         ]).
 
+-export_type([ fetch_opts/0
+             ]).
+
 -include("kpro_private.hrl").
 -define(DEFAULT_ACK_TIMEOUT, 10000).
 
@@ -68,6 +71,13 @@
 -type partition() :: kpro:partition().
 -type group_id() :: kpro:group_id().
 -type offsets_to_commit() :: kpro:offsets_to_commit().
+-type fetch_opts() :: #{ max_wait_time => wait()
+                       , min_bytes => count()
+                       , max_bytes => count()
+                       , isolation_level => isolation_level()
+                       , session_id => kpro:int32()
+                       , epoch => kpro:int32()
+                       }.
 
 %% @doc Make a `metadata' request
 -spec metadata(vsn(), all | [topic()]) -> req().
@@ -128,14 +138,7 @@ list_offsets(Vsn, Topic, Partition, Time, IsolationLevel) ->
 %% @doc Help function to construct a `fetch' request
 %% against one single topic-partition. In transactional mode, set
 %% `IsolationLevel = kpro_read_uncommitted' to fetch uncommitted messages.
--spec fetch(vsn(), topic(), partition(), offset(),
-            #{ max_wait_time => wait()
-             , min_bytes => count()
-             , max_bytes => count()
-             , isolation_level => isolation_level()
-             , session_id => kpro:int32()
-             , epoch => kpro:int32()
-             }) -> req().
+-spec fetch(vsn(), topic(), partition(), offset(), fetch_opts()) -> req().
 fetch(Vsn, Topic, Partition, Offset, Opts) ->
   MaxWaitTime = maps:get(max_wait_time, Opts, timer:seconds(1)),
   MinBytes = maps:get(min_bytes, Opts, 0),
