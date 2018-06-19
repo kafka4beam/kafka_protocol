@@ -121,15 +121,9 @@ handshake(Sock, Mod, Timeout, ClientId, Mechanism, Vsn) ->
       ok;
     unsupported_sasl_mechanism ->
       EnabledMechanisms = kpro:find(enabled_mechanisms, Rsp),
-      EnabledMechanismsStr =
-        case EnabledMechanisms of
-          [] -> "[]"; %% none
-          [H] -> H; %% one
-          [H | T] -> [H, [[",", I] || I <- T]] %% comma separate
-        end,
       Msg = io_lib:format("sasl mechanism ~s is not enabled in kafka, "
-                         "enabled mechanism(s): ~s",
-                         [Mechanism, EnabledMechanismsStr]),
+                          "enabled mechanism(s): ~s",
+                          [Mechanism, cs(EnabledMechanisms)]),
       ?ERROR(iolist_to_binary(Msg));
     Other ->
       ?ERROR(Other)
@@ -142,6 +136,10 @@ mechanism(?plain) -> <<"PLAIN">>;
 mechanism(?scram_sha_256) -> <<"SCRAM-SHA-256">>;
 mechanism(?scram_sha_512) -> <<"SCRAM-SHA-512">>;
 mechanism({Tag, _User, _Pass}) -> mechanism(Tag).
+
+cs([]) -> "[]";
+cs([X]) -> X;
+cs([H | T]) -> [H, "," | cs(T)].
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

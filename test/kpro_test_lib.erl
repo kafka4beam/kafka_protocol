@@ -88,7 +88,7 @@ sasl_config(Mechanism) ->
   {Mechanism, User, Pass}.
 
 get_sasl_file() ->
-  case osenv("KPRO_TEST_KAFKA_SASL_PLAIN_USER_PASS_FILE") of
+  case osenv("KPRO_TEST_KAFKA_SASL_USER_PASS_FILE") of
     undefined ->
       F = "/tmp/kpro-test-sasl-plain-user-pass",
       ok = file:write_file(F, "alice\necila\n"),
