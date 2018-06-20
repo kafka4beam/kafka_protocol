@@ -307,16 +307,19 @@ decode_batches(_) ->
   ?incomplete_batch(?BATCH_LEADING_BYTES).
 
 %% @doc Send a request, wait for response.
-%% Immediately return 'ok' if it is a produce request with `required_acks = 0'.
+%% Immediately return 'ok' if it is a produce request with `required_acks=0'.
 -spec request_sync(pid(), req(), timeout()) ->
         ok | {ok, rsp()} | {error, any()}.
 request_sync(ConnectionPid, Request, Timeout) ->
   kpro_connection:request_sync(ConnectionPid, Request, Timeout).
 
-%% @doc Send a request and get back a correlation ID to match future response.
-%% Immediately return 'ok' if it is a produce request with `required_acks = 0'.
--spec request_async(pid(), req()) ->
-        ok | {ok, corr_id()} | {error, any()}.
+%% @doc Send a request without waiting for reply.
+%% Reply will be delivered to caller in the future when response message is
+%% received from kafka.
+%% The message to expect should have spec `{msg, connection(), #kpro_rsp{}}'
+%% where `#kpro_rsp.ref' matches the sent `Request#kpro_req.ref'.
+%% When it is a produce request with `required_acks=0', there will be no reply.
+-spec request_async(pid(), req()) -> ok | {error, any()}.
 request_async(ConnectionPid, Request) ->
   kpro_connection:request_async(ConnectionPid, Request).
 
