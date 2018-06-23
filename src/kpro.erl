@@ -291,13 +291,14 @@ parse_response(Rsp) -> kpro_rsp_lib:parse(Rsp).
 encode_request(ClientId, CorrId, Req) ->
   kpro_req_lib:encode(ClientId, CorrId, Req).
 
-%% @doc The messageset is not decoded upon receiving (in socket process).
-%% Pass the message set as binary to the consumer process and decode there.
+%% @doc The message-set is not decoded upon receiving (in connection process).
+%% It is passed as binary to the consumer process and decoded there.
 %% Return `?incomplete_batch(ExpectedSize)' if the fetch size is not big
 %% enough for even one single message. Otherwise return `[{Meta, Messages}]'
 %% where `Meta' is either `?KPRO_NO_BATCH_META' for magic-version 0-1 or
 %% `kpro:batch_meta()' for magic-version 2 or above.
--spec decode_batches(binary()) -> kpro:batch_decode_result().
+-spec decode_batches(binary()) -> batch_decode_result().
+decode_batches(<<>>) -> []; %% no data
 decode_batches(<<_:64/?INT, L:32, T/binary>> = Bin) when size(T) >= L ->
   kpro_batch:decode(Bin);
 decode_batches(<<_:64/?INT, L:32, _T/binary>>) ->
