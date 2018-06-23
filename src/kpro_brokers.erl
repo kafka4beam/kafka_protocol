@@ -107,6 +107,8 @@ connect_controller(Bootstrap, ConnConfig, Opts) ->
   discover_and_connect(DiscoverFun, Bootstrap, ConnConfig, Timeout).
 
 %% @doc Qury API version ranges using the given `kpro_connection' pid.
+%% The return value is an intersection of queried version ranges
+%% and version ranges supported in THIS library.
 -spec get_api_versions(connection()) ->
         {ok, kpro:vsn_ranges()} | {error, any()}.
 get_api_versions(Connection) ->
