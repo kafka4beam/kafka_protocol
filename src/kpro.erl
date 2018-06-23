@@ -68,6 +68,7 @@
         ]).
 
 -export_type([ api/0
+             , batch/0
              , batch_decode_result/0
              , batch_input/0
              , batch_meta/0
@@ -240,8 +241,8 @@
 -type batch_meta_val() :: boolean() | atom() | integer().
 -type batch_meta() :: ?KPRO_NO_BATCH_META %% magic 0-1
                     | #{batch_meta_key() => batch_meta_val()}.
--type batch_decode_result() :: ?incomplete_batch(int32())
-                             | [{batch_meta(), [message()]}].
+-type batch() :: {batch_meta(), [message()]}.
+-type batch_decode_result() :: ?incomplete_batch(int32()) | [batch()].
 %% offset or offset + associated user-data to commit
 -type offset_ud() :: offset() %% no user data
                    | {offset(), binary()}.
