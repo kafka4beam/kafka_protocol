@@ -19,9 +19,9 @@ notifications:
   email: false
 
 otp_release:
-  - 20.0
+  - 21.0
+  - 20.3
   - 19.3
-  - 18.2.1
 
 script:
   - make

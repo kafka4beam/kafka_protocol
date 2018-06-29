@@ -50,8 +50,8 @@ auth(_Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn) ->
     fun(Req) ->
         try kpro_lib:send_and_recv_raw(Req, Sock, Mod, Timeout)
         catch
-          error : Reason ->
-            Stack = erlang:get_stacktrace(),
+          error : Reason ?BIND_STACKTRACE(Stack) ->
+            ?GET_STACKTRACE(Stack),
             ?ERROR({Reason, Stack})
         end
     end,

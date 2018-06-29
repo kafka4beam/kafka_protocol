@@ -155,7 +155,7 @@
 -type header_key() :: binary().
 -type header_val() :: binary().
 -type headers() :: [{header_key(), header_val()}].
--type seqno() :: non_neg_integer().
+-type seqno() :: integer().
 %% optional args to make produce request
 -type produce_opts() :: #{ compression => compress_option() % common
                          , required_acks => required_acks() % common

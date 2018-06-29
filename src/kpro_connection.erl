@@ -165,11 +165,12 @@ init(Parent, Host, Port, Config) ->
       try
         do_init(State, Sock, Host, Config)
       catch
-        error : Reason ->
+        error : Reason ?BIND_STACKTRACE(Stack) ->
+          ?GET_STACKTRACE(Stack),
           IsSsl = maps:get(ssl, Config, false),
           SaslOpt = get_sasl_opt(Config),
           ok = maybe_log_hint(Host, Port, Reason, IsSsl, SaslOpt),
-          erlang:exit({Reason, erlang:get_stacktrace()})
+          erlang:exit({Reason, Stack})
       end;
     {error, Reason} ->
       %% exit instead of {error, Reason}
