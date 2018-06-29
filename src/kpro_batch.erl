@@ -59,7 +59,6 @@ encode(Batch, Compression) ->
   iolist_to_binary(kpro_batch_v01:encode(Batch, Compression)).
 
 %% @doc Encode a batch of magic version 2.
-%% @end
 % RecordBatch =>
 %   FirstOffset => int64
 %   Length => int32

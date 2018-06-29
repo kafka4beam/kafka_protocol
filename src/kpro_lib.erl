@@ -76,8 +76,8 @@ send_and_recv(#kpro_req{api = API, vsn = Vsn} = Req,
       kpro_rsp_lib:decode(API, Vsn, Body, _DummyRef = false),
     Msg
   catch
-    error : Reason ->
-      Stack = erlang:get_stacktrace(),
+    error : Reason ?BIND_STACKTRACE(Stack) ->
+      ?GET_STACKTRACE(Stack),
       erlang:raise(error, {Req, Reason}, Stack)
   end.
 
@@ -271,8 +271,9 @@ with_timeout(F0, Timeout) ->
           try
             {normal, F0()}
           catch
-            C : E ->
-              CrashContext = {C, E, erlang:get_stacktrace()},
+            C : E ?BIND_STACKTRACE(Stack) ->
+              ?GET_STACKTRACE(Stack),
+              CrashContext = {C, E, Stack},
               {exception, CrashContext}
           end,
         {links, Links1} = process_info(self(), links),

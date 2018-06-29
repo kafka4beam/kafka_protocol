@@ -52,6 +52,8 @@
 
 -include("kpro_private.hrl").
 -define(DEFAULT_ACK_TIMEOUT, 10000).
+-define(FIELD_ENCODE_ERROR(Reason, EncoderStack),
+        {field_encode_error, Reason, EncoderStack}).
 
 -type vsn() :: kpro:vsn().
 -type topic() :: kpro:topic().
@@ -346,8 +348,8 @@ encode_struct(API, Vsn, Fields) ->
   try
     bin(enc_struct(Schema, Fields, [{API, Vsn}]))
   catch
-    throw : {Reason, Stack} ->
-      Trace = erlang:get_stacktrace(),
+    throw : ?FIELD_ENCODE_ERROR(Reason, Stack) ?BIND_STACKTRACE(Trace) ->
+      ?GET_STACKTRACE(Trace),
       erlang:raise(error, {Reason, Stack, Fields}, Trace)
   end.
 
@@ -377,7 +379,7 @@ enc_struct_field({array, Schema}, Values, Stack) ->
       | [enc_struct_field(Schema, Value, Stack) || Value <- Values]
       ];
     false ->
-      erlang:throw({not_array, Stack, Values})
+      erlang:throw(?FIELD_ENCODE_ERROR(not_array, Stack))
   end;
 enc_struct_field(Schema, Value, Stack) when ?IS_STRUCT(Schema) ->
   enc_struct(Schema, Value, Stack);
@@ -385,8 +387,9 @@ enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
   try
     encode(Primitive, Value)
   catch
-    error : Reason ->
-      erlang:throw({Reason, Stack, erlang:get_stacktrace()})
+    error : Reason ?BIND_STACKTRACE(Trace) ->
+      ?GET_STACKTRACE(Trace),
+      erlang:raise(throw, ?FIELD_ENCODE_ERROR(Reason, Stack), Trace)
   end.
 
 %% Translate embedded bytes to structs or enum values to enum symbols.

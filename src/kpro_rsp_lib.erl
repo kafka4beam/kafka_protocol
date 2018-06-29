@@ -33,13 +33,13 @@ decode(API, Vsn, Body, Ref) ->
   {Message, <<>>} =
     try
       decode_struct(API, Vsn, Body)
-    catch error : E ->
+    catch error : E ?BIND_STACKTRACE(Stack) ->
       Context = [ {api, API}
                 , {vsn, Vsn}
                 , {body, Body}
                 ],
-      Trace = erlang:get_stacktrace(),
-      erlang:raise(error, {E, Context}, Trace)
+      ?GET_STACKTRACE(Stack),
+      erlang:raise(error, {E, Context}, Stack)
     end,
   #kpro_rsp{ ref = Ref
            , api = API
