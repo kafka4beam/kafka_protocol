@@ -24,7 +24,7 @@
         ?assertMatch(#{ partition := ?PARTI
                       , error_code := no_error
                       , base_offset := _
-                      }, kpro:parse_response(Rsp))).
+                      }, kpro_test_lib:parse_rsp(Rsp))).
 
 magic_v0_basic_test_() ->
   {Min, Max} = get_api_vsn_range(),

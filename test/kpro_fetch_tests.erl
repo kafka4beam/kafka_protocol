@@ -66,7 +66,7 @@ do_fetch(Connection, Vsn, BeginOffset, MaxBytes) ->
   {ok, Rsp} = kpro:request_sync(Connection, Req, ?TIMEOUT),
   #{ header := Header
    , batches := Batches
-   } = kpro:parse_response(Rsp),
+   } = kpro_test_lib:parse_rsp(Rsp),
   case Header of
     undefined -> ok;
     _ -> ?assertEqual(no_error, kpro:find(error_code, Header))
@@ -105,7 +105,7 @@ produce_randomly(Connection, Count, Acc) ->
   {ok, Rsp} = kpro:request_sync(Connection, Req, ?TIMEOUT),
   #{ error_code := no_error
    , base_offset := Offset
-   } = kpro:parse_response(Rsp),
+   } = kpro_test_lib:parse_rsp(Rsp),
   produce_randomly(Connection, Count - 1, [{Offset, Batch} | Acc]).
 
 rand_produce_opts() ->

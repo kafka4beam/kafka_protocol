@@ -178,7 +178,7 @@ fetch_and_verify(FetchReqFun, BaseOffset, ExpectedMessages, IsolationLevel) ->
           fun(Offset, Exp) ->
               Req = FetchReqFun(Offset, IsolationLevel),
               {ok, Rsp} = kpro:request_sync(Connection, Req, ?TIMEOUT),
-              #{batches := Batches0} = kpro_rsp_lib:parse(Rsp),
+              #{batches := Batches0} = kpro_test_lib:parse_rsp(Rsp),
               Messages = lists:append([Msgs || {Meta, Msgs} <- Batches0,
                                        not kpro_batch:is_control(Meta)]),
               verify_messages(Offset, Messages, Exp)
@@ -228,11 +228,11 @@ produce_messages(ProduceVsn, TxnCtx, Seqno0) ->
         {ok, Rsp0} = kpro:request_sync(Connection, Req0, ?TIMEOUT),
         #{ error_code := no_error
          , base_offset := Offset0
-         } = kpro_rsp_lib:parse(Rsp0),
+         } = kpro_test_lib:parse_rsp(Rsp0),
         {ok, Rsp1} = kpro:request_sync(Connection, Req1, ?TIMEOUT),
         #{ error_code := no_error
          , base_offset := Offset1
-         } = kpro_rsp_lib:parse(Rsp1),
+         } = kpro_test_lib:parse_rsp(Rsp1),
         {Seqno, [{Offset0, Batch0}, {Offset1, Batch1}]}
     end).
 
