@@ -56,7 +56,6 @@
 %% there are more in `kpro_req_lib'
 -export([ encode_request/3
         , make_request/3
-        , parse_response/1
         ]).
 
 %% misc
@@ -278,13 +277,6 @@ parse_endpoints(Protocol, String) ->
 -spec make_request(api(), vsn(), struct()) -> req().
 make_request(Api, Vsn, Fields) ->
   kpro_req_lib:make(Api, Vsn, Fields).
-
-%% @doc Help function to translate `#kpro_rsp{}' into a simpler term.
-%% NOTE: This function is implemented with assumptions like:
-%% topic-partition requests (list_offsets, produce, fetch etc.) are always sent
-%% against only ONE topic-partition.
--spec parse_response(rsp()) -> term().
-parse_response(Rsp) -> kpro_rsp_lib:parse(Rsp).
 
 %% @doc Encode request to byte stream.
 -spec encode_request(client_id(), corr_id(), req()) -> iodata().

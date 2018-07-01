@@ -55,14 +55,14 @@ test_create_topic_partition(CreateTopicsVsn, CreatePartitionsVsn) ->
         TopicReq = kpro_req_lib:create_topics(CreateTopicsVsn,
                                               [CreateTopicArgs], Opts),
         {ok, TopicRsp} = kpro:request_sync(Conn, TopicReq, Timeout),
-        ok = kpro_rsp_lib:parse(TopicRsp),
+        ok = kpro_test_lib:parse_rsp(TopicRsp),
         case is_integer(CreatePartitionsVsn) of
           true ->
             PartitionReq =
               kpro_req_lib:create_partitions(CreatePartitionsVsn,
                                              [CreatePartitionArgs], Opts),
             {ok, PartitionRsp} = kpro:request_sync(Conn, PartitionReq, Timeout),
-            ok = kpro_rsp_lib:parse(PartitionRsp);
+            ok = kpro_test_lib:parse_rsp(PartitionRsp);
           false ->
             ok
         end
@@ -94,7 +94,7 @@ test_delete_topics(Vsn, Timeout) ->
     fun(Endpoints, Config) -> kpro:connect_controller(Endpoints, Config) end,
     fun(Conn) ->
         {ok, Rsp} = kpro:request_sync(Conn, Req, infinity),
-        ok = kpro_rsp_lib:parse(Rsp)
+        ok = kpro_test_lib:parse_rsp(Rsp)
     end).
 
 %%%_* Helpers ==================================================================

@@ -34,7 +34,7 @@ make_test_case(Vsn, Ts) ->
       Req = kpro_req_lib:list_offsets(Vsn, ?TOPIC, ?PARTI, Ts),
       Test = fun(Pid) ->
                  {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
-                 assert_no_error(kpro:parse_response(Rsp))
+                 assert_no_error(kpro_test_lib:parse_rsp(Rsp))
              end,
       ConnFun =
         fun(Endpoints, Config) ->

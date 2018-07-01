@@ -36,6 +36,7 @@
 
 -export([ is_kafka_09/0
         , get_kafka_version/0
+        , parse_rsp/1
         ]).
 
 -include("kpro_private.hrl").
@@ -121,7 +122,81 @@ with_connection(Endpoints, Config, ConnectFun, WithConnFun) ->
   {ok, Pid} = ConnectFun(Endpoints, Config),
   with_connection_pid(Pid, WithConnFun).
 
+-spec parse_rsp(kpro:rsp()) -> term().
+parse_rsp(#kpro_rsp{ api = list_offsets
+                   , msg = Msg
+                   }) ->
+  case get_partition_rsp(Msg) of
+    #{offsets := [Offset]} = M -> M#{offset => Offset};
+    #{offset := _} = M -> M
+  end;
+parse_rsp(#kpro_rsp{ api = produce
+                   , msg = Msg
+                   }) ->
+  get_partition_rsp(Msg);
+parse_rsp(#kpro_rsp{ api = fetch
+                   , vsn = Vsn
+                   , msg = Msg
+                   }) ->
+  EC1 = kpro:find(error_code, Msg, ?no_error),
+  SessionID = kpro:find(session_id, Msg, 0),
+  {Header, Batches, EC2} =
+    case kpro:find(responses, Msg) of
+      [] ->
+        %% a session init without data
+        {undefined, [], ?no_error};
+      _ ->
+        PartitionRsp = get_partition_rsp(Msg),
+        Header0 = kpro:find(partition_header, PartitionRsp),
+        Records = kpro:find(record_set, PartitionRsp),
+        ECx = kpro:find(error_code, Header0),
+        {Header0, decode_batches(Vsn, Records), ECx}
+    end,
+  ErrorCode = case EC2 =:= ?no_error of
+                true  -> EC1;
+                false -> EC2
+              end,
+  #{ error_code => ErrorCode
+   , session_id => SessionID
+   , header => Header
+   , batches => Batches
+   };
+parse_rsp(#kpro_rsp{ api = create_topics
+                   , msg = Msg
+                   }) ->
+  error_if_any(kpro:find(topic_errors, Msg));
+parse_rsp(#kpro_rsp{ api = delete_topics
+                   , msg = Msg
+                   }) ->
+  error_if_any(kpro:find(topic_error_codes, Msg));
+parse_rsp(#kpro_rsp{ api = create_partitions
+                   , msg = Msg
+                   }) ->
+  error_if_any(kpro:find(topic_errors, Msg));
+parse_rsp(#kpro_rsp{msg = Msg}) ->
+  Msg.
+
 %%%_* Internal functions =======================================================
+
+decode_batches(Vsn, <<>>) when Vsn >= ?MIN_MAGIC_2_FETCH_API_VSN ->
+  %% when it's magic v2, there is no incomplete batch
+  [];
+decode_batches(_Vsn, Bin) ->
+  kpro:decode_batches(Bin).
+
+get_partition_rsp(Struct) ->
+  [TopicRsp] = kpro:find(responses, Struct),
+  [PartitionRsp] = kpro:find(partition_responses, TopicRsp),
+  PartitionRsp.
+
+%% Return ok if all error codes are 'no_error'
+%% otherwise return {error, Errors} where Errors is a list of error codes
+error_if_any(Errors) ->
+  Pred = fun(Struct) -> kpro:find(error_code, Struct) =/= ?no_error end,
+  case lists:filter(Pred, Errors) of
+    [] -> ok;
+    Errs -> erlang:error(Errs)
+  end.
 
 ssl_options() ->
   case osenv("KPRO_TEST_SSL_TRUE") of
