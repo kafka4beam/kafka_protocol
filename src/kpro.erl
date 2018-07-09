@@ -164,7 +164,7 @@
                          }.
 
 -type key() :: ?null | iodata().
--type value() :: ?null | iodata().
+-type value() :: ?null | iodata() | value_mabye_nested().
 -type value_mabye_nested() :: value() | [{key(), kv_list()}].
 -type kv_list() :: [kv() | tkv()].
 
