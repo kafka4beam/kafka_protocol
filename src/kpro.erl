@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2014-2018, Klarna AB
+%%%   Copyright (c) 2014-2018, Klarna Bank AB (publ)
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 
 %% Connection
 -export([ close_connection/1
+        , connect/2
         , connect_any/2
         , connect_controller/2
         , connect_controller/3
@@ -316,6 +317,16 @@ request_sync(ConnectionPid, Request, Timeout) ->
 -spec request_async(pid(), req()) -> ok | {error, any()}.
 request_async(ConnectionPid, Request) ->
   kpro_connection:request_async(ConnectionPid, Request).
+
+%% @doc Connect to the given endpoint.
+%% NOTE: Connection process is linked to caller unless `nolink => true'
+%%       is set in connection config
+-spec connect(endpoint(), conn_config()) -> {ok, connection()} | {error, any()}.
+connect(Endpoint, ConnConfig) ->
+  case connect_any([Endpoint], ConnConfig) of
+    {ok, Connection} -> {ok, Connection};
+    {error, [{Endpoint, Reason}]} -> {error, Reason}
+  end.
 
 %% @doc Connect to any of the endpoints in the given list.
 %% NOTE: Connection process is linked to caller unless `nolink => true'
