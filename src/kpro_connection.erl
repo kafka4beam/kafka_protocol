@@ -57,7 +57,7 @@
                  | ssl.
 
 -type cfg_val() :: term().
--type config() :: #{cfg_key() => cfg_val()}.
+-type config() :: [{cfg_key(), cfg_val()}] | #{cfg_key() => cfg_val()}.
 -type requests() :: kpro_sent_reqs:requests().
 -type hostname() :: kpro:hostname().
 -type portnum()  :: kpro:portnum().
@@ -91,6 +91,8 @@ all_cfg_keys() ->
 %% The started connection pid is linked to caller
 %% unless `nolink := true' is found in `Config'
 -spec start(hostname(), portnum(), config()) -> {ok, pid()} | {error, any()}.
+start(Host, Port, Config) when is_list(Config) ->
+  start(Host, Port, maps:from_list(Config));
 start(Host, Port, #{nolink := true} = Config) ->
   proc_lib:start(?MODULE, init, [self(), host(Host), Port, Config]);
 start(Host, Port, Config) ->
