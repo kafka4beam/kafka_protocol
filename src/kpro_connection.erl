@@ -69,7 +69,7 @@
 -record(state, { client_id   :: client_id()
                , parent      :: pid()
                , remote      :: kpro:endpoint()
-               , sock        :: ?undef | port()
+               , sock        :: gen_tcp:socket() | ssl:sslsocket()
                , mod         :: ?undef | gen_tcp | ssl
                , req_timeout :: ?undef | timeout()
                , api_vsns    :: ?undef | kpro:vsn_ranges()
@@ -155,6 +155,33 @@ debug(Pid, File) when is_list(File) ->
 
 -spec init(pid(), hostname(), portnum(), config()) -> no_return().
 init(Parent, Host, Port, Config) ->
+  State =
+    try
+      State0 = connect(Parent, Host, Port, Config),
+      ReqTimeout = get_request_timeout(Config),
+      ok = send_assert_max_req_age(self(), ReqTimeout),
+      Requests = kpro_sent_reqs:new(),
+      State0#state{requests = Requests, req_timeout = ReqTimeout}
+    catch
+      error : Reason ?BIND_STACKTRACE(Stack) ->
+        ?GET_STACKTRACE(Stack),
+        IsSsl = maps:get(ssl, Config, false),
+        SaslOpt = get_sasl_opt(Config),
+        ok = maybe_log_hint(Host, Port, Reason, IsSsl, SaslOpt),
+        proc_lib:init_ack(Parent, {error, {Reason, Stack}}),
+        erlang:exit(normal)
+    end,
+  %% From now on, enter `{active, once}' mode
+  %% NOTE: ssl doesn't support `{active, N}'
+  ok = setopts(State#state.sock, State#state.mod, [{active, once}]),
+  Debug = sys:debug_options(maps:get(debug, Config, [])),
+  proc_lib:init_ack(Parent, {ok, self()}),
+  loop(State, Debug).
+
+%% Connect to the given endpoint, then initalize connection.
+%% Raise an error exception for any failure.
+-spec connect(pid(), hostname(), portnum(), config()) -> state().
+connect(Parent, Host, Port, Config) ->
   Timeout = get_connect_timeout(Config),
   %% initial active opt should be 'false' before upgrading to ssl
   SockOpts = [{active, false}, binary, {nodelay, true}],
@@ -163,29 +190,21 @@ init(Parent, Host, Port, Config) ->
       State = #state{ client_id = get_client_id(Config)
                     , parent    = Parent
                     , remote    = {Host, Port}
+                    , sock      = Sock
                     },
-      try
-        do_init(State, Sock, Host, Config)
-      catch
-        error : Reason ?BIND_STACKTRACE(Stack) ->
-          ?GET_STACKTRACE(Stack),
-          IsSsl = maps:get(ssl, Config, false),
-          SaslOpt = get_sasl_opt(Config),
-          ok = maybe_log_hint(Host, Port, Reason, IsSsl, SaslOpt),
-          erlang:exit({Reason, Stack})
-      end;
+      init_connection(State, Config);
     {error, Reason} ->
-      %% exit instead of {error, Reason}
-      %% otherwise exit reason will be 'normal'
-      erlang:exit({connection_failure, Reason})
+      erlang:error(Reason)
   end.
 
--spec do_init(state(), port(), hostname(), config()) -> no_return().
-do_init(State0, Sock, Host, Config) ->
-  #state{ parent = Parent
-        , client_id = ClientId
-        } = State0,
-  Debug = sys:debug_options(maps:get(debug, Config, [])),
+%% Initialize connection.
+%% * Upgrade to SSL
+%% * SASL authentication
+%% * Query API versions
+init_connection(#state{ client_id = ClientId
+                      , sock = Sock
+                      , remote = {Host, _}
+                      } = State, Config) ->
   Timeout = get_connect_timeout(Config),
   %% adjusting buffer size as per recommendation at
   %% http://erlang.org/doc/man/inet.html#setopts-2
@@ -210,15 +229,7 @@ do_init(State0, Sock, Host, Config) ->
   SaslOpts = get_sasl_opt(Config),
   ok = kpro_sasl:auth(Host, NewSock, Mod, ClientId,
                       Timeout, SaslOpts, HandshakeVsn),
-  State = State0#state{mod = Mod, sock = NewSock, api_vsns = Versions},
-  proc_lib:init_ack(Parent, {ok, self()}),
-  ReqTimeout = get_request_timeout(Config),
-  ok = send_assert_max_req_age(self(), ReqTimeout),
-  Requests = kpro_sent_reqs:new(),
-  %% from now on, enter `{active, once}' mode
-  %% NOTE: ssl doesn't support `{active, N}'
-  ok = setopts(NewSock, Mod, [{active, once}]),
-  loop(State#state{requests = Requests, req_timeout = ReqTimeout}, Debug).
+  State#state{mod = Mod, sock = NewSock, api_vsns = Versions}.
 
 query_api_versions(Sock, Mod, ClientId, Timeout) ->
   Req = kpro_req_lib:make(api_versions, 0, []),
