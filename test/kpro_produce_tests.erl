@@ -56,13 +56,17 @@ non_monotoic_ts_in_batch_test() ->
     false ->
       Ts = kpro_lib:now_ts() - 1000,
       Msgs = [ #{ts => Ts,
-                 value => make_value(?LINE)
+                 value => make_value(?LINE),
+                 headers => [{<<"foo">>, <<"bar">>}]
                 }
              , #{ts => Ts - 1000,
-                 value => make_value(?LINE)
+                 value => make_value(?LINE),
+                 headers => [{<<"foo">>, <<"bar">>},
+                             {<<"baz">>, <<"gazonga">>}]
                 }
              , #{ts => Ts + 1000,
-                 value => make_value(?LINE)
+                 value => make_value(?LINE),
+                 headers => []
                 }
              ],
       Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Msgs),
