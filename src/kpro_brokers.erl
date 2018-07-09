@@ -36,7 +36,6 @@
 -type coordinator_type() :: kpro:coordinator_type().
 -type group_id() :: kpro:group_id().
 -type transactional_id() :: kpro:transactional_id().
--type conn_config() :: kpro:conn_config().
 
 -define(DEFAULT_TIMEOUT, timer:seconds(5)).
 
@@ -53,6 +52,8 @@ connect_any(Endpoints0, Config) ->
 -spec with_connection([endpoint()], config(),
                       fun((connection()) -> Return)) ->
         Return when Return :: term().
+with_connection(Endpoints, Config, Fun) when is_list(Config) ->
+  with_connection(Endpoints, maps:from_list(Config), Fun);
 with_connection(Endpoints, Config, Fun) ->
   %% connect to any bootstrap endpoint (without linking to self)
   Connection =
@@ -98,13 +99,13 @@ connect_coordinator(Bootstrap, Config, #{ type := Type
   discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
 
 %% @doc Conect to the controller broker of the kafka cluster.
--spec connect_controller(connection() | [endpoint()], conn_config(),
+-spec connect_controller(connection() | [endpoint()], config(),
                          #{timeout => timeout()}) ->
         {ok, connection()} | {error, any()}.
-connect_controller(Bootstrap, ConnConfig, Opts) ->
+connect_controller(Bootstrap, Config, Opts) ->
   Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
   DiscoverFun = fun(Conn) -> discover_controller(Conn, Timeout) end,
-  discover_and_connect(DiscoverFun, Bootstrap, ConnConfig, Timeout).
+  discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
 
 %% @doc Qury API version ranges using the given `kpro_connection' pid.
 %% The return value is an intersection of queried version ranges
@@ -246,6 +247,8 @@ discover_controller(Conn, Timeout) ->
 %% * Cluster controller
 %% * Group coordinator
 %% * Transactional coordinator
+discover_and_connect(DiscoverFun, X, Config, Timeout) when is_list(Config) ->
+  discover_and_connect(DiscoverFun, X, maps:from_list(Config), Timeout);
 discover_and_connect(DiscoverFun, C, Config, Timeout) when is_pid(C) ->
   FL =
     [ fun() -> DiscoverFun(C) end
