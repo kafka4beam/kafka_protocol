@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2018, Klarna AB
+%%%   Copyright (c) 2018, Klarna Bank AB (publ)
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -179,13 +179,16 @@ produce(Vsn, Topic, Partition, Batch) ->
 %% 1. `Batch' arg must be be a `[map()]' to indicate magic v2,
 %%     for example: `[#{key => Key, value => Value, ts => Ts}]'.
 %%     Current system time will be taken if `ts' is missing in batch input.
+%%     It may also be `binary()' if user choose to encode a batch beforehand.
+%%     This could be helpful when a large batch can be encoded in another
+%%     process, so it may pass large binary instead of list between processes.
 %% 2. `first_sequence' must exist in `Opts'.
 %%     It should be the sequence number for the fist message in batch.
 %%     Maintained by producer, sequence numbers should start from zero and be
 %%     monotonically increasing, with one sequence number per topic-partition.
 %% 3. `txn_ctx' (which is of spec `kpro:txn_ctx()') must exist in `Opts'
 -spec produce(vsn(), topic(), partition(),
-              batch_input(), produce_opts()) -> req().
+              binary() | batch_input(), produce_opts()) -> req().
 produce(Vsn, Topic, Partition, Batch, Opts) ->
   RequiredAcks = required_acks(maps:get(required_acks, Opts, all_isr)),
   Compression = maps:get(compression, Opts, ?no_compression),
@@ -193,10 +196,15 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
   TxnCtx = maps:get(txn_ctx, Opts, false),
   FirstSequence = maps:get(first_sequence, Opts, -1),
   EncodedBatch =
-    case TxnCtx =:= false of
+    case is_binary(Batch) of
       true ->
+        %% already encoded non-transactional batch
+        Batch;
+      false when TxnCtx =:= false ->
+        %% non-transactional batch
         kpro_batch:encode(Batch, Compression);
       false ->
+        %% transactional batch
         true = FirstSequence >= 0, %% assert
         kpro_batch:encode_tx(Batch, Compression, FirstSequence, TxnCtx)
     end,

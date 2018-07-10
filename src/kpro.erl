@@ -56,6 +56,7 @@
 %% request makers/response parsers
 %% there are more in `kpro_req_lib'
 -export([ encode_request/3
+        , encode_batch/2
         , make_request/3
         ]).
 
@@ -283,6 +284,11 @@ make_request(Api, Vsn, Fields) ->
 -spec encode_request(client_id(), corr_id(), req()) -> iodata().
 encode_request(ClientId, CorrId, Req) ->
   kpro_req_lib:encode(ClientId, CorrId, Req).
+
+%% @doc Encode message batch for produce request.
+-spec encode_batch(batch_input(), compress_option()) -> binary().
+encode_batch(Batch, Compression) ->
+  kpro_batch:encode(Batch, Compression).
 
 %% @doc The message-set is not decoded upon receiving (in connection process).
 %% It is passed as binary to the consumer process and decoded there.

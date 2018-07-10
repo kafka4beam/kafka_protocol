@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2018, Klarna AB
+%%%   Copyright (c) 2018, Klarna Bank AB (publ)
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -76,6 +76,26 @@ non_monotoic_ts_in_batch_test() ->
           ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
         end)
   end.
+
+%% batches can be encoded by caller before making a produce request
+encode_batch_beforehand_test() ->
+  {_, Vsn} = get_api_vsn_range(),
+  Batch =
+    case Vsn < ?MIN_MAGIC_2_PRODUCE_API_VSN of
+      true ->
+        [{<<"key">>, make_value(?LINE)}];
+      false ->
+        [#{ts => kpro_lib:now_ts(),
+           value => make_value(?LINE),
+           headers => []}]
+    end,
+  Bin = kpro:encode_batch(Batch, no_compression),
+  Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Bin),
+  with_connection(
+    fun(Pid) ->
+        {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
+        ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
+    end).
 
 make_req(Vsn) ->
   Batch = make_batch(Vsn),
