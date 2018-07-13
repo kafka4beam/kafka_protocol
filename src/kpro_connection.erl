@@ -49,6 +49,7 @@
 
 -type cfg_key() :: connect_timeout
                  | client_id
+                 | extra_sock_opts
                  | debug
                  | nolink
                  | query_api_versions
@@ -84,7 +85,7 @@
 -spec all_cfg_keys() -> [cfg_key()].
 all_cfg_keys() ->
   [ connect_timeout, debug, client_id, request_timeout, sasl, ssl,
-    nolink, query_api_versions
+    nolink, query_api_versions, extra_sock_opts
   ].
 
 %% @doc Connect to the given endpoint.
@@ -184,7 +185,7 @@ init(Parent, Host, Port, Config) ->
 connect(Parent, Host, Port, Config) ->
   Timeout = get_connect_timeout(Config),
   %% initial active opt should be 'false' before upgrading to ssl
-  SockOpts = [{active, false}, binary, {nodelay, true}],
+  SockOpts = [{active, false}, binary] ++ get_extra_sock_opts(Config),
   case gen_tcp:connect(Host, Port, SockOpts, Timeout) of
     {ok, Sock} ->
       State = #state{ client_id = get_client_id(Config)
@@ -447,6 +448,10 @@ ts() ->
   {{Y, M, D}, {HH, MM, SS}} = calendar:now_to_local_time(Now),
   lists:flatten(io_lib:format("~.4.0w-~.2.0w-~.2.0w ~.2.0w:~.2.0w:~.2.0w.~w",
                               [Y, M, D, HH, MM, SS, MicroSec])).
+
+-spec get_extra_sock_opts(config()) -> [gen_tcp:connect_option()].
+get_extra_sock_opts(Config) ->
+  maps:get(extra_sock_opts, Config, []).
 
 -spec get_connect_timeout(config()) -> timeout().
 get_connect_timeout(Config) ->
