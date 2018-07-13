@@ -49,6 +49,7 @@
 
 -type cfg_key() :: connect_timeout
                  | client_id
+                 | extra_sock_opts
                  | debug
                  | nolink
                  | query_api_versions
@@ -84,7 +85,7 @@
 -spec all_cfg_keys() -> [cfg_key()].
 all_cfg_keys() ->
   [ connect_timeout, debug, client_id, request_timeout, sasl, ssl,
-    nolink, query_api_versions
+    nolink, query_api_versions, extra_sock_opts
   ].
 
 %% @doc Connect to the given endpoint.
