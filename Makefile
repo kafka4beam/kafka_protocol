@@ -45,7 +45,7 @@ compile:
 .PHONY: distclean
 distclean: clean
 	@rm -rf _build deps
-	@rm rebar.lock
+	@rm -f rebar.lock
 
 .PHONY: edoc
 edoc: profile=edown
