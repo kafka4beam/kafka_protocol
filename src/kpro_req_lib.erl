@@ -195,6 +195,7 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
   AckTimeout = maps:get(ack_timeout, Opts, ?DEFAULT_ACK_TIMEOUT),
   TxnCtx = maps:get(txn_ctx, Opts, false),
   FirstSequence = maps:get(first_sequence, Opts, -1),
+  MagicV = kpro_lib:produce_api_vsn_to_magic_vsn(Vsn),
   EncodedBatch =
     case is_binary(Batch) of
       true ->
@@ -202,7 +203,7 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
         Batch;
       false when TxnCtx =:= false ->
         %% non-transactional batch
-        kpro_batch:encode(Batch, Compression);
+        kpro_batch:encode(MagicV, Batch, Compression);
       false ->
         %% transactional batch
         true = FirstSequence >= 0, %% assert

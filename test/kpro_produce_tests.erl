@@ -80,16 +80,11 @@ non_monotoic_ts_in_batch_test() ->
 %% batches can be encoded by caller before making a produce request
 encode_batch_beforehand_test() ->
   {_, Vsn} = get_api_vsn_range(),
-  Batch =
-    case Vsn < ?MIN_MAGIC_2_PRODUCE_API_VSN of
-      true ->
-        [{<<"key">>, make_value(?LINE)}];
-      false ->
-        [#{ts => kpro_lib:now_ts(),
-           value => make_value(?LINE),
-           headers => []}]
-    end,
-  Bin = kpro:encode_batch(Batch, no_compression),
+  Batch = [#{ts => kpro_lib:now_ts(),
+             value => make_value(?LINE),
+             headers => []}],
+  Magic = kpro_lib:produce_api_vsn_to_magic_vsn(Vsn),
+  Bin = kpro:encode_batch(Magic, Batch, no_compression),
   Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Bin),
   with_connection(
     fun(Pid) ->
@@ -115,14 +110,6 @@ with_connection(Config, Fun) ->
     end,
   kpro_test_lib:with_connection(Config, ConnFun, Fun).
 
-% Produce requests since v3 are only allowed to
-% contain record batches with magic v2
-% magic 0-1 have tuple list as batch input
-% magic 2 has map list as batch input
-make_batch(Vsn) when Vsn < ?MIN_MAGIC_2_PRODUCE_API_VSN ->
-  [ {<<"key1">>, make_value(Vsn)}
-  , {<<"key2">>, make_value(Vsn)}
-  ];
 make_batch(Vsn) ->
   F = fun(I) ->
           #{ key => iolist_to_binary("key" ++ integer_to_list(I))

@@ -100,7 +100,7 @@ produce_randomly(Connection, Count, Acc) ->
           false -> MinVsn + rand_num(MaxVsn - MinVsn) - 1
         end,
   Opts = rand_produce_opts(),
-  Batch = make_random_batch(Vsn, rand_num(?RAND_BATCH_SIZE)),
+  Batch = make_random_batch(rand_num(?RAND_BATCH_SIZE)),
   Req = kpro_req_lib:produce(Vsn, ?TOPIC, ?PARTI, Batch, Opts),
   {ok, Rsp} = kpro:request_sync(Connection, Req, ?TIMEOUT),
   #{ error_code := no_error
@@ -147,13 +147,7 @@ with_connection(Config, Fun) ->
     end,
   kpro_test_lib:with_connection(Config, ConnFun, Fun).
 
-make_random_batch(Vsn, Count) when Vsn < 2 ->
-  %% kafka 0.9
-  [{uniq_bin(), rand_bin()} || _ <- lists:seq(1, Count)];
-make_random_batch(2, Count) ->
-  %% kafka 0.10
-  [{kpro_lib:now_ts(), uniq_bin(), rand_bin()} || _ <- lists:seq(1, Count)];
-make_random_batch(_, Count) ->
+make_random_batch(Count) ->
   [#{ ts => kpro_lib:now_ts()
     , key => uniq_bin()
     , value => rand_bin()

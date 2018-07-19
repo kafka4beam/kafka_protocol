@@ -13,24 +13,17 @@
 %%%   limitations under the License.
 %%%
 
-% Structures of kafka magic version 2.
-% For v0 and v1, see `kpro_batch_v01'.
-% In `kafka_protocol', there is no message version number in APIs,
-% the input pattern is used to figure out version number:
-% `[{Key, Value}]' : 0
-% `[{Timestamp, Key, Value}]': 1
-% `[#{headers => Headers, ts => Ts, key => Key, value => Value}]': 2
-
 -module(kpro_batch).
 
 -export([ decode/1
-        , encode/2
+        , encode/3
         , encode_tx/4
         , is_control/1
         ]).
 
 -include("kpro_private.hrl").
 
+-type magic() :: kpro:magic().
 -type message() :: kpro:message().
 -type ts_type() :: kpro:timestamp_type().
 -type msg_ts() :: kpro:msg_ts().
@@ -45,18 +38,15 @@
 -define(NO_META, ?KPRO_NO_BATCH_META).
 
 %% @doc Encode a list of batch inputs into byte stream.
-%% Depending on the input pattern, if it is magic version 0 - 1
-%% call kpro_batch_v01 to do the work.
-%% If it is magic version 2, encode with dummy (non-transactional) batch meta.
--spec encode(batch_input(), compress_option()) -> binary().
-encode([#{} | _] = Batch, Compression) ->
+-spec encode(magic(), batch_input(), compress_option()) -> binary().
+encode(_MagicVsn = 2, Batch, Compression) ->
   FirstSequence = -1,
   NonTxn = #{ producer_id => -1
             , producer_epoch => -1
             },
   iolist_to_binary(encode_tx(Batch, Compression, FirstSequence, NonTxn));
-encode(Batch, Compression) ->
-  iolist_to_binary(kpro_batch_v01:encode(Batch, Compression)).
+encode(MagicVsn, Batch, Compression) ->
+  iolist_to_binary(kpro_batch_v01:encode(MagicVsn, Batch, Compression)).
 
 %% @doc Encode a batch of magic version 2.
 % RecordBatch =>

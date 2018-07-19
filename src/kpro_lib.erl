@@ -32,6 +32,7 @@
         , ok_pipe/1
         , ok_pipe/2
         , parse_endpoints/2
+        , produce_api_vsn_to_magic_vsn/1
         , send_and_recv/5
         , send_and_recv_raw/4
         , update_map/4
@@ -47,6 +48,14 @@
 -type count() :: non_neg_integer().
 
 %%%_* APIs =====================================================================
+
+-spec produce_api_vsn_to_magic_vsn(kpro:vsn()) -> kpro:magic().
+produce_api_vsn_to_magic_vsn(0) -> 0;
+produce_api_vsn_to_magic_vsn(V) ->
+  case V < ?MIN_MAGIC_2_PRODUCE_API_VSN of
+    true -> 1;
+    false -> 2
+  end.
 
 %% @doc Send a raw packet to broker and wait for response raw packet.
 -spec send_and_recv_raw(iodata(), port(), module(), timeout()) -> binary().

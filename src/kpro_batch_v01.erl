@@ -39,17 +39,17 @@
 -module(kpro_batch_v01).
 
 -export([ decode/2
-        , encode/2
+        , encode/3
         ]).
 
--type msg_in() :: kpro:kv() | kpro:tkv().
 -type msg_ts() :: kpro:msg_ts().
 -type key() :: kpro:key().
 -type value() :: kpro:value().
--type kv_list() :: kpro:kv_list().
 -type compress_option() :: kpro:compress_option().
 -type offset() :: kpro:offset().
 -type message() :: kpro:message().
+-type batch() :: kpro:batch_input().
+-type magic() :: kpro:magic().
 
 -include("kpro_private.hrl").
 
@@ -57,12 +57,12 @@
 
 %%%_* APIs =====================================================================
 
--spec encode(kv_list(), compress_option()) -> iodata().
-encode(KvList, Compression) ->
-  {Encoded, WrapperTs} = do_encode_messages(KvList),
+-spec encode(magic(), batch(), compress_option()) -> iodata().
+encode(Magic, Batch, Compression) ->
+  {Encoded, WrapperTs} = do_encode_messages(Magic, Batch),
   case Compression =:= ?no_compression of
     true -> Encoded;
-    false -> compress(Compression, Encoded, WrapperTs)
+    false -> compress(Magic, Compression, Encoded, WrapperTs)
   end.
 
 %% @doc Decode one message or a compressed batch.
@@ -133,21 +133,6 @@ decode_loop(<<O:64/?INT, L:32/?INT, Body:L/binary, Rest/binary>>, Acc) ->
   Messages = decode(O, Body),
   decode_loop(Rest, Messages ++ Acc).
 
--spec nested(msg_in()) -> kv_list() | false.
-nested({_K, [Msg | _] = Nested}) when is_tuple(Msg) -> Nested;
-nested({_T, _K, [Msg | _] = Nested}) when is_tuple(Msg) -> Nested;
-nested(_) -> false.
-
--spec foldl_kvlist(fun((msg_in(), term()) -> term()),
-                   term(), kv_list()) -> term().
-foldl_kvlist(_Fun, Acc, []) -> Acc;
-foldl_kvlist(Fun, Acc, [Msg | Rest]) ->
-  NewAcc = case nested(Msg) of
-             false -> Fun(Msg, Acc);
-             Nested -> foldl_kvlist(Fun, Acc, Nested)
-           end,
-  foldl_kvlist(Fun, NewAcc, Rest).
-
 %% Assign relative offsets to help kafka save some CPU when compressed.
 %% Kafka will decompress to validate CRC, and assign real or relative offsets
 %% depending on kafka verson and/or broker config. For 0.10 or later if relative
@@ -156,44 +141,32 @@ foldl_kvlist(Fun, Acc, [Msg | Rest]) ->
 %% ref: https://cwiki.apache.org/confluence/display/KAFKA/ \
 %%           KIP-31+-+Move+to+relative+offsets+in+compressed+message+sets
 %%
-%% Also try to find out the timestamp for compressed wrapper message.
-%% In case all messages have timestamp, i.e. of spec `{T, K, V}', the max
-%% timestamp is to be used for the wrapper.
-%% In case all messages have no timestamp, i.e. of spec `{K, V}', default
-%% value -1 (as in 'no timestamp') is used for wrapper.
-%% In case of mixed presence, `false' is returned to indicate that the batch
-%% should not be compressed otherwise kafka will consider it 'corrupted'.
--spec do_encode_messages(kv_list()) -> {iodata(), msg_ts() | false}.
-do_encode_messages(KvList) ->
-  F = fun(Msg, {Acc, Offset, MaxTs, KvCount0}) ->
-          {T, K, V, KvCount} =
-            case Msg of
-              {Kx, Vx}     -> {?NO_TIMESTAMP, Kx, Vx, KvCount0 + 1};
-              {Tx, Kx, Vx} -> {Tx, Kx, Vx, KvCount0}
-            end,
-          Encoded = encode_message(?KPRO_COMPRESS_NONE, T, K, V, Offset),
-          {[Encoded | Acc], Offset + 1, erlang:max(MaxTs, T), KvCount}
+%% NOTE: Current timestamp is used if not found in input message.
+-spec do_encode_messages(magic(), batch()) -> {iodata(), msg_ts()}.
+do_encode_messages(Magic, Batch) ->
+  NowTs = kpro_lib:now_ts(),
+  F = fun(Msg, {Acc, Offset, MaxTs}) ->
+          T = maps:get(ts, Msg, NowTs),
+          K = maps:get(key, Msg, <<>>),
+          V = maps:get(value, Msg, <<>>),
+          Encoded = encode_message(Magic, ?KPRO_COMPRESS_NONE, T, K, V, Offset),
+          {[Encoded | Acc], Offset + 1, erlang:max(MaxTs, T)}
       end,
-  {Stream, _Offset, MaxTs, KvCount} =
-    foldl_kvlist(F, {[], _Offset0 = 0, ?NO_TIMESTAMP, _KvCount = 0}, KvList),
-  WrapperTs = case KvCount > 0 andalso MaxTs =/= ?NO_TIMESTAMP of
-                true  -> false; %% some are {K, V} some are {T, K, V}
-                false -> MaxTs
-              end,
-  {lists:reverse(Stream), WrapperTs}.
+  {Stream, _Offset, MaxTs} =
+    lists:foldl(F, {[], _Offset0 = 0, ?NO_TIMESTAMP}, Batch),
+  {lists:reverse(Stream), MaxTs}.
 
 %% Encode one message, magic version 0 or 1 is taken from with or without
 %% timestamp given at the 2nd arg.
--spec encode_message(byte(), msg_ts(), key(), value(), offset()) -> iodata().
-encode_message(Codec, T, Key, Value, Offset) ->
-  {MagicByte, CreateTs, Attributes} =
-    case T of
-      ?NO_TIMESTAMP ->
-        {?KPRO_MAGIC_0, <<>>, Codec};
-      _ ->
-        {?KPRO_MAGIC_1, enc(int64, T), Codec bor ?KPRO_TS_TYPE_CREATE}
+-spec encode_message(magic(), byte(), msg_ts(),
+                     key(), value(), offset()) -> iodata().
+encode_message(Magic, Codec, Ts, Key, Value, Offset) ->
+  {CreateTs, Attributes} =
+    case Magic of
+      0 -> {<<>>, Codec};
+      1 -> {enc(int64, Ts), Codec bor ?KPRO_TS_TYPE_CREATE}
     end,
-  Body = [ enc(int8, MagicByte)
+  Body = [ enc(int8, Magic)
          , enc(int8, Attributes)
          , CreateTs
          , enc(bytes, Key)
@@ -206,9 +179,8 @@ encode_message(Codec, T, Key, Value, Offset) ->
    Crc, Body
   ].
 
--spec compress(compress_option(), iodata(), msg_ts() | false) -> iodata().
-compress(_Method, IoData, false) -> IoData; %% no way to compress
-compress(Method, IoData, WrapperMsgTs) ->
+-spec compress(magic(), compress_option(), iodata(), msg_ts()) -> iodata().
+compress(Magic, Method, IoData, WrapperMsgTs) ->
   Key = <<>>,
   Value = kpro_compress:compress(Method, IoData),
   Codec = kpro_compress:method_to_codec(Method),
@@ -218,7 +190,7 @@ compress(Method, IoData, WrapperMsgTs) ->
   %%  - Relative offset of the last message in the inner batch
   %%  - The absolute offset in kafka which is unknown to clients
   WrapperOffset = 0,
-  encode_message(Codec, WrapperMsgTs, Key, Value, WrapperOffset).
+  encode_message(Magic, Codec, WrapperMsgTs, Key, Value, WrapperOffset).
 
 %% Kafka may assign relative or real offsets for compressed messages.
 -spec maybe_assign_offsets(offset(), [message()]) -> [message()].

@@ -36,4 +36,7 @@
   - Add sasl-scram support
 * 2.0.1
   - Bump `crc32cer` to from `0.1.0` to `0.1.1` to fix build issue in OSX
+* 2.1.0
+  - Simplify batch input. Batch magic version is derived from produce API version.
+    no longer depends on batch input format to determin magic version.
 

@@ -56,8 +56,9 @@
 %% request makers/response parsers
 %% there are more in `kpro_req_lib'
 -export([ encode_request/3
-        , encode_batch/2
+        , encode_batch/3
         , make_request/3
+        , produce_api_vsn_to_magic_vsn/1
         ]).
 
 %% misc
@@ -98,7 +99,6 @@
              , int64/0
              , isolation_level/0
              , key/0
-             , kv_list/0
              , magic/0
              , message/0
              , msg_ts/0
@@ -142,7 +142,7 @@
 -type error_code() :: int16() | atom().
 -type msg_ts() :: int64().
 -type producer_id() :: int64().
--type magic() :: int8().
+-type magic() :: 0..2.
 
 -type client_id() :: binary().
 -type hostname() :: binary() | string().
@@ -165,21 +165,14 @@
                          , first_seqno => seqno() % txn only
                          }.
 
--type key() :: ?null | iodata().
--type value() :: ?null | iodata() | value_mabye_nested().
--type value_mabye_nested() :: value() | [{key(), kv_list()}].
--type kv_list() :: [kv() | tkv()].
-
--type msg_key() :: headers | ts | key | value.
--type msg_val() :: headers() | msg_ts() | key() | value().
-
--type kv() :: {key(), value_mabye_nested()}. % magic 0
--type tkv() :: {msg_ts(), key(), value_mabye_nested()}. % magic 1
--type msg_input() :: #{msg_key() => msg_val()}. % magic 2
-
--type batch_input() :: [kv()] % magic 0
-                     | [tkv()] % magic 1
-                     | [msg_input()]. % magic 2 non-transactional
+-type key() :: binary().
+-type value() :: binary().
+-type msg_input() :: #{ headers => headers() % default to []
+                      , ts => msg_ts() % default to current ts
+                      , key => key() % default to <<"">>
+                      , value => value() % default to <<"">>
+                      }.
+-type batch_input() :: [msg_input()].
 
 -type incomplete_batch() :: ?incomplete_batch(int32()).
 -type message() :: #kafka_message{}.
@@ -265,6 +258,10 @@
 
 %%%_* APIs =====================================================================
 
+%% Get batch magic version from produce API version.
+-spec produce_api_vsn_to_magic_vsn(vsn()) -> magic().
+produce_api_vsn_to_magic_vsn(V) -> kpro_lib:produce_api_vsn_to_magic_vsn(V).
+
 %% @see kpro_lib:parse_endpoints/2.
 parse_endpoints(String) ->
   parse_endpoints(undefined, String).
@@ -286,9 +283,9 @@ encode_request(ClientId, CorrId, Req) ->
   kpro_req_lib:encode(ClientId, CorrId, Req).
 
 %% @doc Encode message batch for produce request.
--spec encode_batch(batch_input(), compress_option()) -> binary().
-encode_batch(Batch, Compression) ->
-  kpro_batch:encode(Batch, Compression).
+-spec encode_batch(magic(), batch_input(), compress_option()) -> binary().
+encode_batch(Magic, Batch, Compression) ->
+  kpro_batch:encode(Magic, Batch, Compression).
 
 %% @doc The message-set is not decoded upon receiving (in connection process).
 %% It is passed as binary to the consumer process and decoded there.
