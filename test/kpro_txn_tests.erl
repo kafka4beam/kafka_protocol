@@ -273,8 +273,6 @@ connect_coordinator(ProducerId, TryCount, _LastFailure) ->
     {ok, Conn} ->
       {ok, Conn};
     {error, Reason} ->
-      io:format(user, "\nfailed to connect txn coordinator, reason: ~p\n",
-                [Reason]),
       timer:sleep(1000),
       connect_coordinator(ProducerId, TryCount - 1, Reason)
   end.

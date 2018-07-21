@@ -11,8 +11,9 @@ See [brod](https://github.com/klarna/brod) for a complete kafka client implement
 
 ## Test (`make eunit`)
 
-To make a kakfa-1.1.0 testbed locally (requires docker) run `make testbed`
-To test against other kafka-version (e.g. 0.9.0.0) run `make KAFKA_VERSION=0.9 testbed`
+To make a testbed locally (requires docker) run `make testbed`.
+To test against a specific kafka version (e.g. `0.9`), set environment variable `KAFKA_VERSION`. e.g. `export KAFKA_VERSION=0.9`
+
 To test with an existing kafka cluster set below environment variables:
 
 - `KPRO_TEST_KAFKA_09`" Set to 'TRUE' or 'true' or '1' to test against a kafka 0.9 cluster.

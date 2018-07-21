@@ -1,4 +1,4 @@
-
+KAFKA_VERSION ?= 1.1
 all: compile
 
 rebar ?= $(shell which rebar3)
@@ -36,7 +36,7 @@ xref:
 
 .PHONY: eunit
 eunit:
-	@$(rebar_cmd) eunit -v
+	@$(rebar_cmd) eunit -v --cover_export_name $(KAFKA_VERSION)
 
 .PHONY: compile
 compile:
@@ -62,5 +62,8 @@ hex-publish: distclean
 
 .PHONY: testbed
 testbed:
-	@$(verbose) ./scripts/setup-testbed.sh ${KAFKA_VERSION}
+	@$(verbose) ./scripts/setup-testbed.sh $(KAFKA_VERSION)
 
+.PHONY: cover
+cover:
+	@rebar3 cover -v

@@ -1,32 +1,12 @@
-#!/bin/bash -ex
+#!/bin/bash -e
 
 cd $(dirname "$0")
 
-# test against 1.1.0 by default
-VERSION="${1:-1.1.0}"
+# test against 1.1 by default
+VERSION="${1:-1.1}"
 
-case $VERSION in
-  0.9)
-    VERSION="0.9.0.0";;
-  0.10)
-    VERSION="0.10.2.1";;
-  0.11)
-    VERSION="0.11.0.2";;
-  1.*)
-    VERSION="1.1.0";;
-  *)
-    true
-esac
-
-case $VERSION in
-  0.9*)
-    DOWNLOAD_URL_PREFIX="https://archive.apache.org/dist/kafka";;
-  *)
-    DOWNLOAD_URL_PREFIX="https://apache.org/dist/kafka/";;
-esac
-
-IMAGE="kafka_protocol_test:${VERSION}"
-sudo docker build --build-arg VERSION=$VERSION --build-arg DOWNLOAD_URL_PREFIX=$DOWNLOAD_URL_PREFIX -t $IMAGE .
+IMAGE="zmstone/kafka:${VERSION}"
+sudo docker pull $IMAGE
 
 ZK='zookeeper'
 KAFKA_1='kafka-1'
