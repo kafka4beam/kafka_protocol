@@ -39,4 +39,7 @@
 * 2.1.0
   - Simplify batch input. Batch magic version is derived from produce API version.
     no longer depends on batch input format to determin magic version.
+* 2.1.1
+  - Pull docker image (instead of build locally) for tests
+  - Update snappyer and crc32cer to support configurable nif so file lookup location
 
