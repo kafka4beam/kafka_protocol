@@ -64,7 +64,8 @@ no_api_version_query_test() ->
   ok = kpro_connection:stop(Pid).
 
 extra_sock_opts_test() ->
-  Config = #{query_api_versions => false, extra_sock_opts => [{delay_send, true}]},
+  Config = #{query_api_versions => false,
+             extra_sock_opts => [{delay_send, true}]},
   {ok, Pid} = connect(Config),
 
   {ok, Sock} = kpro_connection:get_tcp_sock(Pid),
