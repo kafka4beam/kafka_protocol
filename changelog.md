@@ -42,4 +42,6 @@
 * 2.1.1
   - Pull docker image (instead of build locally) for tests
   - Update snappyer and crc32cer to support configurable nif so file lookup location
+* 2.1.2
+  - Bump crc32cer to 0.1.3 to support alpine/busybox build
 
