@@ -36,6 +36,7 @@
 %% Primitive RPCs
 -export([ request_sync/3
         , request_async/2
+        , send/2
         ]).
 
 %% Transactional RPCs
@@ -317,9 +318,16 @@ request_sync(ConnectionPid, Request, Timeout) ->
 %% The message to expect should have spec `{msg, connection(), #kpro_rsp{}}'
 %% where `#kpro_rsp.ref' matches the sent `Request#kpro_req.ref'.
 %% When it is a produce request with `required_acks=0', there will be no reply.
--spec request_async(pid(), req()) -> ok | {error, any()}.
+-spec request_async(connection(), req()) -> ok | {error, any()}.
 request_async(ConnectionPid, Request) ->
   kpro_connection:request_async(ConnectionPid, Request).
+
+%% @doc Same as @link request_async/2.
+%% Only that the message towards connection process is a cast (not a call).
+%% Always return 'ok'.
+-spec send(connection(), req()) -> ok.
+send(ConnectionPid, Request) when is_pid(ConnectionPid) ->
+  kpro_connection:send(ConnectionPid, Request).
 
 %% @doc Connect to the given endpoint.
 %% NOTE: Connection process is linked to caller unless `nolink => true'

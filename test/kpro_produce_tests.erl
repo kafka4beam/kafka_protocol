@@ -92,6 +92,26 @@ encode_batch_beforehand_test() ->
         ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
     end).
 
+%% async send test
+async_send_test() ->
+  {_, Vsn} = get_api_vsn_range(),
+  Batch1 = [#{ts => kpro_lib:now_ts(), value => make_value(?LINE)}],
+  Batch2 = [#{ts => kpro_lib:now_ts(), value => make_value(?LINE)}],
+  Req1 = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Batch1),
+  Req2 = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Batch2),
+  with_connection(
+    fun(Pid) ->
+        ok = kpro:send(Pid, Req1),
+        ok = kpro:request_async(Pid, Req2),
+        Assert = fun(Req, Rsp) ->
+                     ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp),
+                     ?assertEqual(Req#kpro_req.ref, Rsp#kpro_rsp.ref)
+                 end,
+        receive {msg, Pid, Rsp1} -> Assert(Req1, Rsp1) end,
+        receive {msg, Pid, Rsp2} -> Assert(Req2, Rsp2) end,
+        receive Msg -> erlang:throw({unexpected, Msg}) after 10 -> ok end
+    end).
+
 make_req(Vsn) ->
   Batch = make_batch(Vsn),
   kpro_req_lib:produce(Vsn, topic(), ?PARTI, Batch).
