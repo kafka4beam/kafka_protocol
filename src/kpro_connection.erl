@@ -25,6 +25,7 @@
         , loop/2
         , request_sync/3
         , request_async/2
+        , send/2
         , start/3
         , stop/1
         , debug/2
@@ -98,6 +99,14 @@ start(Host, Port, #{nolink := true} = Config) ->
   proc_lib:start(?MODULE, init, [self(), host(Host), Port, Config]);
 start(Host, Port, Config) ->
   proc_lib:start_link(?MODULE, init, [self(), host(Host), Port, Config]).
+
+%% @doc Same as @link request_async/2.
+%% Only that the message towards connection process is a cast (not a call).
+%% Always return 'ok'.
+-spec send(connection(), kpro:req()) -> ok.
+send(Pid, Request) ->
+  erlang:send(Pid, {{self(), no_reply}, {send, Request}}),
+  ok.
 
 %% @doc Send a request. Caller should expect to receive a response
 %% having `Rsp#kpro_rsp.ref' the same as `Request#kpro_req.ref'
@@ -314,8 +323,11 @@ call(Pid, Request) ->
       {error, {connection_down, Reason}}
   end.
 
-reply({To, Tag}, Reply) ->
-  To ! {Tag, Reply}.
+maybe_reply({To, Ref}, Reply) when is_reference(Ref) ->
+  _ = erlang:send(To, {Ref, Reply}),
+  ok;
+maybe_reply(_, _) ->
+  ok.
 
 loop(#state{} = State, Debug) ->
   Msg = receive Input -> Input end,
@@ -378,24 +390,23 @@ handle_msg({From, {send, Request}},
         end,
   case Res of
     ok ->
-      _ = reply(From, ok),
-      ok;
+      maybe_reply(From, ok);
     {error, Reason} ->
       exit({send_error, Reason})
   end,
   ?MODULE:loop(State#state{requests = NewRequests}, Debug);
 handle_msg({From, get_api_vsns}, State, Debug) ->
-  _ = reply(From, {ok, State#state.api_vsns}),
+  maybe_reply(From, {ok, State#state.api_vsns}),
   ?MODULE:loop(State, Debug);
 handle_msg({From, get_endpoint}, State, Debug) ->
-  _ = reply(From, {ok, State#state.remote}),
+  maybe_reply(From, {ok, State#state.remote}),
   ?MODULE:loop(State, Debug);
 handle_msg({From, get_tcp_sock}, State, Debug) ->
-  _ = reply(From, {ok, State#state.sock}),
+  maybe_reply(From, {ok, State#state.sock}),
   ?MODULE:loop(State, Debug);
 handle_msg({From, stop}, #state{mod = Mod, sock = Sock}, _Debug) ->
   Mod:close(Sock),
-  _ = reply(From, ok),
+  maybe_reply(From, ok),
   ok;
 handle_msg(Msg, #state{} = State, Debug) ->
   error_logger:warning_msg("[~p] ~p got unrecognized message: ~p",

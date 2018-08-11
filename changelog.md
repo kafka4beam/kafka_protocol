@@ -44,4 +44,6 @@
   - Update snappyer and crc32cer to support configurable nif so file lookup location
 * 2.1.2
   - Bump crc32cer to 0.1.3 to support alpine/busybox build
+* 2.2.0
+  - Add truely async send API `kpro:send/2`
 
