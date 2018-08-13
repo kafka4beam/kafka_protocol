@@ -105,7 +105,7 @@ start(Host, Port, Config) ->
 %% Always return 'ok'.
 -spec send(connection(), kpro:req()) -> ok.
 send(Pid, Request) ->
-  erlang:send(Pid, {{self(), no_reply}, {send, Request}}),
+  erlang:send(Pid, {{self(), noreply}, {send, Request}}),
   ok.
 
 %% @doc Send a request. Caller should expect to receive a response
@@ -323,10 +323,11 @@ call(Pid, Request) ->
       {error, {connection_down, Reason}}
   end.
 
-maybe_reply({To, Ref}, Reply) when is_reference(Ref) ->
-  _ = erlang:send(To, {Ref, Reply}),
+-spec maybe_reply({pid(), reference() | noreply}, term()) -> ok.
+maybe_reply({_, noreply}, _) ->
   ok;
-maybe_reply(_, _) ->
+maybe_reply({To, Ref}, Reply) ->
+  _ = erlang:send(To, {Ref, Reply}),
   ok.
 
 loop(#state{} = State, Debug) ->
