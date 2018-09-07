@@ -46,4 +46,6 @@
   - Bump crc32cer to 0.1.3 to support alpine/busybox build
 * 2.2.0
   - Add truely async send API `kpro:send/2`
+* 2.2.2
+  - Moved make_ref to function impl from record definition
 
