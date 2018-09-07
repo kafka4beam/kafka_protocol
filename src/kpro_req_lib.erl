@@ -320,6 +320,7 @@ make(API, Vsn, Fields) ->
   #kpro_req{ api = API
            , vsn = Vsn
            , msg = encode_struct(API, Vsn, Fields)
+           , ref = make_ref()
            }.
 
 %% @doc Encode a request to bytes that can be sent on wire.
