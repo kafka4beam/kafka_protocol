@@ -106,6 +106,12 @@
 -define(GET_STACKTRACE(Var), Var = erlang:get_stacktrace()).
 -endif.
 
+-ifndef(OLD_TIME_UNITS).
+-define(millisecond, millisecond).
+-else.
+-define(millisecond, milli_seconds).
+-endif.
+
 -endif.
 
 %%%_* Emacs ====================================================================

@@ -109,7 +109,7 @@ scan_for_max_age(#requests{sent = Sent}) ->
 next_corr_id(N) -> (N + 1) rem (1 bsl 31).
 
 %% os:system_time('millisecond') is since otp-19
-now_ts() -> os:system_time(1000).
+now_ts() -> os:system_time(?millisecond).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

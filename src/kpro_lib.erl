@@ -210,7 +210,7 @@ get_ts_type(_, A) when ?KPRO_IS_APPEND_TS(A) -> append.
 
 %% os:system_time(millisecond) is since otp 19
 -spec now_ts() -> kpro:msg_ts().
-now_ts() -> os:system_time() div 1000000.
+now_ts() -> os:system_time(?millisecond).
 
 -spec get_req_schema(kpro:api(), kpro:vsn()) -> kpro:struct_schema().
 get_req_schema(Api, Vsn) ->
