@@ -48,4 +48,5 @@
   - Add truely async send API `kpro:send/2`
 * 2.2.2
   - Moved make_ref to function impl from record definition
-
+* 2.2.3
+  - Gotten rid of OS native timestamps
