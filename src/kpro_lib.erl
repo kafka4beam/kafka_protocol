@@ -203,7 +203,7 @@ copy_bytes(Size, Bin) ->
   <<Bytes:Size/binary, Rest/binary>> = Bin,
   {binary:copy(Bytes), Rest}.
 
--spec get_ts_type(byte(), byte()) -> kpro:ts_type().
+-spec get_ts_type(byte(), byte()) -> kpro:timestamp_type().
 get_ts_type(0, _) -> undefined;
 get_ts_type(_, A) when ?KPRO_IS_CREATE_TS(A) -> create;
 get_ts_type(_, A) when ?KPRO_IS_APPEND_TS(A) -> append.
@@ -249,7 +249,7 @@ find(_Field, Other) ->
   erlang:error({not_struct, Other}).
 
 %% @doc Find struct field value, return `Default' if the field is not found.
--spec find(kpro:filed_name(), kpro:struct(), kpro:field_value()) ->
+-spec find(kpro:field_name(), kpro:struct(), kpro:field_value()) ->
         kpro:field_value().
 find(Field, Struct, Default) ->
   try
