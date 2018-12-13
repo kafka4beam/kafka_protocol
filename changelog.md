@@ -50,3 +50,5 @@
   - Moved make_ref to function impl from record definition
 * 2.2.3
   - Gotten rid of OS native timestamps
+* 2.2.4
+  - Fix type specs (PR #48, by Piotr Bober)
