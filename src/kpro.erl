@@ -102,6 +102,7 @@
              , key/0
              , magic/0
              , message/0
+             , msg_input/0
              , msg_ts/0
              , offset/0
              , offsets_to_commit/0
@@ -121,6 +122,7 @@
              , stack/0
              , str/0
              , struct/0
+             , struct_schema/0
              , timestamp_type/0
              , transactional_id/0
              , txn_ctx/0
