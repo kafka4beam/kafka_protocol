@@ -224,7 +224,7 @@ init_connection(#state{ client_id = ClientId
   ok = inet:setopts(Sock, [{buffer, max(RecBufSize, SndBufSize)}]),
   SslOpts = maps:get(ssl, Config, false),
   Mod = get_tcp_mod(SslOpts),
-  NewSock = maybe_upgrade_to_ssl(Sock, Mod, SslOpts, Timeout),
+  NewSock = maybe_upgrade_to_ssl(Sock, Mod, SslOpts, Host, Timeout),
   %% from now on, it's all packet-4 messages
   ok = setopts(NewSock, Mod, [{packet, 4}]),
   Versions =
@@ -270,16 +270,32 @@ get_tcp_mod(_SslOpts = true)  -> ssl;
 get_tcp_mod(_SslOpts = [_|_]) -> ssl;
 get_tcp_mod(_)                -> gen_tcp.
 
-maybe_upgrade_to_ssl(Sock, _Mod = ssl, SslOpts0, Timeout) ->
+%% If SslOpts contains {verify_peer, true}, we insert
+%% {server_name_indication, Host}. This is necessary as of OTP 20, to
+%% ensure that peer verification is done against the correct host name
+%% (otherwise the IP will be used, which is almost certainly
+%% incorrect).
+insert_server_name_indication(SslOpts, Host) when is_list(SslOpts) ->
+  case proplists:get_value(verify_peer, SslOpts) of
+    true ->
+      [{server_name_indication, Host}|SslOpts];
+    undefined ->
+      SslOpts
+  end;
+insert_server_name_indication(SslOpts, _) ->
+  SslOpts.
+
+maybe_upgrade_to_ssl(Sock, _Mod = ssl, SslOpts0, Host, Timeout) ->
   SslOpts = case SslOpts0 of
               true -> [];
-              [_|_] -> SslOpts0
+              [_|_] -> insert_server_name_indication(SslOpts0, Host)
             end,
+
   case ssl:connect(Sock, SslOpts, Timeout) of
     {ok, NewSock} -> NewSock;
     {error, Reason} -> erlang:error({failed_to_upgrade_to_ssl, Reason})
   end;
-maybe_upgrade_to_ssl(Sock, _Mod, _SslOpts, _Timeout) ->
+maybe_upgrade_to_ssl(Sock, _Mod, _SslOpts, _Host, _Timeout) ->
   Sock.
 
 setopts(Sock, _Mod = gen_tcp, Opts) -> inet:setopts(Sock, Opts);
