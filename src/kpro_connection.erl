@@ -276,10 +276,10 @@ get_tcp_mod(_)                -> gen_tcp.
 %% (otherwise the IP will be used, which is almost certainly
 %% incorrect).
 insert_server_name_indication(SslOpts, Host) when is_list(SslOpts) ->
-  case proplists:get_value(verify_peer, SslOpts) of
-    true ->
+  case proplists:get_value(verify, SslOpts) of
+    verify_peer ->
       [{server_name_indication, Host}|SslOpts];
-    undefined ->
+    _ ->
       SslOpts
   end;
 insert_server_name_indication(SslOpts, _) ->
