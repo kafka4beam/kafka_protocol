@@ -275,15 +275,13 @@ get_tcp_mod(_)                -> gen_tcp.
 %% ensure that peer verification is done against the correct host name
 %% (otherwise the IP will be used, which is almost certainly
 %% incorrect).
-insert_server_name_indication(SslOpts, Host) when is_list(SslOpts) ->
+insert_server_name_indication(SslOpts, Host) ->
   case proplists:get_value(verify, SslOpts) of
     verify_peer ->
       [{server_name_indication, Host}|SslOpts];
     _ ->
       SslOpts
-  end;
-insert_server_name_indication(SslOpts, _) ->
-  SslOpts.
+  end.
 
 maybe_upgrade_to_ssl(Sock, _Mod = ssl, SslOpts0, Host, Timeout) ->
   SslOpts = case SslOpts0 of
