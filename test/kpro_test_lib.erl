@@ -230,6 +230,7 @@ default_ssl_options() ->
   [ {cacertfile, Fname("ca.crt")}
   , {keyfile,    Fname("client.key")}
   , {certfile,   Fname("client.crt")}
+  , {verify, verify_peer}
   ].
 
 osenv(Name) ->

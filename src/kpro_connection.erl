@@ -270,7 +270,7 @@ get_tcp_mod(_SslOpts = true)  -> ssl;
 get_tcp_mod(_SslOpts = [_|_]) -> ssl;
 get_tcp_mod(_)                -> gen_tcp.
 
-%% If SslOpts contains {verify_peer, true}, we insert
+%% If SslOpts contains {verify, verify_peer}, we insert
 %% {server_name_indication, Host}. This is necessary as of OTP 20, to
 %% ensure that peer verification is done against the correct host name
 %% (otherwise the IP will be used, which is almost certainly
@@ -278,7 +278,7 @@ get_tcp_mod(_)                -> gen_tcp.
 insert_server_name_indication(SslOpts, Host) ->
   case proplists:get_value(verify, SslOpts) of
     verify_peer ->
-      [{server_name_indication, Host}|SslOpts];
+      [{server_name_indication, Host} | SslOpts];
     _ ->
       SslOpts
   end.
