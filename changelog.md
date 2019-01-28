@@ -52,3 +52,6 @@
   - Gotten rid of OS native timestamps
 * 2.2.4
   - Fix type specs (PR #48, by Piotr Bober)
+* 2.2.5
+  - Add `{server_name_indication, Host}` when `{verify, verify_peer}` is
+    used. This is necessary for OTP >= 20.x.
