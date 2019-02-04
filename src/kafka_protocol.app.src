@@ -1,6 +1,6 @@
 {application,kafka_protocol,
              [{description,"Kafka protocol library for Erlang/Elixir"},
-              {vsn,"2.2.5"},
+              {vsn,"2.2.6"},
               {registered,[]},
               {applications,[kernel,stdlib,ssl,snappyer,crc32cer]},
               {env,[]},

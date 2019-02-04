@@ -55,3 +55,5 @@
 * 2.2.5
   - Add `{server_name_indication, Host}` when `{verify, verify_peer}` is
     used. This is necessary for OTP >= 20.x.
+* 2.2.6
+  - change kpro_lib:data_size/1 to iolist_size nif
