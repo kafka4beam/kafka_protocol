@@ -129,7 +129,7 @@ parse_endpoints(Protocol, Str) ->
 %% @doc Return number of bytes in the given `iodata()'.
 -spec data_size(iodata()) -> count().
 data_size(IoData) ->
-  data_size(IoData, 0).
+  iolist_size(IoData).
 
 %% @doc Encode primitives.
 -spec encode(primitive_type(), kpro:primitive()) -> iodata().
@@ -357,15 +357,6 @@ parse_host_port(HostPort) ->
     [Host, Port] ->
       {Host, list_to_integer(Port)}
   end.
-
--spec data_size(iodata(), count()) -> count().
-data_size([], Size) -> Size;
-data_size(<<>>, Size) -> Size;
-data_size(I, Size) when ?IS_BYTE(I) -> Size + 1;
-data_size(B, Size) when is_binary(B) -> Size + size(B);
-data_size([H | T], Size0) ->
-  Size1 = data_size(H, Size0),
-  data_size(T, Size1).
 
 get_schema(F, Context) ->
   try
