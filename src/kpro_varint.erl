@@ -13,6 +13,7 @@
 %%%   limitations under the License.
 
 -module(kpro_varint).
+-compile({inline, [enc_zigzag/1]}).
 
 -export([ encode/1
         , decode/1
@@ -26,10 +27,9 @@ decode(Bin) ->
   dec_zigzag(dec_varint(Bin)).
 
 %% @doc Encode varint.
--spec encode(kpro:int64()) -> binary().
+-spec encode(kpro:int64()) -> iodata().
 encode(Int) ->
-  Bytes = enc_varint(enc_zigzag(Int)),
-  iolist_to_binary(Bytes).
+  enc_varint(enc_zigzag(Int)).
 
 -spec enc_zigzag(integer()) -> non_neg_integer().
 enc_zigzag(Int) ->
@@ -38,13 +38,10 @@ enc_zigzag(Int) ->
   (Int bsl 1) bxor (Int bsr ?MAX_BITS).
 
 -spec enc_varint(non_neg_integer()) -> iodata().
+enc_varint(I) when I =< 127 ->
+  [I];
 enc_varint(I) ->
-  H = I bsr 7,
-  L = I band 127,
-  case H =:= 0 of
-    true  -> [L];
-    false -> [128 + L | enc_varint(H)]
-  end.
+  [128 + I band 127 | enc_varint(I bsr 7)].
 
 -spec dec_zigzag({integer(), binary()} | integer()) ->
         {integer(), binary()} | integer().
