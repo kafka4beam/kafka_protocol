@@ -168,7 +168,8 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
       end
     , fun({Brokers, PartitionMeta}) ->
           ErrorCode = kpro:find(error_code, PartitionMeta),
-          case ErrorCode =:= ?no_error of
+          case ErrorCode =:= ?no_error orelse
+               ErrorCode =:= ?replica_not_available of
             true  -> {ok, {Brokers, PartitionMeta}};
             false -> {error, ErrorCode}
           end
