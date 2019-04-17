@@ -24,6 +24,7 @@
         , find/3
         , req/3
         , max_corr_id/0
+        , decompress/2
         ]).
 
 %% APIs for the socket process
@@ -185,6 +186,7 @@ fetch_request(Vsn, Topic, Partition, Offset,
     [{replica_id, ?KPRO_REPLICA_ID},
      {max_wait_time, MaxWaitTime},
      {min_bytes, MinBytes},
+     {isolation_level, 1},
      {topics,[[{topic, Topic},
                {partitions,
                 [[{partition, Partition},
@@ -278,7 +280,15 @@ decode_response(Bin) ->
 %% @end
 -spec decode_message_set(binary()) -> incomplete_message() | [message()].
 decode_message_set(MessageSetBin) when is_binary(MessageSetBin) ->
-  case decode_message_stream(MessageSetBin, []) of
+  put(is_magic_v2, false),
+  erase(magic_v2_last_offset),
+  R = decode_message_stream(MessageSetBin, []),
+  IsMagicV2 = get(is_magic_v2),
+  case R of
+    [] when IsMagicV2 ->
+      {jump_to_begin_offset, get(magic_v2_last_offset) + 1};
+    [?incomplete_message(_)] when IsMagicV2 ->
+      {jump_to_begin_offset, get(magic_v2_last_offset) + 1};
     [?incomplete_message(_) = Incomplete] ->
       %% The only message is incomplete
       %% return the special tuple
@@ -560,11 +570,26 @@ decode_message(<<Offset:64/?INT, MsgSize:32/?INT, T/binary>>, Acc) ->
       {[?incomplete_message(MsgSize + 12) | Acc], <<>>};
     false ->
       <<Body:MsgSize/binary, Rest/binary>> = T,
-      {do_decode_message(Offset, Body, Acc), Rest}
+      <<_:32, Magic:8, _:32, _/binary>> = Body,
+      case Magic < 2 of
+        true ->
+          {do_decode_message(Offset, Body, Acc), Rest};
+        false ->
+          put(is_magic_v2, true),
+          {decode_v2(Offset, Body) ++ Acc, Rest}
+      end
   end;
 decode_message(_, Acc) ->
   %% need to fetch at least 12 bytes to know the message size
   {[?incomplete_message(12) | Acc], <<>>}.
+
+decode_v2(Offset, Body) ->
+  {#{is_control := IsCtl, last_offset := LastOffset}, Msgs} = kpro_v2:decodex(Offset, Body),
+  put(magic_v2_last_offset, LastOffset),
+  case IsCtl of
+    true -> [];
+    false -> Msgs
+  end.
 
 %% @private Comment is copied from:
 %% core/src/main/scala/kafka/message/Message.scala

@@ -55,6 +55,16 @@ get(fetch_request, 3) ->
                    {partitions,{array,[{partition,int32},
                                        {fetch_offset,int64},
                                        {max_bytes,int32}]}}]}}];
+get(fetch_request, 4) ->
+  [{replica_id,int32},
+   {max_wait_time,int32},
+   {min_bytes,int32},
+   {max_bytes,int32},
+   {isolation_level,int8},
+   {topics,{array,[{topic,string},
+                   {partitions,{array,[{partition,int32},
+                                       {fetch_offset,int64},
+                                       {max_bytes,int32}]}}]}}];
 get(fetch_response, 0) ->
   [{responses,
        {array,
@@ -77,6 +87,23 @@ get(fetch_response, V) when V >= 1, V =< 3 ->
                          [{partition,int32},
                           {error_code,int16},
                           {high_watermark,int64}]},
+                     {record_set,records}]}}]}}];
+get(fetch_response, 4) ->
+  [{throttle_time_ms,int32},
+   {responses,
+       {array,
+           [{topic,string},
+            {partition_responses,
+                {array,
+                    [{partition_header,
+                         [{partition,int32},
+                          {error_code,int16},
+                          {high_watermark,int64},
+                          {last_stable_offset,int64},
+                          {aborted_transactions,
+                              {array,
+                                  [{producer_id,int64},
+                                   {first_offset,int64}]}}]},
                      {record_set,records}]}}]}}];
 get(offsets_request, 0) ->
   [{replica_id,int32},
