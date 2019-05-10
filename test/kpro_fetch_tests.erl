@@ -30,6 +30,39 @@ fetch_test_() ->
   [{"version " ++ integer_to_list(V),
     fun() -> with_vsn(V) end} || V <- lists:seq(Min, Max)].
 
+incremental_fetch_test() ->
+  {_Min, Max} = get_api_vsn_range(),
+  case Max >= 7 of
+    true ->
+      with_connection(
+        random_config(),
+        fun(Conn) -> test_incemental_fetch(Conn, Max) end);
+    false -> ok
+  end.
+
+test_incemental_fetch(Connection, Vsn) ->
+  %% session-id=0 and epoch=0 to initialize a session
+  Req0 = kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, 0,
+                            #{ session_id => 0
+                             , epoch => 0
+                             , max_bytes => 1
+                             }),
+  {ok, Rsp0} = kpro:request_sync(Connection, Req0, ?TIMEOUT),
+  #{session_id := SessionId} = Rsp0#kpro_rsp.msg,
+  #{header := Header0} = kpro_test_lib:parse_rsp(Rsp0),
+  #{last_stable_offset := LatestOffset} = Header0,
+  Req1 = kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, LatestOffset,
+                            #{ session_id => SessionId
+                             , epoch => 1 %% 0 + 1
+                             , max_bytes => 1
+                             , max_wait_time => 10 %% ms
+                             }),
+  {ok, Rsp1} = kpro:request_sync(Connection, Req1, ?TIMEOUT),
+  ?assertMatch(#kpro_rsp{msg = #{ error_code := no_error
+                                , responses := []
+                                , session_id := SessionId
+                                }}, Rsp1).
+
 fetch_and_verify(_Connection, _Vsn, _BeginOffset, []) -> ok;
 fetch_and_verify(Connection, Vsn, BeginOffset, Messages) ->
   Batch0 = do_fetch(Connection, Vsn, BeginOffset, rand_num(1000)),
