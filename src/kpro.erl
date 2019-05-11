@@ -165,7 +165,7 @@
                          , required_acks => required_acks() % common
                          , ack_timeout => wait() % common
                          , txn_ctx => txn_ctx() % txn only
-                         , first_seqno => seqno() % txn only
+                         , first_sequence => seqno() % txn only
                          }.
 
 -type key() :: binary().
