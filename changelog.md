@@ -56,6 +56,8 @@
   - Add `{server_name_indication, Host}` when `{verify, verify_peer}` is
     used. This is necessary for OTP >= 20.x.
 * 2.2.6
-  - change kpro_lib:data_size/1 to iolist_size nif
+  - Change kpro_lib:data_size/1 to iolist_size nif
 * 2.2.7
-  - improve varint encoding performance
+  - Improve varint encoding performance
+* 2.2.8
+  - Discard replica_not_available (ReplicaNotAvailable) in partition metadata
