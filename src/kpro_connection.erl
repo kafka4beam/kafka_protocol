@@ -25,7 +25,9 @@
         , loop/2
         , request_sync/3
         , request_async/2
+        , request_async/3
         , send/2
+        , send/3
         , start/3
         , stop/1
         , debug/2
@@ -105,7 +107,10 @@ start(Host, Port, Config) ->
 %% Always return 'ok'.
 -spec send(connection(), kpro:req()) -> ok.
 send(Pid, Request) ->
-  erlang:send(Pid, {{self(), noreply}, {send, Request}}),
+  send(Pid, Request, self()).
+
+send(Pid, Request, RspTo) ->
+  erlang:send(Pid, {{self(), noreply}, {send, Request, RspTo}}),
   ok.
 
 %% @doc Send a request. Caller should expect to receive a response
@@ -113,7 +118,11 @@ send(Pid, Request) ->
 %% unless `Request#kpro_req.no_ack' is set to 'true'
 -spec request_async(connection(), kpro:req()) -> ok | {error, any()}.
 request_async(Pid, Request) ->
-  call(Pid, {send, Request}).
+  request_async(Pid, Request, self()).
+
+-spec request_async(connection(), kpro:req(), pid()) -> ok | {error, any()}.
+request_async(Pid, Request, RspTo) ->
+  call(Pid, {send, Request, RspTo}).
 
 %% @doc Send a request and wait for response for at most Timeout milliseconds.
 -spec request_sync(connection(), kpro:req(), timeout()) ->
@@ -384,7 +393,11 @@ handle_msg({tcp_error, Sock, Reason}, #state{sock = Sock}, _) ->
   exit({tcp_error, Reason});
 handle_msg({ssl_error, Sock, Reason}, #state{sock = Sock}, _) ->
   exit({ssl_error, Reason});
-handle_msg({From, {send, Request}},
+handle_msg({From, {send, Request}}, State, Debug) ->
+  %% backward compatible
+  {Caller, _Ref} = From,
+  handle_msg({From, {send, Request, Caller}}, State, Debug);
+handle_msg({From, {send, Request, RspTo}},
            #state{ client_id = ClientId
                  , mod       = Mod
                  , sock      = Sock
@@ -396,7 +409,7 @@ handle_msg({From, {send, Request}},
       #kpro_req{no_ack = true} ->
         kpro_sent_reqs:increment_corr_id(Requests);
       #kpro_req{ref = Ref, api = API, vsn = Vsn} ->
-        kpro_sent_reqs:add(Requests, Caller, Ref, API, Vsn)
+        kpro_sent_reqs:add(Requests, RspTo, Ref, API, Vsn)
     end,
   RequestBin = kpro_req_lib:encode(ClientId, CorrId, Request),
   Res = case Mod of
@@ -451,6 +464,8 @@ format_status(Opt, Status) ->
   {Opt, Status}.
 
 print_msg(Device, {_From, {send, Request}}, State) ->
+  do_print_msg(Device, "send: ~p", [Request], State);
+print_msg(Device, {_From, {send, Request, _RspTo}}, State) ->
   do_print_msg(Device, "send: ~p", [Request], State);
 print_msg(Device, {tcp, _Sock, Bin}, State) ->
   do_print_msg(Device, "tcp: ~p", [Bin], State);

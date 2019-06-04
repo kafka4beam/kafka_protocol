@@ -36,7 +36,9 @@
 %% Primitive RPCs
 -export([ request_sync/3
         , request_async/2
+        , request_async/3
         , send/2
+        , send/3
         ]).
 
 %% Transactional RPCs
@@ -324,12 +326,31 @@ request_sync(ConnectionPid, Request, Timeout) ->
 request_async(ConnectionPid, Request) ->
   kpro_connection:request_async(ConnectionPid, Request).
 
+%% @doc Send a request without waiting for reply.
+%% Reply will be delivered to the `RspTo` pid in the future when response
+%% message is received from kafka.
+%% The message to expect should have spec `{msg, connection(), #kpro_rsp{}}'
+%% where `#kpro_rsp.ref' matches the sent `Request#kpro_req.ref'.
+%% When it is a produce request with `required_acks=0', there will be no reply.
+-spec request_async(connection(), req(), pid()) -> ok | {error, any()}.
+request_async(ConnectionPid, Request, RspTo) ->
+  kpro_connection:request_async(ConnectionPid, Request, RspTo).
+
 %% @doc Same as @link request_async/2.
 %% Only that the message towards connection process is a cast (not a call).
 %% Always return 'ok'.
 -spec send(connection(), req()) -> ok.
 send(ConnectionPid, Request) when is_pid(ConnectionPid) ->
   kpro_connection:send(ConnectionPid, Request).
+
+%% @doc Same as @link request_async/2.
+%% Only that the message towards connection process is a cast (not a call).
+%% Always return 'ok'.
+%% The response message (if sent successfully will be sent
+%% to the `RspTo` pid when kafka sends back the response.
+-spec send(connection(), req(), pid()) -> ok.
+send(ConnectionPid, Request, RspTo) when is_pid(ConnectionPid) ->
+  kpro_connection:send(ConnectionPid, Request, RspTo).
 
 %% @doc Connect to the given endpoint.
 %% NOTE: Connection process is linked to caller unless `nolink => true'

@@ -63,15 +63,25 @@ test_incemental_fetch(Connection, Vsn) ->
                                 , session_id := SessionId
                                 }}, Rsp1).
 
-fetch_and_verify(_Connection, _Vsn, _BeginOffset, []) -> ok;
-fetch_and_verify(Connection, Vsn, BeginOffset, Messages) ->
-  Batch0 = do_fetch(Connection, Vsn, BeginOffset, rand_num(1000)),
+fetch_and_verify(Connection, Vsn, BaseOffset, Messages) ->
+  fetch_and_verify(Connection, Vsn, BaseOffset,
+                   rand_element([sync, send, async]), Messages).
+
+fetch_and_verify(_Connection, _Vsn, _BeginOffset, _API, []) -> ok;
+fetch_and_verify(Connection, Vsn, BeginOffset, API, Messages) ->
+  MaxBytes = rand_num(1000),
+  Batch0 =
+    case API of
+      sync -> sync_fetch(Connection, Vsn, BeginOffset, MaxBytes);
+      send -> async_fetch(Connection, Vsn, BeginOffset, send, MaxBytes);
+      async -> async_fetch(Connection, Vsn, BeginOffset, request_async, MaxBytes)
+    end,
   Batch = drop_older_offsets(BeginOffset, Batch0),
   [#kafka_message{offset = FirstOffset} | _] = Batch,
   ?assertEqual(FirstOffset, BeginOffset),
   Rest = validate_messages(Batch, Messages),
   #kafka_message{offset = NextBeginOffset} = lists:last(Batch),
-  fetch_and_verify(Connection, Vsn, NextBeginOffset + 1, Rest).
+  fetch_and_verify(Connection, Vsn, NextBeginOffset + 1, API, Rest).
 
 %% kafka 0.9 may return messages having offset less than requested
 %% in case the requested offset is in the middle of a compressed batch
@@ -94,9 +104,36 @@ validate_message(K, V, Wat) ->
                 , produced => Wat
                 }).
 
-do_fetch(Connection, Vsn, BeginOffset, MaxBytes) ->
+sync_fetch(Connection, Vsn, BeginOffset, MaxBytes) ->
   Req = make_req(Vsn, BeginOffset, MaxBytes),
   {ok, Rsp} = kpro:request_sync(Connection, Req, ?TIMEOUT),
+  parse_fetch_rsp(Rsp, fun(NewMaxBytes) ->
+                           sync_fetch(Connection, Vsn, BeginOffset, NewMaxBytes)
+                       end).
+
+async_fetch(Conn, Vsn, Offset, API, MaxBytes) ->
+  #kpro_req{ref = Ref} = Req = make_req(Vsn, Offset, MaxBytes),
+  Self = self(),
+  Delegate =
+    spawn_link(fun() ->
+                   receive
+                     {msg, Conn, #kpro_rsp{ref = Ref} = Rsp} ->
+                       Self ! {rsp_from_delegate, Rsp}
+                   end
+               end),
+  ok = kpro:API(Conn, Req, Delegate),
+  receive
+    {rsp_from_delegate, #kpro_rsp{ref = Ref} = Rsp} ->
+      parse_fetch_rsp(Rsp,
+                      fun(NewMaxBytes) ->
+                           async_fetch(Conn, Vsn, Offset, API, NewMaxBytes)
+                       end)
+  after
+    ?TIMEOUT ->
+      error(timeout)
+  end.
+
+parse_fetch_rsp(Rsp, Retry) ->
   #{ header := Header
    , batches := Batches
    } = kpro_test_lib:parse_rsp(Rsp),
@@ -106,7 +143,7 @@ do_fetch(Connection, Vsn, BeginOffset, MaxBytes) ->
   end,
   case Batches of
     ?incomplete_batch(Size) ->
-      do_fetch(Connection, Vsn, BeginOffset, Size);
+      Retry(Size);
     _ ->
       lists:append([Msgs || {_Meta, Msgs} <- Batches])
   end.
