@@ -61,3 +61,5 @@
   - Improve varint encoding performance
 * 2.2.8
   - Discard replica_not_available (ReplicaNotAvailable) in partition metadata
+* 2.2.9
+  - Allo atom as hostname because `inet:hostname() :: atom() | string().`

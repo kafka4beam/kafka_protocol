@@ -148,7 +148,7 @@
 -type magic() :: 0..2.
 
 -type client_id() :: binary().
--type hostname() :: binary() | string().
+-type hostname() :: binary() | inet:hostname().
 -type portnum() :: non_neg_integer().
 -type endpoint() :: {hostname(), portnum()}.
 -type corr_id() :: int32().

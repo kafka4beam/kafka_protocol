@@ -575,9 +575,9 @@ read_sasl_file(File) ->
   [User, Pass] = lists:filter(fun(Line) -> Line =/= <<>> end, Lines),
   {User, Pass}.
 
-%% Ensure string() hostname
+%% Allow binary() host name.
 host(Host) when is_binary(Host) -> binary_to_list(Host);
-host(Host) when is_list(Host) -> Host.
+host(Host) -> Host.
 
 %% Ensure binary client id
 get_client_id(Config) ->
