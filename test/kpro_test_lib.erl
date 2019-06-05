@@ -251,7 +251,7 @@ guess_protocol(Config) ->
     _ -> ssl
   end.
 
-default_endpoints(plaintext) -> [{"localhost", 9092}];
+default_endpoints(plaintext) -> [{localhost, 9092}];
 default_endpoints(ssl) -> [{"localhost", 9093}];
 default_endpoints(sasl_ssl) -> [{"localhost", 9094}].
 
