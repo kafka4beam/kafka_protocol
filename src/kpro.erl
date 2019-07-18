@@ -185,7 +185,7 @@
 -type required_acks() :: -1..1 | all_isr | none | leader_only.
 -type primitive() :: integer() | string() | binary() | atom().
 -type field_name() :: atom().
--type field_value() :: primitive() | struct() | [struct()].
+-type field_value() :: primitive() | [primitive()] | struct() | [struct()].
 -type struct() :: #{field_name() => field_value()}
                 | [{field_name(), field_value()}].
 -type api() :: atom().
