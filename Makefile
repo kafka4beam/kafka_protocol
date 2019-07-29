@@ -59,6 +59,7 @@ dialyze: compile
 .PHONY: hex-publish
 hex-publish: distclean
 	$(verbose) rebar3 hex publish
+	$(verbose) rebar3 hex docs
 
 .PHONY: testbed
 testbed:
