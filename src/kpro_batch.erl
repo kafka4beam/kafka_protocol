@@ -198,7 +198,12 @@ do_decode(Offset, <<_PartitionLeaderEpoch:32,
   Compression = maps:get(compression, Attributes),
   TsType = maps:get(ts_type, Attributes),
   RecordsBin = kpro_compress:decompress(Compression, T8),
-  Messages = dec_records(Count, Offset, FirstTimestamp, TsType, RecordsBin),
+  TsFun =
+    case TsType of
+      create -> fun(TsDelta) -> FirstTimestamp + TsDelta end;
+      append -> fun(_) -> MaxTimestamp end
+    end,
+  Messages = dec_records(Count, Offset, TsFun, TsType, RecordsBin),
   Meta = #{ is_transaction => maps:get(is_transaction, Attributes)
           , is_control => maps:get(is_control, Attributes)
           , last_offset => Offset + LastOffsetDelta
@@ -207,20 +212,20 @@ do_decode(Offset, <<_PartitionLeaderEpoch:32,
           },
   {Meta, Messages}.
 
--spec dec_records(integer(), offset(), msg_ts(),
+-spec dec_records(integer(), offset(), fun((msg_ts()) -> msg_ts()),
                   ts_type(), binary()) -> [message()].
-dec_records(Count, Offset, Ts, TsType, Bin) ->
-  dec_records(Count, Offset, Ts, TsType, Bin, []).
+dec_records(Count, Offset, TsFun, TsType, Bin) ->
+  dec_records(Count, Offset, TsFun, TsType, Bin, []).
 
 %% Messages are returned in reversed order
--spec dec_records(integer(), offset(), msg_ts(),
+-spec dec_records(integer(), offset(), fun((msg_ts()) -> msg_ts()),
                   ts_type(), binary(), [message()]) -> [message()].
-dec_records(0, _Offset, _Ts, _TsType, <<>>, Acc) ->
+dec_records(0, _Offset, _TsFun, _TsType, <<>>, Acc) ->
   %% NO reverse here
   Acc;
-dec_records(Count, Offset, Ts, TsType, Bin, Acc) ->
-  {Rec, Tail} = dec_record(Offset, Ts, TsType, Bin),
-  dec_records(Count - 1, Offset, Ts, TsType, Tail, [Rec | Acc]).
+dec_records(Count, Offset, TsFun, TsType, Bin, Acc) ->
+  {Rec, Tail} = dec_record(Offset, TsFun, TsType, Bin),
+  dec_records(Count - 1, Offset, TsFun, TsType, Tail, [Rec | Acc]).
 
 % Record =>
 %   Length => varint
@@ -232,9 +237,9 @@ dec_records(Count, Offset, Ts, TsType, Bin, Acc) ->
 %   ValueLen => varint
 %   Value => data
 %   Headers => [Header]
--spec dec_record(offset(), msg_ts(), ts_type(), binary()) ->
+-spec dec_record(offset(), fun((msg_ts()) -> msg_ts()), ts_type(), binary()) ->
         {message(), binary()}.
-dec_record(Offset, Ts, TsType, Bin) ->
+dec_record(Offset, TsFun, TsType, Bin) ->
   {_Len,        T0} = dec(varint, Bin),
   {_Attr,       T1} = dec(int8, T0),
   {TsDelta,     T2} = dec(varint, T1),
@@ -246,7 +251,7 @@ dec_record(Offset, Ts, TsType, Bin) ->
                       , key = Key
                       , value = Value
                       , ts_type = TsType
-                      , ts = Ts + TsDelta
+                      , ts = TsFun(TsDelta)
                       , headers = Headers
                       },
   {Msg, T}.

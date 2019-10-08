@@ -19,6 +19,7 @@ To test with an existing kafka cluster set below environment variables:
 - `KPRO_TEST_KAFKA_09`" Set to 'TRUE' or 'true' or '1' to test against a kafka 0.9 cluster.
 - `KPRO_TEST_KAFKA_ENDPOINTS`: Comma separated endpoints, e.g. `plaintext://localhost:9092,ssl://localhost:9093,sasl_ssl://localhost:9094,sasl_plaintext://localhost:9095`
 - `KPRO_TEST_KAFKA_TOPIC_NAME`: Topic name for message produce/fetch test.
+- `KPRO_TEST_KAFKA_TOPIC_LAT_NAME`: Topic name for message produce/fetch test with `message.timestamp.type=LogAppendTime` set.
 - `KPRO_TEST_KAFKA_SASL_USER_PASS_FILE`: A text file having two lines for username and password.
 - `KPRO_TEST_SSL_TRUE`: Set to 'TRUE' or 'true' or '1' to use `ssl => true' in connection config (if kafka ca is trusted already)
 - `KPRO_TEST_SSL_CA_CERT_FILE`: Ca cert file
