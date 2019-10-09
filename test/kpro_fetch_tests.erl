@@ -69,7 +69,7 @@ fetch_and_verify(Connection, Vsn, BeginOffset, Messages) ->
   Batch = drop_older_offsets(BeginOffset, Batch0),
   [#kafka_message{offset = FirstOffset} | _] = Batch,
   ?assertEqual(FirstOffset, BeginOffset),
-  Rest = validate_messages(Batch, Messages),
+  Rest = validate_messages(Vsn, Batch, Messages),
   #kafka_message{offset = NextBeginOffset} = lists:last(Batch),
   fetch_and_verify(Connection, Vsn, NextBeginOffset + 1, Rest).
 
@@ -81,16 +81,40 @@ drop_older_offsets(Offset, [#kafka_message{offset = O} | R] = ML) ->
     false -> ML
   end.
 
-validate_messages([], Rest) -> Rest;
-validate_messages([#kafka_message{key = K, value = V} | R1], [Msg | R2]) ->
-  ok = validate_message(K, V, Msg),
-  validate_messages(R1, R2).
+validate_messages(_FetchVsn, [], Rest) -> Rest;
+validate_messages(FetchVsn,
+                  [#kafka_message{ts = T, key = K, value = V} | R1],
+                  [{ProduceVsn, ProducedMsg} | R2]) ->
+  RefData = #{fetch_vsn => FetchVsn, produce_vsn => ProduceVsn},
+  FetchedMsg = #{ts => T, key => K, value => V},
+  ok = validate_message_key_val(FetchedMsg, ProducedMsg),
+  ok = validate_message_ts(RefData, FetchedMsg, ProducedMsg),
+  validate_messages(FetchVsn, R1, R2).
 
-validate_message(K, V, #{key := K, value := V}) -> ok;
-validate_message(K, V, Wat) ->
-  erlang:error(#{ fetched => {K, V}
-                , produced => Wat
-                }).
+validate_message_key_val(_F = #{key := K, value := V},
+                         _P = #{key := K, value := V}) -> ok;
+validate_message_key_val(Fetched, Produced) ->
+    erlang:error(#{ fetched => Fetched
+                  , produced => Produced
+                  }).
+
+% Message fetched without timestamp.
+validate_message_ts(
+  #{fetch_vsn := FVsn}, _F = #{ts := undefined}, _P
+ ) when FVsn < 2 -> ok;
+% Message produced without timestamp.
+validate_message_ts(
+  #{produce_vsn := PVsn}, _F = #{ts := -1}, _P
+ ) when PVsn < 1 -> ok;
+% Fetched and produced messages have matching timestamps.
+validate_message_ts(_RefData, _F = #{ts := T},
+                              _P = #{ts := T}) -> ok;
+% Something unexpected.
+validate_message_ts(RefData, F, P) ->
+    erlang:error(#{ ref_data => RefData
+                  , fetched => F
+                  , produced => P
+                  }).
 
 do_fetch(Connection, Vsn, BeginOffset, MaxBytes) ->
   Req = make_req(Vsn, BeginOffset, MaxBytes),
@@ -121,8 +145,8 @@ produce_randomly(Connection) ->
   produce_randomly(Connection, rand_num(?RAND_PRODUCE_BATCH_COUNT), []).
 
 produce_randomly(_Connection, 0, Acc0) ->
-  [{BaseOffset, _} | _] = Acc = lists:reverse(Acc0),
-  {BaseOffset, lists:append([Msg || {_, Msg} <- Acc])};
+  [{BaseOffset, _, _} | _] = Acc = lists:reverse(Acc0),
+  {BaseOffset, lists:append([lists:map(fun(M) -> {Vsn, M} end, Msg) || {_, Vsn, Msg} <- Acc])};
 produce_randomly(Connection, Count, Acc) ->
   {ok, Versions} = kpro:get_api_versions(Connection),
   {MinVsn, MaxVsn} = maps:get(produce, Versions),
@@ -137,7 +161,7 @@ produce_randomly(Connection, Count, Acc) ->
   #{ error_code := no_error
    , base_offset := Offset
    } = kpro_test_lib:parse_rsp(Rsp),
-  produce_randomly(Connection, Count - 1, [{Offset, Batch} | Acc]).
+  produce_randomly(Connection, Count - 1, [{Offset, Vsn, Batch} | Acc]).
 
 rand_produce_opts() ->
   #{ compression => rand_element([no_compression, gzip, snappy])
