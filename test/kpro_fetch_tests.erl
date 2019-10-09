@@ -86,8 +86,6 @@ validate_messages([#kafka_message{key = K, value = V} | R1], [Msg | R2]) ->
   ok = validate_message(K, V, Msg),
   validate_messages(R1, R2).
 
-validate_message(K, V, {K, V}) -> ok;
-validate_message(K, V, {_T, K, V}) -> ok;
 validate_message(K, V, #{key := K, value := V}) -> ok;
 validate_message(K, V, Wat) ->
   erlang:error(#{ fetched => {K, V}
