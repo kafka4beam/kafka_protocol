@@ -40,13 +40,15 @@ method_to_codec(?no_compression) -> ?KPRO_COMPRESS_NONE.
 -spec compress(kpro:compress_option(), iodata()) -> iodata().
 compress(?no_compression, IoData) -> IoData;
 compress(?gzip, IoData)           -> zlib:gzip(IoData);
-compress(?snappy, IoData)         -> snappy_compress(IoData).
+compress(?snappy, IoData)         -> snappy_compress(IoData);
+compress(?lz4, IoData)            -> lz4_compress(IoData).
 
 %% @doc Decompress batch.
 -spec decompress(kpro:compress_option(), binary()) -> binary().
 decompress(?no_compression, Bin) -> Bin;
 decompress(?gzip, Bin)           -> zlib:gunzip(Bin);
-decompress(?snappy, Bin)         -> java_snappy_unpack(Bin).
+decompress(?snappy, Bin)         -> java_snappy_unpack(Bin);
+decompress(?lz4, Bin)            -> lz4_decompress(Bin).
 
 %%%_* Internals ================================================================
 
@@ -79,6 +81,16 @@ snappy_decompress(BinData) ->
 snappy_compress(IoData) ->
   {ok, Compressed} = snappyer:compress(IoData),
   Compressed.
+
+lz4_compress(IoList) when is_list(IoList) ->
+  lz4_compress(iolist_to_binary(IoList));
+lz4_compress(Bin) ->
+  {ok, Compressed} = lz4b_frame:compress(Bin),
+  Compressed.
+
+lz4_decompress(Bin) ->
+  {ok, Data} = lz4b_frame:decompress(Bin),
+  Data.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
