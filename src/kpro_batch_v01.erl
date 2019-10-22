@@ -92,31 +92,43 @@ encode(Magic, Batch, Compression) ->
 %% 7. 4 byte payload length, containing length V
 %% 8. V byte payload
 -spec decode(offset(), binary()) -> [message()].
-decode(Offset, <<CRC:32/unsigned-integer, Body/binary>>) ->
+decode(Offset, Body) -> decode(Offset, Body, _OuterMsg = undefined).
+
+-spec decode(offset(), binary(), message() | undefined) -> [message()].
+decode(Offset, <<CRC:32/unsigned-integer, Body/binary>>, OuterMsg) ->
   CRC = erlang:crc32(Body), %% assert
   {MagicByte, Rest0} = dec(int8, Body),
   {Attributes, Rest1} = dec(int8, Rest0),
   Compression = kpro_compress:codec_to_method(Attributes),
-  TsType = kpro_lib:get_ts_type(MagicByte, Attributes),
-  {Ts, Rest2} =
-    case TsType of
+  TsType0 = kpro_lib:get_ts_type(MagicByte, Attributes),
+  {Ts0, Rest2} =
+    case TsType0 of
       undefined -> {undefined, Rest1};
       _         -> dec(int64, Rest1)
     end,
+  {TsType, Ts} =
+    case OuterMsg of
+      undefined -> {TsType0, Ts0};
+      #kafka_message{ts_type = TT, ts = T} -> {TT, T}
+    end,
   {Key, Rest} = dec(bytes, Rest2),
   {Value, <<>>} = dec(bytes, Rest),
+  Msg = #kafka_message{ offset = Offset
+                      , value = Value
+                      , key = Key
+                      , ts = Ts
+                      , ts_type = TsType
+                      },
   case Compression =:= ?no_compression of
     true ->
-      Msg = #kafka_message{ offset = Offset
-                          , value = Value
-                          , key = Key
-                          , ts = Ts
-                          , ts_type = TsType
-                          },
       [Msg];
     false ->
       Bin = kpro_compress:decompress(Compression, Value),
-      MsgsReversed = decode_loop(Bin, []),
+      MsgsReversed =
+        case TsType of
+          append -> decode_loop(Bin, Msg, []);
+          _ -> decode_loop(Bin, undefined, [])
+        end,
       maybe_assign_offsets(Offset, MsgsReversed)
   end.
 
@@ -124,14 +136,14 @@ decode(Offset, <<CRC:32/unsigned-integer, Body/binary>>) ->
 
 %% Decode byte stream of kafka messages.
 %% Messages are returned in reversed order
--spec decode_loop(binary(), [message()]) -> [message()].
-decode_loop(<<>>, Acc) ->
+-spec decode_loop(binary(), message() | undefined, [message()]) -> [message()].
+decode_loop(<<>>, _OuterMsg, Acc) ->
   %% Assert <<>> tail because a recursive (compressed) batch
   %% should never be partitially delivered
   Acc;
-decode_loop(<<O:64/?INT, L:32/?INT, Body:L/binary, Rest/binary>>, Acc) ->
-  Messages = decode(O, Body),
-  decode_loop(Rest, Messages ++ Acc).
+decode_loop(<<O:64/?INT, L:32/?INT, Body:L/binary, Rest/binary>>, OuterMsg, Acc) ->
+  Messages = decode(O, Body, OuterMsg),
+  decode_loop(Rest, OuterMsg, Messages ++ Acc).
 
 %% Assign relative offsets to help kafka save some CPU when compressed.
 %% Kafka will decompress to validate CRC, and assign real or relative offsets

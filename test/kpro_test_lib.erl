@@ -19,6 +19,7 @@
         ]).
 
 -export([ get_topic/0
+        , get_topic_lat/0
         ]).
 
 -export([ sasl_config/0
@@ -74,6 +75,12 @@ get_endpoints(Protocol) ->
 get_topic() ->
   case osenv("KPRO_TEST_KAFKA_TOPIC_NAME") of
     undefined -> <<"test-topic">>;
+    Str -> iolist_to_binary(Str)
+  end.
+
+get_topic_lat() ->
+  case osenv("KPRO_TEST_KAFKA_TOPIC_LAT_NAME") of
+    undefined -> <<"test-topic-lat">>;
     Str -> iolist_to_binary(Str)
   end.
 
