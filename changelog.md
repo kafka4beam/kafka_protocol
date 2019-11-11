@@ -65,3 +65,5 @@
   - Allo atom as hostname because `inet:hostname() :: atom() | string().`
 * 2.3.0
   - Honor LogAppendTime when decoding messages
+* 2.3.1
+  - Made send_error Reason more informative

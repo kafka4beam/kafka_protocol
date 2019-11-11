@@ -391,11 +391,12 @@ handle_msg({From, {send, Request}},
                  , requests  = Requests
                  } = State, Debug) ->
   {Caller, _Ref} = From,
+  #kpro_req{api = API, vsn = Vsn} = Request,
   {CorrId, NewRequests} =
     case Request of
       #kpro_req{no_ack = true} ->
         kpro_sent_reqs:increment_corr_id(Requests);
-      #kpro_req{ref = Ref, api = API, vsn = Vsn} ->
+      #kpro_req{ref = Ref} ->
         kpro_sent_reqs:add(Requests, Caller, Ref, API, Vsn)
     end,
   RequestBin = kpro_req_lib:encode(ClientId, CorrId, Request),
@@ -406,7 +407,12 @@ handle_msg({From, {send, Request}},
   case Res of
     ok ->
       maybe_reply(From, ok);
-    {error, Reason} ->
+    {error, Reason0} ->
+      Reason = [ {api, API}
+               , {vsn, Vsn}
+               , {caller, Caller}
+               , {reason, Reason0}
+               ],
       exit({send_error, Reason})
   end,
   ?MODULE:loop(State#state{requests = NewRequests}, Debug);
