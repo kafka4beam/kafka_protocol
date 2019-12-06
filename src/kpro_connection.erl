@@ -276,12 +276,20 @@ get_tcp_mod(_)                -> gen_tcp.
 %% (otherwise the IP will be used, which is almost certainly
 %% incorrect).
 insert_server_name_indication(SslOpts, Host) ->
-  case proplists:get_value(verify, SslOpts) of
-    verify_peer ->
+  VerifyOpt = proplists:get_value(verify, SslOpts),
+  insert_server_name_indication(VerifyOpt, SslOpts, Host).
+
+insert_server_name_indication(verify_peer, SslOpts, Host) ->
+  case proplists:get_value(server_name_indication, SslOpts) of
+    undefined ->
+      %% insert {server_name_indication, Host} if not already present
       [{server_name_indication, Host} | SslOpts];
     _ ->
       SslOpts
-  end.
+  end;
+
+insert_server_name_indication(_, SslOpts, _) ->
+  SslOpts.
 
 maybe_upgrade_to_ssl(Sock, _Mod = ssl, SslOpts0, Host, Timeout) ->
   SslOpts = case SslOpts0 of
