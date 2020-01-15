@@ -118,19 +118,47 @@ value(offset, Key, <<1:16/integer, _/binary>> = Bin) ->
            , {expire_time, int64}
            ],
   {offset, Key, dec(Schema, Bin)};
+value(offset, Key, <<2:16/integer, _/binary>> = Bin) ->
+  Schema = [ {version, int16}
+           , {offset, int64}
+           , {metadata, string}
+           , {commit_time, int64}
+           ],
+  {offset, Key, dec(Schema, Bin)};
+value(offset,  Key, <<3:16/integer, _/binary>> = Bin) ->
+  Schema = [ {version, int16}
+           , {offset, int64}
+           , {leader_epoch, int32}
+           , {metadata, string}
+           , {commit_time, int64}
+           ],
+  {offset, Key, dec(Schema, Bin)};
 value(group, Key, ValueBin) ->
   KeyVersion = kpro:find(version, Key),
   {group, Key, group(KeyVersion, ValueBin)}.
 
 %% @private
 -spec group(kpro:vsn(), binary()) -> kpro:struct() | no_return().
-group(_KeyVersion = 2, <<ValueVersion:16/integer, _/binary>> = Bin) ->
+group(_KeyVersion = 2, <<ValueVersion:16/integer, _/binary>> = Bin)
+    when ValueVersion =< 1 ->
   MemberMetaSchema = group_member_metadata_schema(ValueVersion),
   Schema = [ {version, int16}
            , {protocol_type, string}
            , {generation_id, int32}
            , {protocol, string}
            , {leader, string}
+           , {members, {array, MemberMetaSchema}}
+           ],
+  dec(Schema, Bin);
+group(_KeyVersion = 2, <<ValueVersion:16/integer, _/binary>> = Bin)
+    when ValueVersion =< 3 ->
+  MemberMetaSchema = group_member_metadata_schema(ValueVersion),
+  Schema = [ {version, int16}
+           , {protocol_type, string}
+           , {generation_id, int32}
+           , {protocol, string}
+           , {leader, string}
+           , {current_state_timestamp, int64}
            , {members, {array, MemberMetaSchema}}
            ],
   dec(Schema, Bin).
@@ -145,8 +173,19 @@ group_member_metadata_schema(_Version = 0)->
   , {subscription, fun subscription/1}
   , {assignment, fun assignment/1}
   ];
-group_member_metadata_schema(_Version = 1) ->
+group_member_metadata_schema(_Version) when _Version =:= 1
+                                          ; _Version =:= 2 ->
   [ {member_id, string}
+  , {client_id, string}
+  , {client_host, string}
+  , {rebalance_timeout, int32}
+  , {session_timeout, int32}
+  , {subscription, fun subscription/1}
+  , {assignment, fun assignment/1}
+  ];
+group_member_metadata_schema(_Version = 3) ->
+  [ {member_id, string}
+  , {group_instance_id, string}
   , {client_id, string}
   , {client_host, string}
   , {rebalance_timeout, int32}
