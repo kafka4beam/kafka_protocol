@@ -5,7 +5,6 @@
               {applications,[kernel,stdlib,ssl,snappyer,crc32cer]},
               {env,[]},
               {modules,[]},
-              {maintainers,["Zaiming Shi","Ivan Dyachkov"]},
               {licenses,["Apache License 2.0"]},
               {links,[{"Github","https://github.com/klarna/kafka_protocol"}]},
               {build_tools,["rebar","rebar3"]},

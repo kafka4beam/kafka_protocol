@@ -66,6 +66,8 @@
 * 2.3.0
   - Honor LogAppendTime when decoding messages
 * 2.3.1
-  - Use git tag as a source of truth for the application version  
+  - Use git tag as a source of truth for the application version
 * 2.3.2
   - Made send_error Reason more informative
+* 2.3.3
+  - consumer group message metadata V3
