@@ -67,6 +67,9 @@ decode_struct(API, Vsn, Bin) ->
 %% 2. Another struct
 %% 3. A user define decoder
 %% 4. A primitive
+dec_struct_field({array, _Schema}, _Stack, <<>>) ->
+  %% this is a hack for kakfajs client that does not follow protocol.
+  {?null, <<>>};
 dec_struct_field({array, Schema}, Stack, Bin0) ->
   {Count, Bin} = dec(int32, Bin0),
   case Count =:= -1 of

@@ -22,12 +22,20 @@
 %   version => INT16
 %   topics => STRING
 %   user_data => BYTES
-get(cg_member_metadata, 0) ->
-  get(cg_protocol_metadata, 0);
+get(cg_member_metadata, V) ->
+  get(cg_protocol_metadata, V);
 get(cg_protocol_metadata, 0) ->
   [{version, int16},
    {topics, {array, string}},
    {user_data, bytes}
+  ];
+get(cg_protocol_metadata, 1) ->
+  [{version, int16},
+   {topics, {array, string}},
+   {user_data, bytes},
+   {owned_partitions, {array, [{topic, string},
+                               {partitions, {array, int32}}
+                              ]}}
   ];
 % ## embedded in 'BYTES' content of
 % ## SyncGroupRequestV0.group_assignment.member_assignment
@@ -38,6 +46,13 @@ get(cg_protocol_metadata, 0) ->
 %     partitions => INT32
 %   user_data => BYTES
 get(cg_memeber_assignment, 0) ->
+  [{version, int16},
+   {topic_partitions, {array, [{topic, string},
+                               {partitions, {array, int32}}
+                              ]}},
+   {user_data, bytes}
+  ];
+get(cg_memeber_assignment, 1) ->
   [{version, int16},
    {topic_partitions, {array, [{topic, string},
                                {partitions, {array, int32}}

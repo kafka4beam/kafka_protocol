@@ -30,6 +30,8 @@
 -type tag() :: offset | group.
 -type decoded() :: {tag(), Key::kpro:struct(), Value::kpro:struct()}.
 
+-define(PROTOCOL_TYPE_HACK, '__protocol_type_hack__').
+
 %%%_* APIs =====================================================================
 
 %% @doc This function takes key and value binaries of a kafka message consumed
@@ -80,7 +82,16 @@
 -spec decode(binary(), ?kpro_null | binary()) -> decoded().
 decode(KeyBin, ValueBin) ->
   {Tag, Key} = key(KeyBin),
-  value(Tag, Key, ValueBin).
+  put(?PROTOCOL_TYPE_HACK, false),
+  try
+    value(Tag, Key, ValueBin)
+  catch throw:{malformed_bytes, BadBytes, _, ST} ->
+      io:format("BING! unable to decoded ~n"
+                "kpro_consumer_group:decode(~p,~p)~n"
+                "Stacktrace: ~p~nBadBytes:~p~n",
+                [KeyBin, ValueBin, ST, BadBytes]),
+      {Tag, Key, []}
+  end.
 
 %%%_* Internal functions =======================================================
 
@@ -143,9 +154,9 @@ group(_KeyVersion = 2, <<ValueVersion:16/integer, _/binary>> = Bin)
     when ValueVersion =< 1 ->
   MemberMetaSchema = group_member_metadata_schema(ValueVersion),
   Schema = [ {version, int16}
-           , {protocol_type, string}
+           , {protocol_type, fun protocol_type_hack/1}
            , {generation_id, int32}
-           , {protocol, string}
+           , {protocol, fun protocol_type_hack/1}
            , {leader, string}
            , {members, {array, MemberMetaSchema}}
            ],
@@ -154,9 +165,9 @@ group(_KeyVersion = 2, <<ValueVersion:16/integer, _/binary>> = Bin)
     when ValueVersion =< 3 ->
   MemberMetaSchema = group_member_metadata_schema(ValueVersion),
   Schema = [ {version, int16}
-           , {protocol_type, string}
+           , {protocol_type, fun protocol_type_hack/1}
            , {generation_id, int32}
-           , {protocol, string}
+           , {protocol, fun protocol_type_hack/1}
            , {leader, string}
            , {current_state_timestamp, int64}
            , {members, {array, MemberMetaSchema}}
@@ -200,7 +211,15 @@ nullable_bytes(Bin, BytesDecoder) ->
     {<<>>, Rest} ->
       {?kpro_null, Rest};
     {Bytes, Rest} ->
-      {BytesDecoder(Bytes), Rest}
+      try {BytesDecoder(Bytes), Rest}
+      catch _:_:ST ->
+          case get(?PROTOCOL_TYPE_HACK) of
+            true ->
+              {?kpro_null, Rest};
+            _ ->
+              throw({malformed_bytes, Bytes, Rest, ST})
+          end
+      end
   end.
 
 %% @private
@@ -210,14 +229,27 @@ subscription(Bytes) -> nullable_bytes(Bytes, fun decode_subscription/1).
 assignment(Bytes) -> nullable_bytes(Bytes, fun decode_assignment/1).
 
 %% @private
-decode_subscription(Bytes) ->
-  Schema = kpro_lib:get_prelude_schema(cg_protocol_metadata, 0),
+decode_subscription(<< Version:16/integer, _/binary >>= Bytes) ->
+  Schema = kpro_lib:get_prelude_schema(cg_protocol_metadata, Version),
   dec(Schema, Bytes).
 
 %% @private
-decode_assignment(Bytes) ->
-  Schema = kpro_lib:get_prelude_schema(cg_memeber_assignment, 0),
+decode_assignment(<< Version:16/integer, _/binary >>= Bytes) ->
+  Schema = kpro_lib:get_prelude_schema(cg_memeber_assignment, Version),
   dec(Schema, Bytes).
+
+%% @hack
+protocol_type_hack(Bin)->
+  {Type, Res} = kpro_lib:decode(string, Bin),
+  case Type of
+    << "connect" >> -> %% kafka-connect
+      put(?PROTOCOL_TYPE_HACK, true);
+    << "RoundRobinAssigner2" >> -> %% kafkajs client
+      put(?PROTOCOL_TYPE_HACK, true);
+    _ ->
+      ok
+  end,
+  {Type, Res}.
 
 %% @private
 dec(Schema, Bin) ->
