@@ -190,6 +190,7 @@ produce(Vsn, Topic, Partition, Batch) ->
 -spec produce(vsn(), topic(), partition(),
               binary() | batch_input(), produce_opts()) -> req().
 produce(Vsn, Topic, Partition, Batch, Opts) ->
+  ok = assert_known_api_and_vsn(produce, Vsn),
   RequiredAcks = required_acks(maps:get(required_acks, Opts, all_isr)),
   Compression = maps:get(compression, Opts, ?no_compression),
   AckTimeout = maps:get(ack_timeout, Opts, ?DEFAULT_ACK_TIMEOUT),
@@ -209,18 +210,22 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
         true = FirstSequence >= 0, %% assert
         kpro_batch:encode_tx(Batch, Compression, FirstSequence, TxnCtx)
     end,
-  Fields =
-    [{transactional_id, transactional_id(TxnCtx)},
-     {acks, RequiredAcks},
-     {timeout, AckTimeout},
-     {topic_data, [[{topic, Topic},
-                    {data, [[{partition, Partition},
-                             {record_set, EncodedBatch}
-                            ]]}
-                   ]]}
+  Msg =
+    [ [encode(string, transactional_id(TxnCtx)) || Vsn > 2]
+    , encode(int16, RequiredAcks)
+    , encode(int32, AckTimeout)
+    , encode(int32, 1) %% topic array header
+    , encode(string, Topic)
+    , encode(int32, 1) %% partition array header
+    , encode(int32, Partition)
+    , encode(bytes, EncodedBatch)
     ],
-  Req = make(produce, Vsn, Fields),
-  Req#kpro_req{no_ack = RequiredAcks =:= 0}.
+  #kpro_req{ api = produce
+           , vsn = Vsn
+           , msg = Msg
+           , ref = make_ref()
+           , no_ack = RequiredAcks =:= 0
+           }.
 
 %% @doc Make `end_txn' request.
 -spec end_txn(txn_ctx(), commit | abort) -> req().
