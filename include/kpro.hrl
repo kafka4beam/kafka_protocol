@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2017, Klarna AB
+%%%   Copyright (c) 2017-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@
         , api :: kpro:api()
         , vsn :: kpro:vsn()
         , no_ack = false :: boolean() %% set to true for fire-n-forget requests
-        , msg :: binary() | kpro:struct()
+        , msg :: iodata() | kpro:struct()
         }).
 
 -record(kpro_rsp,

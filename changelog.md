@@ -1,3 +1,6 @@
+* 2.3.5
+  - Improve produce request encoding performance by 35%
+
 * 2.3.4
   - Insert sni only when missing in ssl options
   - Ensure string() type sni in ssl options

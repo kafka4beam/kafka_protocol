@@ -1,5 +1,5 @@
 %%%
-%%%   Copyright (c) 2014-2018, Klarna AB
+%%%   Copyright (c) 2014-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -412,10 +412,10 @@ handle_msg({From, {send, Request}},
       #kpro_req{ref = Ref} ->
         kpro_sent_reqs:add(Requests, Caller, Ref, API, Vsn)
     end,
-  RequestBin = kpro_req_lib:encode(ClientId, CorrId, Request),
+  RequestIoData = kpro_req_lib:encode(ClientId, CorrId, Request),
   Res = case Mod of
-          gen_tcp -> gen_tcp:send(Sock, RequestBin);
-          ssl     -> ssl:send(Sock, RequestBin)
+          gen_tcp -> gen_tcp:send(Sock, RequestIoData);
+          ssl     -> ssl:send(Sock, RequestIoData)
         end,
   case Res of
     ok ->

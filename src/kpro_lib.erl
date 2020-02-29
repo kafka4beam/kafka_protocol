@@ -1,5 +1,5 @@
 %%%
-%%%   Copyright (c) 2018, Klarna AB
+%%%   Copyright (c) 2018-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -77,9 +77,9 @@ send_and_recv_raw(Req, Sock, Mod, Timeout) ->
 send_and_recv(#kpro_req{api = API, vsn = Vsn} = Req,
                  Sock, Mod, ClientId, Timeout) ->
   CorrId = make_corr_id(),
-  ReqBin = kpro_req_lib:encode(ClientId, CorrId, Req),
+  ReqIoData = kpro_req_lib:encode(ClientId, CorrId, Req),
   try
-    RspBin = send_and_recv_raw(ReqBin, Sock, Mod, Timeout),
+    RspBin = send_and_recv_raw(ReqIoData, Sock, Mod, Timeout),
     {CorrId, Body} = decode_corr_id(RspBin), %% assert match CorrId
     #kpro_rsp{api = API, vsn = Vsn, msg = Msg} = %% assert match API and Vsn
       kpro_rsp_lib:decode(API, Vsn, Body, _DummyRef = false),

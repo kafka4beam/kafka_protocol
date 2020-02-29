@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2018, Klarna AB
+%%%   Copyright (c) 2018-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -38,15 +38,15 @@
 -define(NO_META, ?KPRO_NO_BATCH_META).
 
 %% @doc Encode a list of batch inputs into byte stream.
--spec encode(magic(), batch_input(), compress_option()) -> binary().
+-spec encode(magic(), batch_input(), compress_option()) -> iodata().
 encode(_MagicVsn = 2, Batch, Compression) ->
   FirstSequence = -1,
   NonTxn = #{ producer_id => -1
             , producer_epoch => -1
             },
-  iolist_to_binary(encode_tx(Batch, Compression, FirstSequence, NonTxn));
+  encode_tx(Batch, Compression, FirstSequence, NonTxn);
 encode(MagicVsn, Batch, Compression) ->
-  iolist_to_binary(kpro_batch_v01:encode(MagicVsn, Batch, Compression)).
+  kpro_batch_v01:encode(MagicVsn, Batch, Compression).
 
 %% @doc Encode a batch of magic version 2.
 % RecordBatch =>
