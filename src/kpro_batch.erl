@@ -93,13 +93,12 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
     , enc(int32, Count)           % {Count,           T8} = dec(int32, T7),
     , EncodedBatch
     ],
-  Body1 = iolist_to_binary(Body0),
-  CRC = crc32cer:nif(Body1),
+  CRC = crc32cer:nif(Body0),
   Body =
     [ enc(int32, PartitionLeaderEpoch)
     , enc(int8,  Magic)
     , enc(int32, CRC)
-    , Body1
+    , Body0
     ],
   Size = iolist_size(Body),
   [ enc(int64, FirstOffset)
