@@ -101,7 +101,7 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
     , enc(int32, CRC)
     , Body1
     ],
-  Size = kpro_lib:data_size(Body),
+  Size = iolist_size(Body),
   [ enc(int64, FirstOffset)
   , enc(int32, Size)
   | Body
@@ -280,7 +280,7 @@ enc_record(Offset, TsBase, #{value := Value} = M) ->
          , enc(bytes, Value)
          , enc_headers(Headers)
          ],
-  Size = kpro_lib:data_size(Body),
+  Size = iolist_size(Body),
   [enc(varint, Size), Body].
 
 enc_headers(Headers) ->

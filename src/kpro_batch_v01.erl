@@ -185,7 +185,7 @@ encode_message(Magic, Codec, Ts, Key, Value, Offset) ->
          , enc(bytes, Value)
          ],
   Crc  = enc(int32, erlang:crc32(Body)),
-  Size = kpro_lib:data_size([Crc, Body]),
+  Size = iolist_size([Crc, Body]),
   [enc(int64, Offset),
    enc(int32, Size),
    Crc, Body

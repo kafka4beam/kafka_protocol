@@ -17,7 +17,6 @@
 -module(kpro_lib).
 
 -export([ copy_bytes/2
-        , data_size/1
         , decode/2
         , decode_corr_id/1
         , encode/2
@@ -126,11 +125,6 @@ parse_endpoints(Protocol, Str) ->
         end
     end, [], string:tokens(Str, ",\n")).
 
-%% @doc Return number of bytes in the given `iodata()'.
--spec data_size(iodata()) -> count().
-data_size(IoData) ->
-  iolist_size(IoData).
-
 %% @doc Encode primitives.
 -spec encode(primitive_type(), kpro:primitive()) -> iodata().
 encode(boolean, true) -> <<1:8/?INT>>;
@@ -152,7 +146,7 @@ encode(string, B) when is_binary(B) ->
   <<Length:16/?INT, B/binary>>;
 encode(bytes, ?null) -> <<-1:32/?INT>>;
 encode(bytes, B) when is_binary(B) orelse is_list(B) ->
-  Size = data_size(B),
+  Size = iolist_size(B),
   case Size =:= 0 of
     true  -> <<-1:32/?INT>>;
     false -> [<<Size:32/?INT>>, B]
