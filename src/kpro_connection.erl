@@ -188,11 +188,12 @@ init(Parent, Host, Port, Config) ->
   proc_lib:init_ack(Parent, {ok, self()}),
   loop(State, Debug).
 
-%% Connect to the given endpoint, then initalize connection.
+%% Connect to the given endpoint, then initialize connection.
 %% Raise an error exception for any failure.
 -spec connect(pid(), hostname(), portnum(), config()) -> state().
 connect(Parent, Host, Port, Config) ->
   Timeout = get_connect_timeout(Config),
+  Deadline = deadline(Timeout),
   %% initial active opt should be 'false' before upgrading to ssl
   SockOpts = [{active, false}, binary] ++ get_extra_sock_opts(Config),
   case gen_tcp:connect(Host, Port, SockOpts, Timeout) of
@@ -202,7 +203,7 @@ connect(Parent, Host, Port, Config) ->
                     , remote    = {Host, Port}
                     , sock      = Sock
                     },
-      init_connection(State, Config);
+      init_connection(State, Config, Deadline);
     {error, Reason} ->
       erlang:error(Reason)
   end.
@@ -214,8 +215,7 @@ connect(Parent, Host, Port, Config) ->
 init_connection(#state{ client_id = ClientId
                       , sock = Sock
                       , remote = {Host, _}
-                      } = State, Config) ->
-  Timeout = get_connect_timeout(Config),
+                      } = State, Config, Deadline) ->
   %% adjusting buffer size as per recommendation at
   %% http://erlang.org/doc/man/inet.html#setopts-2
   %% idea is from github.com/epgsql/epgsql
@@ -224,13 +224,13 @@ init_connection(#state{ client_id = ClientId
   ok = inet:setopts(Sock, [{buffer, max(RecBufSize, SndBufSize)}]),
   SslOpts = maps:get(ssl, Config, false),
   Mod = get_tcp_mod(SslOpts),
-  NewSock = maybe_upgrade_to_ssl(Sock, Mod, SslOpts, Host, Timeout),
+  NewSock = maybe_upgrade_to_ssl(Sock, Mod, SslOpts, Host, timeout(Deadline)),
   %% from now on, it's all packet-4 messages
   ok = setopts(NewSock, Mod, [{packet, 4}]),
   Versions =
     case Config of
       #{query_api_versions := false} -> ?undef;
-      _ -> query_api_versions(NewSock, Mod, ClientId, Timeout)
+      _ -> query_api_versions(NewSock, Mod, ClientId, Deadline)
     end,
   HandshakeVsn = case Versions of
                    #{sasl_handshake := {_, V}} -> V;
@@ -238,12 +238,12 @@ init_connection(#state{ client_id = ClientId
                  end,
   SaslOpts = get_sasl_opt(Config),
   ok = kpro_sasl:auth(Host, NewSock, Mod, ClientId,
-                      Timeout, SaslOpts, HandshakeVsn),
+                      timeout(Deadline), SaslOpts, HandshakeVsn),
   State#state{mod = Mod, sock = NewSock, api_vsns = Versions}.
 
-query_api_versions(Sock, Mod, ClientId, Timeout) ->
+query_api_versions(Sock, Mod, ClientId, Deadline) ->
   Req = kpro_req_lib:make(api_versions, 0, []),
-  Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
+  Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, timeout(Deadline)),
   ErrorCode = find(error_code, Rsp),
   case ErrorCode =:= ?no_error of
     true ->
@@ -607,6 +607,12 @@ get_client_id(Config) ->
   end.
 
 find(FieldName, Struct) -> kpro_lib:find(FieldName, Struct).
+
+deadline(Timeout) ->
+  erlang:monotonic_time(millisecond) + Timeout.
+
+timeout(Deadline) ->
+  erlang:max(0, Deadline - erlang:monotonic_time(millisecond)).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
