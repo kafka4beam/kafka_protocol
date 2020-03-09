@@ -1,6 +1,6 @@
 Nonterminals bnf groups defs def fields field
   new_line new_line_and_indent some_empty_lines.
-Terminals name prim '[' ']' 'ARRAY' '(' ')' '=>' one_new_line one_new_line_and_indent.
+Terminals name prim '[' ']' 'ARRAY' '(' ')' '=>' one_new_line one_new_line_and_indent 'TAG_BUFFER'.
 Rootsymbol bnf.
 
 bnf -> some_empty_lines groups : '$2'.
@@ -20,6 +20,7 @@ def -> name '=>' fields : {v('$1'), '$3'}.
 fields -> field : ['$1'].
 fields -> field fields : ['$1' | '$2'].
 
+field -> 'TAG_BUFFER' : tagged_fields.
 field -> name : v('$1').
 field -> '[' name ']' : {array, v('$2')}.
 

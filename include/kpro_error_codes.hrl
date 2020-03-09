@@ -149,5 +149,39 @@
         fetch_session_id_not_found). % 70
 -define(invalid_fetch_session_epoch,
         invalid_fetch_session_epoch). % 71
+-define(listener_not_found,
+        listener_not_found). % 72
+-define(topic_deletion_disabled,
+        topic_deletion_disabled). % 73
+-define(fenced_leader_epoch,
+        fenced_leader_epoch). % 74
+-define(unknown_leader_epoch,
+        unknown_leader_epoch). % 75
+-define(unsupported_compression_type,
+        unsupported_compression_type). % 76
+-define(stale_broker_epoch,
+        stale_broker_epoch). % 77
+-define(offset_not_available,
+        offset_not_available). % 78
+-define(member_id_required,
+        member_id_required). % 79
+-define(preferred_leader_not_available,
+        preferred_leader_not_available). % 80
+-define(group_max_size_reached,
+        group_max_size_reached). % 81
+-define(fenced_instance_id,
+        fenced_instance_id). % 82
+-define(eligible_leaders_not_available,
+        eligible_leaders_not_available). % 83
+-define(election_not_needed,
+        election_not_needed). % 84
+-define(no_reassignment_in_progress,
+        no_reassignment_in_progress). % 85
+-define(group_subscribed_to_topic,
+        group_subscribed_to_topic). % 86
+-define(invalid_record,
+        invalid_record). % 87
+-define(unstable_offset_commit,
+        unstable_offset_commit). % 88
 
 -endif.

@@ -2,7 +2,7 @@
 %% -*- erlang -*-
 
 %%%
-%%%   Copyright (c) 2014-2016, Klarna AB
+%%%   Copyright (c) 2014-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -158,10 +158,13 @@ merge_versions([{V1, Fields1}, {V2, Fields2} | Rest]) ->
   end.
 
 split_name_version({Tag, Fields}) ->
-  [Vsn, $v, $_ | NameReversed] =
-    lists:reverse(underscorize(atom_to_list(Tag))),
-  Name = lists:reverse(NameReversed),
-  Version = Vsn - $0,
+  {Version, Name} =
+    case lists:reverse(underscorize(atom_to_list(Tag))) of
+      [Vsn, $v, $_ | NameReversed] ->
+        {Vsn - $0, lists:reverse(NameReversed)};
+      [Vsn1, Vsn0, $v, $_ | NameReversed] ->
+        {(Vsn0 - $0) * 10 + (Vsn1 - $0), lists:reverse(NameReversed)}
+    end,
   {Name, Version, Fields}.
 
 split_name(Name) ->
@@ -174,10 +177,16 @@ expand([{Tag, Fields} | Refs]) ->
   {Tag, expand_fields(Fields, Refs)}.
 
 expand_fields([], _Refs) -> [];
+expand_fields([tagged_fields | Rest], Refs) ->
+  [{tagged_fields, tagged_fields} | expand_fields(Rest, Refs)];
 expand_fields([Name | Rest], Refs) when is_atom(Name) ->
+  try
   {Name, Type0} = lists:keyfind(Name, 1, Refs),
   Type = expand_type(Type0, Refs),
-  [{Name, Type} | expand_fields(Rest, Refs)];
+  [{Name, Type} | expand_fields(Rest, Refs)]
+  catch error : _ ->
+  throw({Name, Refs})
+  end;
 expand_fields([{array, Name} | Rest], Refs) ->
   {Name, Type0} = lists:keyfind(Name, 1, Refs),
   Type = expand_type(Type0, Refs),

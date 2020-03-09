@@ -4,6 +4,7 @@ import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Type;
 import org.apache.kafka.common.protocol.Protocol;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.protocol.types.TaggedFields;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -26,8 +27,8 @@ public class KafkaProtocolBnf {
     private static void populateSchemaFields(Schema schema, Set<BoundField> fields) {
         for (BoundField field: schema.fields()) {
             fields.add(field);
-            if (field.def.type instanceof ArrayOf) {
-                Type innerType = ((ArrayOf) field.def.type).type();
+            if (field.def.type.isArray()) {
+                Type innerType = field.def.type.arrayElementType().get();
                 if (innerType instanceof Schema)
                     populateSchemaFields((Schema) innerType, fields);
             } else if (field.def.type instanceof Schema)
@@ -43,22 +44,20 @@ public class KafkaProtocolBnf {
         int index = 0;
         int length = schema.fields().length;
         for (BoundField field: schema.fields()) {
-            String fieldName = field.def.name;
-            if (field.def.type instanceof ArrayOf) {
+            Type type = field.def.type;
+            if (type.isArray()) {
                 b.append("[");
-                b.append(fieldName);
+                b.append(field.def.name);
                 b.append("]");
-                Type innerType = ((ArrayOf) field.def.type).type();
-                if (!subTypes.containsKey(fieldName))
-                    subTypes.put(fieldName, innerType);
-            } else if (field.def.type instanceof Schema) {
-                b.append(fieldName);
-                if (!subTypes.containsKey(fieldName))
-                    subTypes.put(fieldName, field.def.type);
+                if (!subTypes.containsKey(field.def.name)) {
+                    subTypes.put(field.def.name, type.arrayElementType().get());
+                }
+            } else if (type instanceof TaggedFields) {
+                b.append("TAG_BUFFER");
             } else {
-                b.append(fieldName);
-                if (!subTypes.containsKey(fieldName))
-                    subTypes.put(fieldName, field.def.type);
+                b.append(field.def.name);
+                if (!subTypes.containsKey(field.def.name))
+                    subTypes.put(field.def.name, type);
             }
             if (index < (length - 1))
                 b.append(" ");
@@ -90,7 +89,7 @@ public class KafkaProtocolBnf {
         populateSchemaFields(schema, fields);
 
         for (BoundField field : fields) {
-            if (field.def.docString != null) {
+            if (field.def.docString != null && !field.def.docString.equals("")) {
               b.append("# ");
               b.append(field.def.name);
               b.append(": ");
