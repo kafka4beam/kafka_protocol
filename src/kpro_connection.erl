@@ -283,13 +283,18 @@ insert_server_name_indication(verify_peer, SslOpts, Host) ->
   case proplists:get_value(server_name_indication, SslOpts) of
     undefined ->
       %% insert {server_name_indication, Host} if not already present
-      [{server_name_indication, Host} | SslOpts];
+      [{server_name_indication, ensure_string(Host)} | SslOpts];
     _ ->
       SslOpts
   end;
 
 insert_server_name_indication(_, SslOpts, _) ->
   SslOpts.
+
+%% inet:hostname() is atom() | string()
+%% however sni() is only allowed to be string()
+ensure_string(Host) when is_atom(Host) -> atom_to_list(Host);
+ensure_string(Host) -> Host.
 
 maybe_upgrade_to_ssl(Sock, _Mod = ssl, SslOpts0, Host, Timeout) ->
   SslOpts = case SslOpts0 of
