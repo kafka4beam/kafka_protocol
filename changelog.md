@@ -1,22 +1,61 @@
-* 0.9 -> 1.0 incompatible changes
-  - changed from erlang.mk to rebar/rebar3
-  - encode inputs from records to proplists
-  - decode ouptuts from records to proplists
-  - `kpro:fetch_request`, `kpro:offsets_request` APIs have args list changed
-  - Maximum correlation ID changed to (1 bsl 24 - 1)
+* 2.3.4
+  - Insert sni only when missing in ssl options
+  - Ensure string() type sni in ssl options
 
-* 1.0.1 Added more type exports
-* 1.1.0
-  - Bug Fixes:
-      * Adding missing error code and add api-key interpretation
-  - New Features
-      * Support message timestamp in message-set encoding input `{Ts, Key, Value}`
-* 1.1.1
-  - Fix relative offset encoding/decoding in compressed batches
-* 1.1.2
-  - Fix compressed message wrapper timestamp handling, use the max ts in compressed batch
-  - Fix wrapper message offset (always set to 0) to work with kafka 0.11
-  - Fix snappy decompression, version 1 record (MagicByte=1) may not have java snappy packing
+* 2.3.3
+  - consumer group message metadata V3
+
+* 2.3.2
+  - Made send_error Reason more informative
+
+* 2.3.1
+  - Use git tag as a source of truth for the application version
+
+* 2.3.0
+  - Honor LogAppendTime when decoding messages
+
+* 2.2.9
+  - Allo atom as hostname because `inet:hostname() :: atom() | string().`
+
+* 2.2.8
+  - Discard replica_not_available (ReplicaNotAvailable) in partition metadata
+
+* 2.2.7
+  - Improve varint encoding performance
+
+* 2.2.6
+  - Change kpro_lib:data_size/1 to iolist_size nif
+
+* 2.2.5
+  - Add `{server_name_indication, Host}` when `{verify, verify_peer}` is
+    used. This is necessary for OTP >= 20.x.
+
+* 2.2.4
+  - Fix type specs (PR #48, by Piotr Bober)
+
+* 2.2.3
+  - Gotten rid of OS native timestamps
+
+* 2.2.2
+  - Moved make_ref to function impl from record definition
+
+* 2.2.0
+  - Add truely async send API `kpro:send/2`
+
+* 2.1.2
+  - Bump crc32cer to 0.1.3 to support alpine/busybox build
+
+* 2.1.1
+  - Pull docker image (instead of build locally) for tests
+  - Update snappyer and crc32cer to support configurable nif so file lookup location
+
+* 2.1.0
+  - Simplify batch input. Batch magic version is derived from produce API version.
+    no longer depends on batch input format to determin magic version.
+
+* 2.0.1
+  - Bump `crc32cer` to from `0.1.0` to `0.1.1` to fix build issue in OSX
+
 * 2.0.0
   - Supported kafka 1.1 protocol
   - API keys are generated from bnf
@@ -34,40 +73,27 @@
   - Transactional RPC primitives `kpro:txn_xxx`
   - Changed socket option from `{packet, raw}` to `{packet, 4}`
   - Add sasl-scram support
-* 2.0.1
-  - Bump `crc32cer` to from `0.1.0` to `0.1.1` to fix build issue in OSX
-* 2.1.0
-  - Simplify batch input. Batch magic version is derived from produce API version.
-    no longer depends on batch input format to determin magic version.
-* 2.1.1
-  - Pull docker image (instead of build locally) for tests
-  - Update snappyer and crc32cer to support configurable nif so file lookup location
-* 2.1.2
-  - Bump crc32cer to 0.1.3 to support alpine/busybox build
-* 2.2.0
-  - Add truely async send API `kpro:send/2`
-* 2.2.2
-  - Moved make_ref to function impl from record definition
-* 2.2.3
-  - Gotten rid of OS native timestamps
-* 2.2.4
-  - Fix type specs (PR #48, by Piotr Bober)
-* 2.2.5
-  - Add `{server_name_indication, Host}` when `{verify, verify_peer}` is
-    used. This is necessary for OTP >= 20.x.
-* 2.2.6
-  - Change kpro_lib:data_size/1 to iolist_size nif
-* 2.2.7
-  - Improve varint encoding performance
-* 2.2.8
-  - Discard replica_not_available (ReplicaNotAvailable) in partition metadata
-* 2.2.9
-  - Allo atom as hostname because `inet:hostname() :: atom() | string().`
-* 2.3.0
-  - Honor LogAppendTime when decoding messages
-* 2.3.1
-  - Use git tag as a source of truth for the application version
-* 2.3.2
-  - Made send_error Reason more informative
-* 2.3.3
-  - consumer group message metadata V3
+
+* 1.1.2
+  - Fix compressed message wrapper timestamp handling, use the max ts in compressed batch
+  - Fix wrapper message offset (always set to 0) to work with kafka 0.11
+  - Fix snappy decompression, version 1 record (MagicByte=1) may not have java snappy packing
+
+* 1.1.1
+  - Fix relative offset encoding/decoding in compressed batches
+
+* 1.1.0
+  - Bug Fixes:
+      * Adding missing error code and add api-key interpretation
+  - New Features
+      * Support message timestamp in message-set encoding input `{Ts, Key, Value}`
+
+* 1.0.1 Added more type exports
+
+* 0.9 -> 1.0 incompatible changes
+  - changed from erlang.mk to rebar/rebar3
+  - encode inputs from records to proplists
+  - decode ouptuts from records to proplists
+  - `kpro:fetch_request`, `kpro:offsets_request` APIs have args list changed
+  - Maximum correlation ID changed to (1 bsl 24 - 1)
+
