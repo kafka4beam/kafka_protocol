@@ -90,16 +90,16 @@ send_and_recv(#kpro_req{api = API, vsn = Vsn} = Req,
   end.
 
 %% @doc Function pipeline.
-%% The first function takes no args, all succeeding ones shoud be arity-0 or 1
+%% The first function takes no args, all succeeding ones should be arity-0 or 1
 %% functions. All functions should retrun
 %% `ok' | `{ok, Result}' | `{error, Reason}'.
 %% where `Result' is the input arg of the next function,
 %% or the result of pipeline if it's the last pipe node.
 %%
-%% NOTE: If a funcition returns `ok' the next should be an arity-0 function.
+%% NOTE: If a function returns `ok' the next should be an arity-0 function.
 %%       Any `{error, Reason}' return value would cause the pipeline to abort.
 %%
-%% NOTE: The pipe funcions are delegated to an agent process to evaluate,
+%% NOTE: The pipe functions are delegated to an agent process to evaluate,
 %%       only exceptions and process links are propagated back to caller
 %%       other side-effects like monitor references are not handled.
 ok_pipe(FunList, Timeout) ->
