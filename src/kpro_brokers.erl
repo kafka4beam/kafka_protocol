@@ -185,7 +185,7 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
           {ok, {Host, Port}}
       end
     ],
-  kpro_lib:ok_pipe(FL).
+  kpro_lib:ok_pipe(FL, Timeout).
 
 %% @doc Discover group or transactional coordinator.
 -spec discover_coordinator(connection(), coordinator_type(),
