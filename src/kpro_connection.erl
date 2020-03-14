@@ -247,7 +247,7 @@ query_api_versions(Sock, Mod, ClientId, Timeout) ->
   ErrorCode = find(error_code, Rsp),
   case ErrorCode =:= ?no_error of
     true ->
-      Versions = find(api_versions, Rsp),
+      Versions = find(api_keys, Rsp),
       F = fun(V, Acc) ->
           API = find(api_key, V),
           MinVsn = find(min_version, V),
