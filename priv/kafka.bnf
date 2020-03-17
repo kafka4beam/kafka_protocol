@@ -1304,7 +1304,7 @@ MetadataRequestV8 => [topics] allow_auto_topic_creation include_cluster_authoriz
 # include_topic_authorized_operations: Whether to include topic authorized operations.
 
 
-MetadataRequestV9 => [topics] allow_auto_topic_creation include_cluster_authorized_operations include_topic_authorized_operations TAG_BUFFER
+MetadataRequestV9 => {topics} allow_auto_topic_creation include_cluster_authorized_operations include_topic_authorized_operations TAG_BUFFER
   topics => name TAG_BUFFER
     name => COMPACT_STRING
   allow_auto_topic_creation => BOOLEAN
@@ -1680,7 +1680,7 @@ MetadataResponseV8 => throttle_time_ms [brokers] cluster_id controller_id [topic
 # cluster_authorized_operations: 32-bit bitfield to represent authorized operations for this cluster.
 
 
-MetadataResponseV9 => throttle_time_ms [brokers] cluster_id controller_id [topics] cluster_authorized_operations TAG_BUFFER
+MetadataResponseV9 => throttle_time_ms {brokers} cluster_id controller_id {topics} cluster_authorized_operations TAG_BUFFER
   throttle_time_ms => INT32
   brokers => node_id host port rack TAG_BUFFER
     node_id => INT32
@@ -1689,11 +1689,11 @@ MetadataResponseV9 => throttle_time_ms [brokers] cluster_id controller_id [topic
     rack => COMPACT_NULLABLE_STRING
   cluster_id => COMPACT_NULLABLE_STRING
   controller_id => INT32
-  topics => error_code name is_internal [partitions] topic_authorized_operations TAG_BUFFER
+  topics => error_code name is_internal {partitions} topic_authorized_operations TAG_BUFFER
     error_code => INT16
     name => COMPACT_STRING
     is_internal => BOOLEAN
-    partitions => error_code partition_index leader_id leader_epoch [replica_nodes] [isr_nodes] [offline_replicas] TAG_BUFFER
+    partitions => error_code partition_index leader_id leader_epoch {replica_nodes} {isr_nodes} {offline_replicas} TAG_BUFFER
       error_code => INT16
       partition_index => INT32
       leader_id => INT32
@@ -1919,12 +1919,12 @@ OffsetCommitRequestV7 => group_id generation_id member_id group_instance_id [top
 # committed_metadata: Any associated metadata the client wants to keep.
 
 
-OffsetCommitRequestV8 => group_id generation_id member_id group_instance_id [topics] TAG_BUFFER
+OffsetCommitRequestV8 => group_id generation_id member_id group_instance_id {topics} TAG_BUFFER
   group_id => COMPACT_STRING
   generation_id => INT32
   member_id => COMPACT_STRING
   group_instance_id => COMPACT_NULLABLE_STRING
-  topics => name [partitions] TAG_BUFFER
+  topics => name {partitions} TAG_BUFFER
     name => COMPACT_STRING
     partitions => partition_index committed_offset committed_leader_epoch committed_metadata TAG_BUFFER
       partition_index => INT32
@@ -2070,9 +2070,9 @@ OffsetCommitResponseV7 => throttle_time_ms [topics]
 # error_code: The error code, or 0 if there was no error.
 
 
-OffsetCommitResponseV8 => throttle_time_ms [topics] TAG_BUFFER
+OffsetCommitResponseV8 => throttle_time_ms {topics} TAG_BUFFER
   throttle_time_ms => INT32
-  topics => name [partitions] TAG_BUFFER
+  topics => name {partitions} TAG_BUFFER
     name => COMPACT_STRING
     partitions => partition_index error_code TAG_BUFFER
       partition_index => INT32
@@ -2162,9 +2162,9 @@ OffsetFetchRequestV5 => group_id [topics]
 # partition_indexes: The partition indexes we would like to fetch offsets for.
 
 
-OffsetFetchRequestV6 => group_id [topics] TAG_BUFFER
+OffsetFetchRequestV6 => group_id {topics} TAG_BUFFER
   group_id => COMPACT_STRING
-  topics => name [partition_indexes] TAG_BUFFER
+  topics => name {partition_indexes} TAG_BUFFER
     name => COMPACT_STRING
     partition_indexes => INT32
 
@@ -2300,9 +2300,9 @@ OffsetFetchResponseV5 => throttle_time_ms [topics] error_code
 # error_code: The top-level error code, or 0 if there was no error.
 
 
-OffsetFetchResponseV6 => throttle_time_ms [topics] error_code TAG_BUFFER
+OffsetFetchResponseV6 => throttle_time_ms {topics} error_code TAG_BUFFER
   throttle_time_ms => INT32
-  topics => name [partitions] TAG_BUFFER
+  topics => name {partitions} TAG_BUFFER
     name => COMPACT_STRING
     partitions => partition_index committed_offset committed_leader_epoch metadata error_code TAG_BUFFER
       partition_index => INT32
@@ -2541,7 +2541,7 @@ JoinGroupRequestV5 => group_id session_timeout_ms rebalance_timeout_ms member_id
 # metadata: The protocol metadata.
 
 
-JoinGroupRequestV6 => group_id session_timeout_ms rebalance_timeout_ms member_id group_instance_id protocol_type [protocols] TAG_BUFFER
+JoinGroupRequestV6 => group_id session_timeout_ms rebalance_timeout_ms member_id group_instance_id protocol_type {protocols} TAG_BUFFER
   group_id => COMPACT_STRING
   session_timeout_ms => INT32
   rebalance_timeout_ms => INT32
@@ -2689,7 +2689,7 @@ JoinGroupResponseV5 => throttle_time_ms error_code generation_id protocol_name l
 # metadata: The group member metadata.
 
 
-JoinGroupResponseV6 => throttle_time_ms error_code generation_id protocol_name leader member_id [members] TAG_BUFFER
+JoinGroupResponseV6 => throttle_time_ms error_code generation_id protocol_name leader member_id {members} TAG_BUFFER
   throttle_time_ms => INT32
   error_code => INT16
   generation_id => INT32
@@ -2846,7 +2846,7 @@ LeaveGroupRequestV3 => group_id [members]
 # group_instance_id: The group instance ID to remove from the group.
 
 
-LeaveGroupRequestV4 => group_id [members] TAG_BUFFER
+LeaveGroupRequestV4 => group_id {members} TAG_BUFFER
   group_id => COMPACT_STRING
   members => member_id group_instance_id TAG_BUFFER
     member_id => COMPACT_STRING
@@ -2898,7 +2898,7 @@ LeaveGroupResponseV3 => throttle_time_ms error_code [members]
 # error_code: The error code, or 0 if there was no error.
 
 
-LeaveGroupResponseV4 => throttle_time_ms error_code [members] TAG_BUFFER
+LeaveGroupResponseV4 => throttle_time_ms error_code {members} TAG_BUFFER
   throttle_time_ms => INT32
   error_code => INT16
   members => member_id group_instance_id error_code TAG_BUFFER
@@ -2983,7 +2983,7 @@ SyncGroupRequestV3 => group_id generation_id member_id group_instance_id [assign
 # assignment: The member assignment.
 
 
-SyncGroupRequestV4 => group_id generation_id member_id group_instance_id [assignments] TAG_BUFFER
+SyncGroupRequestV4 => group_id generation_id member_id group_instance_id {assignments} TAG_BUFFER
   group_id => COMPACT_STRING
   generation_id => INT32
   member_id => COMPACT_STRING
@@ -3087,7 +3087,7 @@ DescribeGroupsRequestV4 => [groups] include_authorized_operations
 # include_authorized_operations: Whether to include authorized operations.
 
 
-DescribeGroupsRequestV5 => [groups] include_authorized_operations TAG_BUFFER
+DescribeGroupsRequestV5 => {groups} include_authorized_operations TAG_BUFFER
   groups => COMPACT_STRING
   include_authorized_operations => BOOLEAN
 
@@ -3250,9 +3250,9 @@ DescribeGroupsResponseV4 => throttle_time_ms [groups]
 # authorized_operations: 32-bit bitfield to represent authorized operations for this group.
 
 
-DescribeGroupsResponseV5 => throttle_time_ms [groups] TAG_BUFFER
+DescribeGroupsResponseV5 => throttle_time_ms {groups} TAG_BUFFER
   throttle_time_ms => INT32
-  groups => error_code group_id group_state protocol_type protocol_data [members] authorized_operations TAG_BUFFER
+  groups => error_code group_id group_state protocol_type protocol_data {members} authorized_operations TAG_BUFFER
     error_code => INT16
     group_id => COMPACT_STRING
     group_state => COMPACT_STRING
@@ -3345,7 +3345,7 @@ ListGroupsResponseV2 => throttle_time_ms error_code [groups]
 # protocol_type: The group protocol type.
 
 
-ListGroupsResponseV3 => throttle_time_ms error_code [groups] TAG_BUFFER
+ListGroupsResponseV3 => throttle_time_ms error_code {groups} TAG_BUFFER
   throttle_time_ms => INT32
   error_code => INT16
   groups => group_id protocol_type TAG_BUFFER
@@ -3458,7 +3458,7 @@ ApiVersionsResponseV2 => error_code [api_keys] throttle_time_ms
 # throttle_time_ms: The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota.
 
 
-ApiVersionsResponseV3 => error_code [api_keys] throttle_time_ms TAG_BUFFER
+ApiVersionsResponseV3 => error_code {api_keys} throttle_time_ms TAG_BUFFER
   error_code => INT16
   api_keys => api_key min_version max_version TAG_BUFFER
     api_key => INT16
@@ -3615,12 +3615,12 @@ CreateTopicsRequestV4 => [topics] timeout_ms validate_only
 # validate_only: If true, check that the topics can be created as specified, but don't create anything.
 
 
-CreateTopicsRequestV5 => [topics] timeout_ms validate_only TAG_BUFFER
-  topics => name num_partitions replication_factor [assignments] [configs] TAG_BUFFER
+CreateTopicsRequestV5 => {topics} timeout_ms validate_only TAG_BUFFER
+  topics => name num_partitions replication_factor {assignments} {configs} TAG_BUFFER
     name => COMPACT_STRING
     num_partitions => INT32
     replication_factor => INT16
-    assignments => partition_index [broker_ids] TAG_BUFFER
+    assignments => partition_index {broker_ids} TAG_BUFFER
       partition_index => INT32
       broker_ids => INT32
     configs => name value TAG_BUFFER
@@ -3711,9 +3711,9 @@ CreateTopicsResponseV4 => throttle_time_ms [topics]
 # error_message: The error message, or null if there was no error.
 
 
-CreateTopicsResponseV5 => throttle_time_ms [topics] TAG_BUFFER
+CreateTopicsResponseV5 => throttle_time_ms {topics} TAG_BUFFER
   throttle_time_ms => INT32
-  topics => name error_code error_message num_partitions replication_factor [configs] TAG_BUFFER
+  topics => name error_code error_message num_partitions replication_factor {configs} TAG_BUFFER
     name => COMPACT_STRING
     error_code => INT16
     error_message => COMPACT_NULLABLE_STRING
@@ -3777,7 +3777,7 @@ DeleteTopicsRequestV3 => [topic_names] timeout_ms
 # timeout_ms: The length of time in milliseconds to wait for the deletions to complete.
 
 
-DeleteTopicsRequestV4 => [topic_names] timeout_ms TAG_BUFFER
+DeleteTopicsRequestV4 => {topic_names} timeout_ms TAG_BUFFER
   topic_names => COMPACT_STRING
   timeout_ms => INT32
 
@@ -3832,7 +3832,7 @@ DeleteTopicsResponseV3 => throttle_time_ms [responses]
 # error_code: The deletion error, or 0 if the deletion succeeded.
 
 
-DeleteTopicsResponseV4 => throttle_time_ms [responses] TAG_BUFFER
+DeleteTopicsResponseV4 => throttle_time_ms {responses} TAG_BUFFER
   throttle_time_ms => INT32
   responses => name error_code TAG_BUFFER
     name => COMPACT_STRING
@@ -5005,7 +5005,7 @@ CreateDelegationTokenRequestV1 => [renewers] max_lifetime_ms
 # max_lifetime_ms: The maximum lifetime of the token in milliseconds, or -1 to use the server side default.
 
 
-CreateDelegationTokenRequestV2 => [renewers] max_lifetime_ms TAG_BUFFER
+CreateDelegationTokenRequestV2 => {renewers} max_lifetime_ms TAG_BUFFER
   renewers => principal_type principal_name TAG_BUFFER
     principal_type => COMPACT_STRING
     principal_name => COMPACT_STRING
@@ -5254,7 +5254,7 @@ DeleteGroupsRequestV1 => [groups_names]
 # groups_names: The group names to delete.
 
 
-DeleteGroupsRequestV2 => [groups_names] TAG_BUFFER
+DeleteGroupsRequestV2 => {groups_names} TAG_BUFFER
   groups_names => COMPACT_STRING
 
 # groups_names: The group names to delete.
@@ -5285,7 +5285,7 @@ DeleteGroupsResponseV1 => throttle_time_ms [results]
 # error_code: The deletion error, or 0 if the deletion succeeded.
 
 
-DeleteGroupsResponseV2 => throttle_time_ms [results] TAG_BUFFER
+DeleteGroupsResponseV2 => throttle_time_ms {results} TAG_BUFFER
   throttle_time_ms => INT32
   results => group_id error_code TAG_BUFFER
     group_id => COMPACT_STRING
@@ -5326,9 +5326,9 @@ ElectLeadersRequestV1 => election_type [topic_partitions] timeout_ms
 # timeout_ms: The time in ms to wait for the election to complete.
 
 
-ElectLeadersRequestV2 => election_type [topic_partitions] timeout_ms TAG_BUFFER
+ElectLeadersRequestV2 => election_type {topic_partitions} timeout_ms TAG_BUFFER
   election_type => INT8
-  topic_partitions => topic [partition_id] TAG_BUFFER
+  topic_partitions => topic {partition_id} TAG_BUFFER
     topic => COMPACT_STRING
     partition_id => INT32
   timeout_ms => INT32
@@ -5380,10 +5380,10 @@ ElectLeadersResponseV1 => throttle_time_ms error_code [replica_election_results]
 # error_message: The result message, or null if there was no error.
 
 
-ElectLeadersResponseV2 => throttle_time_ms error_code [replica_election_results] TAG_BUFFER
+ElectLeadersResponseV2 => throttle_time_ms error_code {replica_election_results} TAG_BUFFER
   throttle_time_ms => INT32
   error_code => INT16
-  replica_election_results => topic [partition_result] TAG_BUFFER
+  replica_election_results => topic {partition_result} TAG_BUFFER
     topic => COMPACT_STRING
     partition_result => partition_id error_code error_message TAG_BUFFER
       partition_id => INT32
@@ -5424,8 +5424,8 @@ IncrementalAlterConfigsRequestV0 => [resources] validate_only
 # validate_only: True if we should validate the request, but not change the configurations.
 
 
-IncrementalAlterConfigsRequestV1 => [resources] validate_only TAG_BUFFER
-  resources => resource_type resource_name [configs] TAG_BUFFER
+IncrementalAlterConfigsRequestV1 => {resources} validate_only TAG_BUFFER
+  resources => resource_type resource_name {configs} TAG_BUFFER
     resource_type => INT8
     resource_name => COMPACT_STRING
     configs => name config_operation value TAG_BUFFER
@@ -5463,7 +5463,7 @@ IncrementalAlterConfigsResponseV0 => throttle_time_ms [responses]
 # resource_name: The resource name.
 
 
-IncrementalAlterConfigsResponseV1 => throttle_time_ms [responses] TAG_BUFFER
+IncrementalAlterConfigsResponseV1 => throttle_time_ms {responses} TAG_BUFFER
   throttle_time_ms => INT32
   responses => error_code error_message resource_type resource_name TAG_BUFFER
     error_code => INT16
@@ -5482,11 +5482,11 @@ IncrementalAlterConfigsResponseV1 => throttle_time_ms [responses] TAG_BUFFER
 
 
 #ApiKey: AlterPartitionReassignments, 45
-AlterPartitionReassignmentsRequestV0 => timeout_ms [topics] TAG_BUFFER
+AlterPartitionReassignmentsRequestV0 => timeout_ms {topics} TAG_BUFFER
   timeout_ms => INT32
-  topics => name [partitions] TAG_BUFFER
+  topics => name {partitions} TAG_BUFFER
     name => COMPACT_STRING
-    partitions => partition_index [replicas] TAG_BUFFER
+    partitions => partition_index {replicas} TAG_BUFFER
       partition_index => INT32
       replicas => INT32
 
@@ -5501,11 +5501,11 @@ AlterPartitionReassignmentsRequestV0 => timeout_ms [topics] TAG_BUFFER
 # _tagged_fields: The tagged fields
 
 
-AlterPartitionReassignmentsResponseV0 => throttle_time_ms error_code error_message [responses] TAG_BUFFER
+AlterPartitionReassignmentsResponseV0 => throttle_time_ms error_code error_message {responses} TAG_BUFFER
   throttle_time_ms => INT32
   error_code => INT16
   error_message => COMPACT_NULLABLE_STRING
-  responses => name [partitions] TAG_BUFFER
+  responses => name {partitions} TAG_BUFFER
     name => COMPACT_STRING
     partitions => partition_index error_code error_message TAG_BUFFER
       partition_index => INT32
@@ -5527,9 +5527,9 @@ AlterPartitionReassignmentsResponseV0 => throttle_time_ms error_code error_messa
 
 
 #ApiKey: ListPartitionReassignments, 46
-ListPartitionReassignmentsRequestV0 => timeout_ms [topics] TAG_BUFFER
+ListPartitionReassignmentsRequestV0 => timeout_ms {topics} TAG_BUFFER
   timeout_ms => INT32
-  topics => name [partition_indexes] TAG_BUFFER
+  topics => name {partition_indexes} TAG_BUFFER
     name => COMPACT_STRING
     partition_indexes => INT32
 
@@ -5541,13 +5541,13 @@ ListPartitionReassignmentsRequestV0 => timeout_ms [topics] TAG_BUFFER
 # _tagged_fields: The tagged fields
 
 
-ListPartitionReassignmentsResponseV0 => throttle_time_ms error_code error_message [topics] TAG_BUFFER
+ListPartitionReassignmentsResponseV0 => throttle_time_ms error_code error_message {topics} TAG_BUFFER
   throttle_time_ms => INT32
   error_code => INT16
   error_message => COMPACT_NULLABLE_STRING
-  topics => name [partitions] TAG_BUFFER
+  topics => name {partitions} TAG_BUFFER
     name => COMPACT_STRING
-    partitions => partition_index [replicas] [adding_replicas] [removing_replicas] TAG_BUFFER
+    partitions => partition_index {replicas} {adding_replicas} {removing_replicas} TAG_BUFFER
       partition_index => INT32
       replicas => INT32
       adding_replicas => INT32

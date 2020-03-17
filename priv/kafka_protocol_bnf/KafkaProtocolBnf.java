@@ -1,4 +1,5 @@
 import org.apache.kafka.common.protocol.types.ArrayOf;
+import org.apache.kafka.common.protocol.types.CompactArrayOf;
 import org.apache.kafka.common.protocol.types.BoundField;
 import org.apache.kafka.common.protocol.types.Schema;
 import org.apache.kafka.common.protocol.types.Type;
@@ -46,9 +47,17 @@ public class KafkaProtocolBnf {
         for (BoundField field: schema.fields()) {
             Type type = field.def.type;
             if (type.isArray()) {
-                b.append("[");
+                if (type instanceof CompactArrayOf) {
+                  b.append("{");
+                } else {
+                  b.append("[");
+                }
                 b.append(field.def.name);
-                b.append("]");
+                if (type instanceof CompactArrayOf) {
+                  b.append("}");
+                } else {
+                  b.append("]");
+                }
                 if (!subTypes.containsKey(field.def.name)) {
                     subTypes.put(field.def.name, type.arrayElementType().get());
                 }
