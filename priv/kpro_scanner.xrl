@@ -10,6 +10,8 @@ TAG_BUFFER : {token, {'TAG_BUFFER', TokenLine}}.
 => : {token, {'=>', TokenLine}}.
 \[ : {token, {'[', TokenLine}}.
 \] : {token, {']', TokenLine}}.
+\{ : {token, {'{', TokenLine}}.
+\} : {token, {'}', TokenLine}}.
 \( : {token, {'(', TokenLine}}.
 \) : {token, {')', TokenLine}}.
 \| : {token, {'|', TokenLine}}.

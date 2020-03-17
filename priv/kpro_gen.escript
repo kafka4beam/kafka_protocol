@@ -176,6 +176,7 @@ split_name(Name) ->
 expand([{Tag, Fields} | Refs]) ->
   {Tag, expand_fields(Fields, Refs)}.
 
+-define(IS_ARRAY(A), (A =:= array orelse A =:= compact_array)).
 expand_fields([], _Refs) -> [];
 expand_fields([tagged_fields | Rest], Refs) ->
   [{tagged_fields, tagged_fields} | expand_fields(Rest, Refs)];
@@ -187,14 +188,14 @@ expand_fields([Name | Rest], Refs) when is_atom(Name) ->
   catch error : _ ->
   throw({Name, Refs})
   end;
-expand_fields([{array, Name} | Rest], Refs) ->
+expand_fields([{Array, Name} | Rest], Refs) when ?IS_ARRAY(Array) ->
   {Name, Type0} = lists:keyfind(Name, 1, Refs),
   Type = expand_type(Type0, Refs),
-  [{Name, {array, Type}} | expand_fields(Rest, Refs)].
+  [{Name, {Array, Type}} | expand_fields(Rest, Refs)].
 
-expand_type({array, Type}, Refs) ->
+expand_type({Array, Type}, Refs) when ?IS_ARRAY(Array) ->
   %% Array of array
-  {array, expand_type(Type, Refs)};
+  {Array, expand_type(Type, Refs)};
 expand_type(Fields, Refs) when is_list(Fields) ->
   expand_fields(Fields, Refs);
 expand_type(Type, _Refs) ->
