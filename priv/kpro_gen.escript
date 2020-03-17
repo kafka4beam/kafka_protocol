@@ -37,7 +37,7 @@ main(_Args) ->
 
 -define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
 -module(kpro_schema).
--export([all_apis/0, vsn_range/1, api_key/1, req/2, rsp/2, ec/1]).
+-export([all_apis/0, vsn_range/1, min_flexible_vsn/1, api_key/1, req/2, rsp/2, ec/1]).
 ").
 
 generate_schema_module(GroupedTypes) ->
@@ -46,6 +46,7 @@ generate_schema_module(GroupedTypes) ->
     [?SCHEMA_MODULE_HEADER, "\n",
      generate_all_apis_fun(GroupedTypes),
      generate_version_range_clauses(GroupedTypes),
+     generate_min_flexible_vsn_clauses(GroupedTypes),
      generate_api_key_clauses(),
      generate_req_rsp_clauses(GroupedTypes),
      generate_ec_clauses()
@@ -89,6 +90,29 @@ generate_all_apis_fun(GroupedTypes) ->
   ["all_apis() ->\n[", infix(APIs, ",\n"), "].\n\n"].
 
 generate_version_range_clauses(GroupedTypes) ->
+  IsFlexible = fun(Fields) ->
+                   lists:keyfind(tagged_fields, 1, Fields) =/= false
+               end,
+  F = fun({Name, VersionedFields}, Acc) ->
+          case split_name(Name) of
+            {API, "req"} ->
+              Versions = [V || {V, Fields} <- VersionedFields, IsFlexible(Fields)],
+              case Versions =:= [] of
+                true ->
+                  Acc;
+                false ->
+                  Min = integer_to_list(lists:min(Versions)),
+                  Clause = ["min_flexible_vsn(", API, ") -> ", Min, ";\n"],
+                  [Clause | Acc]
+              end;
+            {_API, "rsp"} ->
+              Acc
+          end
+      end,
+  Clauses = lists:foldr(F, [], GroupedTypes),
+  [Clauses, "min_flexible_vsn(_) -> 9999.\n\n"].
+
+generate_min_flexible_vsn_clauses(GroupedTypes) ->
   F = fun({Name, VersionedFields}, Acc) ->
           case split_name(Name) of
             {API, "req"} ->
@@ -103,6 +127,7 @@ generate_version_range_clauses(GroupedTypes) ->
       end,
   Clauses = lists:foldr(F, [], GroupedTypes),
   [Clauses, "vsn_range(_) -> false.\n\n"].
+
 
 generate_req_clauses(PerNameTypes) ->
   generate_schema_clauses(PerNameTypes, "req").

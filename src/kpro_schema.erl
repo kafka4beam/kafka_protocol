@@ -1,6 +1,6 @@
 %% generated code, do not edit!
 -module(kpro_schema).
--export([all_apis/0, vsn_range/1, api_key/1, req/2, rsp/2, ec/1]).
+-export([all_apis/0, vsn_range/1, min_flexible_vsn/1, api_key/1, req/2, rsp/2, ec/1]).
 
 all_apis() ->
 [produce,
@@ -46,6 +46,28 @@ incremental_alter_configs,
 alter_partition_reassignments,
 list_partition_reassignments,
 offset_delete].
+
+min_flexible_vsn(metadata) -> 9;
+min_flexible_vsn(offset_commit) -> 8;
+min_flexible_vsn(offset_fetch) -> 6;
+min_flexible_vsn(find_coordinator) -> 3;
+min_flexible_vsn(join_group) -> 6;
+min_flexible_vsn(heartbeat) -> 4;
+min_flexible_vsn(leave_group) -> 4;
+min_flexible_vsn(sync_group) -> 4;
+min_flexible_vsn(describe_groups) -> 5;
+min_flexible_vsn(list_groups) -> 3;
+min_flexible_vsn(api_versions) -> 3;
+min_flexible_vsn(create_topics) -> 5;
+min_flexible_vsn(delete_topics) -> 4;
+min_flexible_vsn(init_producer_id) -> 2;
+min_flexible_vsn(create_delegation_token) -> 2;
+min_flexible_vsn(delete_groups) -> 2;
+min_flexible_vsn(elect_leaders) -> 2;
+min_flexible_vsn(incremental_alter_configs) -> 1;
+min_flexible_vsn(alter_partition_reassignments) -> 0;
+min_flexible_vsn(list_partition_reassignments) -> 0;
+min_flexible_vsn(_) -> 9999.
 
 vsn_range(produce) -> {0, 8};
 vsn_range(fetch) -> {0, 11};
@@ -348,7 +370,8 @@ req(metadata, 8) ->
    {include_cluster_authorized_operations,boolean},
    {include_topic_authorized_operations,boolean}];
 req(metadata, 9) ->
-  [{topics,{array,[{name,compact_string},{tagged_fields,tagged_fields}]}},
+  [{topics,{compact_array,[{name,compact_string},
+                           {tagged_fields,tagged_fields}]}},
    {allow_auto_topic_creation,boolean},
    {include_cluster_authorized_operations,boolean},
    {include_topic_authorized_operations,boolean},
@@ -434,10 +457,10 @@ req(offset_commit, 8) ->
    {member_id,compact_string},
    {group_instance_id,compact_nullable_string},
    {topics,
-       {array,
+       {compact_array,
            [{name,compact_string},
             {partitions,
-                {array,
+                {compact_array,
                     [{partition_index,int32},
                      {committed_offset,int64},
                      {committed_leader_epoch,int32},
@@ -450,9 +473,9 @@ req(offset_fetch, V) when V >= 0, V =< 5 ->
    {topics,{array,[{name,string},{partition_indexes,{array,int32}}]}}];
 req(offset_fetch, 6) ->
   [{group_id,compact_string},
-   {topics,{array,[{name,compact_string},
-                   {partition_indexes,{array,int32}},
-                   {tagged_fields,tagged_fields}]}},
+   {topics,{compact_array,[{name,compact_string},
+                           {partition_indexes,{compact_array,int32}},
+                           {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 req(find_coordinator, 0) ->
   [{key,string}];
@@ -488,9 +511,9 @@ req(join_group, 6) ->
    {member_id,compact_string},
    {group_instance_id,compact_nullable_string},
    {protocol_type,compact_string},
-   {protocols,{array,[{name,compact_string},
-                      {metadata,compact_bytes},
-                      {tagged_fields,tagged_fields}]}},
+   {protocols,{compact_array,[{name,compact_string},
+                              {metadata,compact_bytes},
+                              {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 req(heartbeat, V) when V >= 0, V =< 2 ->
   [{group_id,string},{generation_id,int32},{member_id,string}];
@@ -512,9 +535,9 @@ req(leave_group, 3) ->
    {members,{array,[{member_id,string},{group_instance_id,nullable_string}]}}];
 req(leave_group, 4) ->
   [{group_id,compact_string},
-   {members,{array,[{member_id,compact_string},
-                    {group_instance_id,compact_nullable_string},
-                    {tagged_fields,tagged_fields}]}},
+   {members,{compact_array,[{member_id,compact_string},
+                            {group_instance_id,compact_nullable_string},
+                            {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 req(sync_group, V) when V >= 0, V =< 2 ->
   [{group_id,string},
@@ -532,16 +555,16 @@ req(sync_group, 4) ->
    {generation_id,int32},
    {member_id,compact_string},
    {group_instance_id,compact_nullable_string},
-   {assignments,{array,[{member_id,compact_string},
-                        {assignment,compact_bytes},
-                        {tagged_fields,tagged_fields}]}},
+   {assignments,{compact_array,[{member_id,compact_string},
+                                {assignment,compact_bytes},
+                                {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 req(describe_groups, V) when V >= 0, V =< 2 ->
   [{groups,{array,string}}];
 req(describe_groups, V) when V >= 3, V =< 4 ->
   [{groups,{array,string}},{include_authorized_operations,boolean}];
 req(describe_groups, 5) ->
-  [{groups,{array,compact_string}},
+  [{groups,{compact_array,compact_string}},
    {include_authorized_operations,boolean},
    {tagged_fields,tagged_fields}];
 req(list_groups, V) when V >= 0, V =< 2 ->
@@ -579,17 +602,17 @@ req(create_topics, V) when V >= 1, V =< 4 ->
    {validate_only,boolean}];
 req(create_topics, 5) ->
   [{topics,
-       {array,
+       {compact_array,
            [{name,compact_string},
             {num_partitions,int32},
             {replication_factor,int16},
             {assignments,
-                {array,
+                {compact_array,
                     [{partition_index,int32},
-                     {broker_ids,{array,int32}},
+                     {broker_ids,{compact_array,int32}},
                      {tagged_fields,tagged_fields}]}},
             {configs,
-                {array,
+                {compact_array,
                     [{name,compact_string},
                      {value,compact_nullable_string},
                      {tagged_fields,tagged_fields}]}},
@@ -600,7 +623,7 @@ req(create_topics, 5) ->
 req(delete_topics, V) when V >= 0, V =< 3 ->
   [{topic_names,{array,string}},{timeout_ms,int32}];
 req(delete_topics, 4) ->
-  [{topic_names,{array,compact_string}},
+  [{topic_names,{compact_array,compact_string}},
    {timeout_ms,int32},
    {tagged_fields,tagged_fields}];
 req(delete_records, V) when V >= 0, V =< 1 ->
@@ -753,9 +776,9 @@ req(create_delegation_token, V) when V >= 0, V =< 1 ->
   [{renewers,{array,[{principal_type,string},{principal_name,string}]}},
    {max_lifetime_ms,int64}];
 req(create_delegation_token, 2) ->
-  [{renewers,{array,[{principal_type,compact_string},
-                     {principal_name,compact_string},
-                     {tagged_fields,tagged_fields}]}},
+  [{renewers,{compact_array,[{principal_type,compact_string},
+                             {principal_name,compact_string},
+                             {tagged_fields,tagged_fields}]}},
    {max_lifetime_ms,int64},
    {tagged_fields,tagged_fields}];
 req(renew_delegation_token, V) when V >= 0, V =< 1 ->
@@ -767,7 +790,8 @@ req(describe_delegation_token, V) when V >= 0, V =< 1 ->
 req(delete_groups, V) when V >= 0, V =< 1 ->
   [{groups_names,{array,string}}];
 req(delete_groups, 2) ->
-  [{groups_names,{array,compact_string}},{tagged_fields,tagged_fields}];
+  [{groups_names,{compact_array,compact_string}},
+   {tagged_fields,tagged_fields}];
 req(elect_leaders, 0) ->
   [{topic_partitions,{array,[{topic,string},{partition_id,{array,int32}}]}},
    {timeout_ms,int32}];
@@ -777,9 +801,9 @@ req(elect_leaders, 1) ->
    {timeout_ms,int32}];
 req(elect_leaders, 2) ->
   [{election_type,int8},
-   {topic_partitions,{array,[{topic,compact_string},
-                             {partition_id,{array,int32}},
-                             {tagged_fields,tagged_fields}]}},
+   {topic_partitions,{compact_array,[{topic,compact_string},
+                                     {partition_id,{compact_array,int32}},
+                                     {tagged_fields,tagged_fields}]}},
    {timeout_ms,int32},
    {tagged_fields,tagged_fields}];
 req(incremental_alter_configs, 0) ->
@@ -790,28 +814,36 @@ req(incremental_alter_configs, 0) ->
                                        {value,nullable_string}]}}]}},
    {validate_only,boolean}];
 req(incremental_alter_configs, 1) ->
-  [{resources,{array,[{resource_type,int8},
-                      {resource_name,compact_string},
-                      {configs,{array,[{name,compact_string},
-                                       {config_operation,int8},
-                                       {value,compact_nullable_string},
-                                       {tagged_fields,tagged_fields}]}},
-                      {tagged_fields,tagged_fields}]}},
+  [{resources,
+       {compact_array,
+           [{resource_type,int8},
+            {resource_name,compact_string},
+            {configs,
+                {compact_array,
+                    [{name,compact_string},
+                     {config_operation,int8},
+                     {value,compact_nullable_string},
+                     {tagged_fields,tagged_fields}]}},
+            {tagged_fields,tagged_fields}]}},
    {validate_only,boolean},
    {tagged_fields,tagged_fields}];
 req(alter_partition_reassignments, 0) ->
   [{timeout_ms,int32},
-   {topics,{array,[{name,compact_string},
-                   {partitions,{array,[{partition_index,int32},
-                                       {replicas,{array,int32}},
-                                       {tagged_fields,tagged_fields}]}},
-                   {tagged_fields,tagged_fields}]}},
+   {topics,
+       {compact_array,
+           [{name,compact_string},
+            {partitions,
+                {compact_array,
+                    [{partition_index,int32},
+                     {replicas,{compact_array,int32}},
+                     {tagged_fields,tagged_fields}]}},
+            {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 req(list_partition_reassignments, 0) ->
   [{timeout_ms,int32},
-   {topics,{array,[{name,compact_string},
-                   {partition_indexes,{array,int32}},
-                   {tagged_fields,tagged_fields}]}},
+   {topics,{compact_array,[{name,compact_string},
+                           {partition_indexes,{compact_array,int32}},
+                           {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 req(offset_delete, 0) ->
   [{group_id,string},
@@ -1128,26 +1160,32 @@ rsp(metadata, 8) ->
    {cluster_authorized_operations,int32}];
 rsp(metadata, 9) ->
   [{throttle_time_ms,int32},
-   {brokers,{array,[{node_id,int32},
-                    {host,compact_string},
-                    {port,int32},
-                    {rack,compact_nullable_string},
-                    {tagged_fields,tagged_fields}]}},
+   {brokers,
+       {compact_array,
+           [{node_id,int32},
+            {host,compact_string},
+            {port,int32},
+            {rack,compact_nullable_string},
+            {tagged_fields,tagged_fields}]}},
    {cluster_id,compact_nullable_string},
    {controller_id,int32},
-   {topics,{array,[{error_code,int16},
-                   {name,compact_string},
-                   {is_internal,boolean},
-                   {partitions,{array,[{error_code,int16},
-                                       {partition_index,int32},
-                                       {leader_id,int32},
-                                       {leader_epoch,int32},
-                                       {replica_nodes,{array,int32}},
-                                       {isr_nodes,{array,int32}},
-                                       {offline_replicas,{array,int32}},
-                                       {tagged_fields,tagged_fields}]}},
-                   {topic_authorized_operations,int32},
-                   {tagged_fields,tagged_fields}]}},
+   {topics,
+       {compact_array,
+           [{error_code,int16},
+            {name,compact_string},
+            {is_internal,boolean},
+            {partitions,
+                {compact_array,
+                    [{error_code,int16},
+                     {partition_index,int32},
+                     {leader_id,int32},
+                     {leader_epoch,int32},
+                     {replica_nodes,{compact_array,int32}},
+                     {isr_nodes,{compact_array,int32}},
+                     {offline_replicas,{compact_array,int32}},
+                     {tagged_fields,tagged_fields}]}},
+            {topic_authorized_operations,int32},
+            {tagged_fields,tagged_fields}]}},
    {cluster_authorized_operations,int32},
    {tagged_fields,tagged_fields}];
 rsp(offset_commit, V) when V >= 0, V =< 2 ->
@@ -1161,11 +1199,15 @@ rsp(offset_commit, V) when V >= 3, V =< 7 ->
                                        {error_code,int16}]}}]}}];
 rsp(offset_commit, 8) ->
   [{throttle_time_ms,int32},
-   {topics,{array,[{name,compact_string},
-                   {partitions,{array,[{partition_index,int32},
-                                       {error_code,int16},
-                                       {tagged_fields,tagged_fields}]}},
-                   {tagged_fields,tagged_fields}]}},
+   {topics,
+       {compact_array,
+           [{name,compact_string},
+            {partitions,
+                {compact_array,
+                    [{partition_index,int32},
+                     {error_code,int16},
+                     {tagged_fields,tagged_fields}]}},
+            {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 rsp(offset_fetch, V) when V >= 0, V =< 1 ->
   [{topics,{array,[{name,string},
@@ -1199,14 +1241,18 @@ rsp(offset_fetch, 5) ->
    {error_code,int16}];
 rsp(offset_fetch, 6) ->
   [{throttle_time_ms,int32},
-   {topics,{array,[{name,compact_string},
-                   {partitions,{array,[{partition_index,int32},
-                                       {committed_offset,int64},
-                                       {committed_leader_epoch,int32},
-                                       {metadata,compact_nullable_string},
-                                       {error_code,int16},
-                                       {tagged_fields,tagged_fields}]}},
-                   {tagged_fields,tagged_fields}]}},
+   {topics,
+       {compact_array,
+           [{name,compact_string},
+            {partitions,
+                {compact_array,
+                    [{partition_index,int32},
+                     {committed_offset,int64},
+                     {committed_leader_epoch,int32},
+                     {metadata,compact_nullable_string},
+                     {error_code,int16},
+                     {tagged_fields,tagged_fields}]}},
+            {tagged_fields,tagged_fields}]}},
    {error_code,int16},
    {tagged_fields,tagged_fields}];
 rsp(find_coordinator, 0) ->
@@ -1258,10 +1304,10 @@ rsp(join_group, 6) ->
    {protocol_name,compact_string},
    {leader,compact_string},
    {member_id,compact_string},
-   {members,{array,[{member_id,compact_string},
-                    {group_instance_id,compact_nullable_string},
-                    {metadata,compact_bytes},
-                    {tagged_fields,tagged_fields}]}},
+   {members,{compact_array,[{member_id,compact_string},
+                            {group_instance_id,compact_nullable_string},
+                            {metadata,compact_bytes},
+                            {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 rsp(heartbeat, 0) ->
   [{error_code,int16}];
@@ -1282,10 +1328,10 @@ rsp(leave_group, 3) ->
 rsp(leave_group, 4) ->
   [{throttle_time_ms,int32},
    {error_code,int16},
-   {members,{array,[{member_id,compact_string},
-                    {group_instance_id,compact_nullable_string},
-                    {error_code,int16},
-                    {tagged_fields,tagged_fields}]}},
+   {members,{compact_array,[{member_id,compact_string},
+                            {group_instance_id,compact_nullable_string},
+                            {error_code,int16},
+                            {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 rsp(sync_group, 0) ->
   [{error_code,int16},{assignment,bytes}];
@@ -1349,14 +1395,14 @@ rsp(describe_groups, 4) ->
 rsp(describe_groups, 5) ->
   [{throttle_time_ms,int32},
    {groups,
-       {array,
+       {compact_array,
            [{error_code,int16},
             {group_id,compact_string},
             {group_state,compact_string},
             {protocol_type,compact_string},
             {protocol_data,compact_string},
             {members,
-                {array,
+                {compact_array,
                     [{member_id,compact_string},
                      {group_instance_id,compact_nullable_string},
                      {client_id,compact_string},
@@ -1377,9 +1423,9 @@ rsp(list_groups, V) when V >= 1, V =< 2 ->
 rsp(list_groups, 3) ->
   [{throttle_time_ms,int32},
    {error_code,int16},
-   {groups,{array,[{group_id,compact_string},
-                   {protocol_type,compact_string},
-                   {tagged_fields,tagged_fields}]}},
+   {groups,{compact_array,[{group_id,compact_string},
+                           {protocol_type,compact_string},
+                           {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 rsp(sasl_handshake, V) when V >= 0, V =< 1 ->
   [{error_code,int16},{mechanisms,{array,string}}];
@@ -1396,10 +1442,10 @@ rsp(api_versions, V) when V >= 1, V =< 2 ->
    {throttle_time_ms,int32}];
 rsp(api_versions, 3) ->
   [{error_code,int16},
-   {api_keys,{array,[{api_key,int16},
-                     {min_version,int16},
-                     {max_version,int16},
-                     {tagged_fields,tagged_fields}]}},
+   {api_keys,{compact_array,[{api_key,int16},
+                             {min_version,int16},
+                             {max_version,int16},
+                             {tagged_fields,tagged_fields}]}},
    {throttle_time_ms,int32},
    {tagged_fields,tagged_fields}];
 rsp(create_topics, 0) ->
@@ -1415,18 +1461,22 @@ rsp(create_topics, V) when V >= 2, V =< 4 ->
                    {error_message,nullable_string}]}}];
 rsp(create_topics, 5) ->
   [{throttle_time_ms,int32},
-   {topics,{array,[{name,compact_string},
-                   {error_code,int16},
-                   {error_message,compact_nullable_string},
-                   {num_partitions,int32},
-                   {replication_factor,int16},
-                   {configs,{array,[{name,compact_string},
-                                    {value,compact_nullable_string},
-                                    {read_only,boolean},
-                                    {config_source,int8},
-                                    {is_sensitive,boolean},
-                                    {tagged_fields,tagged_fields}]}},
-                   {tagged_fields,tagged_fields}]}},
+   {topics,
+       {compact_array,
+           [{name,compact_string},
+            {error_code,int16},
+            {error_message,compact_nullable_string},
+            {num_partitions,int32},
+            {replication_factor,int16},
+            {configs,
+                {compact_array,
+                    [{name,compact_string},
+                     {value,compact_nullable_string},
+                     {read_only,boolean},
+                     {config_source,int8},
+                     {is_sensitive,boolean},
+                     {tagged_fields,tagged_fields}]}},
+            {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 rsp(delete_topics, 0) ->
   [{responses,{array,[{name,string},{error_code,int16}]}}];
@@ -1435,9 +1485,9 @@ rsp(delete_topics, V) when V >= 1, V =< 3 ->
    {responses,{array,[{name,string},{error_code,int16}]}}];
 rsp(delete_topics, 4) ->
   [{throttle_time_ms,int32},
-   {responses,{array,[{name,compact_string},
-                      {error_code,int16},
-                      {tagged_fields,tagged_fields}]}},
+   {responses,{compact_array,[{name,compact_string},
+                              {error_code,int16},
+                              {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 rsp(delete_records, V) when V >= 0, V =< 1 ->
   [{throttle_time_ms,int32},
@@ -1663,9 +1713,9 @@ rsp(delete_groups, V) when V >= 0, V =< 1 ->
    {results,{array,[{group_id,string},{error_code,int16}]}}];
 rsp(delete_groups, 2) ->
   [{throttle_time_ms,int32},
-   {results,{array,[{group_id,compact_string},
-                    {error_code,int16},
-                    {tagged_fields,tagged_fields}]}},
+   {results,{compact_array,[{group_id,compact_string},
+                            {error_code,int16},
+                            {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 rsp(elect_leaders, 0) ->
   [{throttle_time_ms,int32},
@@ -1692,10 +1742,10 @@ rsp(elect_leaders, 2) ->
   [{throttle_time_ms,int32},
    {error_code,int16},
    {replica_election_results,
-       {array,
+       {compact_array,
            [{topic,compact_string},
             {partition_result,
-                {array,
+                {compact_array,
                     [{partition_id,int32},
                      {error_code,int16},
                      {error_message,compact_nullable_string},
@@ -1710,21 +1760,21 @@ rsp(incremental_alter_configs, 0) ->
                       {resource_name,string}]}}];
 rsp(incremental_alter_configs, 1) ->
   [{throttle_time_ms,int32},
-   {responses,{array,[{error_code,int16},
-                      {error_message,compact_nullable_string},
-                      {resource_type,int8},
-                      {resource_name,compact_string},
-                      {tagged_fields,tagged_fields}]}},
+   {responses,{compact_array,[{error_code,int16},
+                              {error_message,compact_nullable_string},
+                              {resource_type,int8},
+                              {resource_name,compact_string},
+                              {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 rsp(alter_partition_reassignments, 0) ->
   [{throttle_time_ms,int32},
    {error_code,int16},
    {error_message,compact_nullable_string},
    {responses,
-       {array,
+       {compact_array,
            [{name,compact_string},
             {partitions,
-                {array,
+                {compact_array,
                     [{partition_index,int32},
                      {error_code,int16},
                      {error_message,compact_nullable_string},
@@ -1735,13 +1785,17 @@ rsp(list_partition_reassignments, 0) ->
   [{throttle_time_ms,int32},
    {error_code,int16},
    {error_message,compact_nullable_string},
-   {topics,{array,[{name,compact_string},
-                   {partitions,{array,[{partition_index,int32},
-                                       {replicas,{array,int32}},
-                                       {adding_replicas,{array,int32}},
-                                       {removing_replicas,{array,int32}},
-                                       {tagged_fields,tagged_fields}]}},
-                   {tagged_fields,tagged_fields}]}},
+   {topics,
+       {compact_array,
+           [{name,compact_string},
+            {partitions,
+                {compact_array,
+                    [{partition_index,int32},
+                     {replicas,{compact_array,int32}},
+                     {adding_replicas,{compact_array,int32}},
+                     {removing_replicas,{compact_array,int32}},
+                     {tagged_fields,tagged_fields}]}},
+            {tagged_fields,tagged_fields}]}},
    {tagged_fields,tagged_fields}];
 rsp(offset_delete, 0) ->
   [{error_code,int16},
