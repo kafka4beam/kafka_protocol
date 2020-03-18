@@ -97,14 +97,21 @@ metadata(Vsn, Topics) ->
 -spec metadata(vsn(), all | [topic()], boolean()) -> req().
 metadata(Vsn, [], IsAutoCreateAllowed) ->
   metadata(Vsn, all, IsAutoCreateAllowed);
-metadata(Vsn, Topics0, IsAutoCreateAllowed) ->
-  Topics = case Topics0 of
-             all when Vsn =:= 0 -> [];
-             all -> ?kpro_null;
-             List -> List
-           end,
-  make(metadata, Vsn, [{topics, Topics},
-                       {allow_auto_topic_creation, IsAutoCreateAllowed}]).
+metadata(Vsn, Topics, IsAutoCreateAllowed) ->
+  make(metadata, Vsn,
+       #{topics => metadata_topics_list(Vsn, Topics),
+         allow_auto_topic_creation => IsAutoCreateAllowed,
+         include_cluster_authorized_operations => false,
+         include_topic_authorized_operations => false,
+         tagged_fields => #{}
+        }).
+
+%% version 0 expects an empty array for 'all'
+%% all later versions expect 'null' for 'all'
+metadata_topics_list(0, all) -> [];
+metadata_topics_list(_, all) -> ?kpro_null;
+metadata_topics_list(_, Names) ->
+  [#{name => Name, tagged_fields => #{}} || Name <- Names].
 
 %% @doc Help function to contruct a `list_offset' request
 %% against one single topic-partition.
@@ -362,12 +369,22 @@ make(API, Vsn, Fields) ->
 encode(ClientName, CorrId, Req) ->
   #kpro_req{api = API, vsn = Vsn, msg = Msg} = Req,
   ApiKey = kpro_schema:api_key(API),
-  [ encode(int16, ApiKey)
-  , encode(int16, Vsn)
-  , encode(int32, CorrId)
-  , encode(string, ClientName)
-  , encode_struct(API, Vsn, Msg)
-  ].
+  % There are 3 versions of request headers.
+  % (but the header itself has no version number indicator).
+  % Version 0 was never supported in this library.
+  % Version 1 added the client-name string field
+  % Version 2 added the flexible tagged fields (which is always null so far)
+  Header =
+    [ encode(int16, ApiKey)
+    , encode(int16, Vsn)
+    , encode(int32, CorrId)
+    , encode(string, ClientName)
+    | case Vsn >= kpro_schema:min_flexible_vsn(API) of
+        true  -> [0]; %% NULL for tagged fields in request header (version 2)
+        false -> [] %% request header version 1
+      end
+    ],
+  [Header | encode_struct(API, Vsn, Msg)].
 
 %%%_* Internal functions =======================================================
 
@@ -417,10 +434,16 @@ enc_struct([{Name, FieldSc} | Schema], Values, Stack) ->
 
 enc_struct_field({array, _Schema}, ?null, _Stack) ->
   encode(int32, -1); %% NULL
-enc_struct_field({array, Schema}, Values, Stack) ->
+enc_struct_field({compact_array, _Schema}, ?null, _Stack) ->
+  0; %% NULL
+enc_struct_field({A, Schema}, Values, Stack) when A =:= array orelse
+                                                  A =:= compact_array ->
   case is_list(Values) of
     true ->
-      [ encode(int32, length(Values))
+      [ case A of
+          array -> encode(int32, length(Values));
+          compact_array -> encode(unsigned_varint, length(Values) + 1)
+        end
       | [enc_struct_field(Schema, Value, Stack) || Value <- Values]
       ];
     false ->

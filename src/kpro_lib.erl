@@ -134,6 +134,7 @@ encode(int16, I) when is_integer(I) -> <<I:16/?INT>>;
 encode(int32, I) when is_integer(I) -> <<I:32/?INT>>;
 encode(int64, I) when is_integer(I) -> <<I:64/?INT>>;
 encode(varint, I) when is_integer(I) -> kpro_varint:encode(I);
+encode(unsigned_varint, I) when is_integer(I) -> kpro_varint:encode_unsigned(I);
 encode(nullable_string, ?null) -> <<-1:16/?INT>>;
 encode(nullable_string, Str) -> encode(string, Str);
 encode(string, Atom) when is_atom(Atom) ->
@@ -142,14 +143,25 @@ encode(string, Str) ->
   Length = iolist_size(Str),
   [encode(int16, Length), Str];
 encode(bytes, ?null) -> <<-1:32/?INT>>;
+encode(compact_bytes, ?null) -> 0;
 encode(bytes, B) when is_binary(B) orelse is_list(B) ->
   Size = iolist_size(B),
   case Size =:= 0 of
     true  -> <<-1:32/?INT>>;
     false -> [<<Size:32/?INT>>, B]
   end;
+encode(compact_bytes, B) when is_binary(B) orelse is_list(B) ->
+  [encode(unsigned_varint, iolist_size(B) + 1), B];
 encode(records, B) ->
-  encode(bytes, B).
+  encode(bytes, B);
+encode(compact_string, ?kpro_null) ->
+  0;
+encode(compact_string, S) ->
+  B = iolist_to_binary(S),
+  [encode(unsigned_varint, size(B) + 1), B];
+encode(tagged_fields, _) ->
+  %% not supported so far
+  0.
 
 %% @doc All kafka messages begin with a 32 bit correlation ID.
 -spec decode_corr_id(binary()) -> {kpro:corr_id(), binary()}.

@@ -8,7 +8,7 @@ cd $(dirname "$0")
 VERSION="${1:-2.4}"
 
 IMAGE="zmstone/kafka:${VERSION}"
-sudo docker pull $IMAGE
+#sudo docker pull $IMAGE
 
 ZK='zookeeper'
 KAFKA_1='kafka-1'
