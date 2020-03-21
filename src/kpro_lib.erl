@@ -138,12 +138,9 @@ encode(nullable_string, ?null) -> <<-1:16/?INT>>;
 encode(nullable_string, Str) -> encode(string, Str);
 encode(string, Atom) when is_atom(Atom) ->
   encode(string, atom_to_binary(Atom, utf8));
-encode(string, <<>>) -> <<0:16/?INT>>;
-encode(string, L) when is_list(L) ->
-  encode(string, iolist_to_binary(L));
-encode(string, B) when is_binary(B) ->
-  Length = size(B),
-  <<Length:16/?INT, B/binary>>;
+encode(string, Str) ->
+  Length = iolist_size(Str),
+  [encode(int16, Length), Str];
 encode(bytes, ?null) -> <<-1:32/?INT>>;
 encode(bytes, B) when is_binary(B) orelse is_list(B) ->
   Size = iolist_size(B),
