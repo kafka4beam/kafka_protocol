@@ -85,7 +85,8 @@
                        , max_bytes => count()
                        , isolation_level => isolation_level()
                        , session_id => kpro:int32()
-                       , epoch => kpro:int32()
+                       , session_epoch => kpro:int32()
+                       , rack_id => iodata()
                        }.
 
 %% @doc Make a `metadata' request
@@ -160,8 +161,25 @@ fetch(Vsn, Topic, Partition, Offset, Opts) ->
   MinBytes = maps:get(min_bytes, Opts, 0),
   MaxBytes = maps:get(max_bytes, Opts, 1 bsl 20), %% 1M
   IsolationLevel = maps:get(isolation_level, Opts, ?kpro_read_committed),
+  %% See: https://cwiki.apache.org/confluence/display/KAFKA/KIP-227%3A+Introduce+Incremental+FetchRequests+to+Increase+Partition+Scalability
+  %% Consumer session is useful when fetch request spans across multiple
+  %% topic-partitions, so that:
+  %% 1. The consumer may fetch from only a subset of the topic-partitions
+  %%    in case e.g. avoid immediately fetch again from partitions which
+  %%    have messages recently received.
+  %% 2. The broker do not have to send a topic/partition response at all
+  %%    if there is not any new messages appended or no metadata change
+  %%    sice the last fetch response.
+  %%    i.e. Send only changed data.
+  %% The default values are to disable fetch session.
   SessionID = maps:get(session_id, Opts, 0),
-  Epoch = maps:get(epoch, Opts, -1),
+  Epoch = maps:get(session_epoch, Opts, -1),
+  %% Leader epoch is returned from topic-partition metadata.
+  %% kafka partition leader make use of this number ot fence consumers with
+  %% stale metadata.
+  LeaderEpoch = maps:get(leader_epoch, Opts, -1),
+  %% Rack ID is to allow consumers fetching from closet replica (instead the leader)
+  RackID = maps:get(rack_id, Opts, ?kpro_null),
   Fields =
     [{replica_id, ?KPRO_REPLICA_ID},
      {max_wait_time, MaxWaitTime},
@@ -169,17 +187,19 @@ fetch(Vsn, Topic, Partition, Offset, Opts) ->
      {min_bytes, MinBytes},
      {isolation_level, IsolationLevel},
      {session_id, SessionID},
-     {epoch, Epoch},
+     {session_epoch, Epoch},
      {topics,[[{topic, Topic},
                {partitions,
                 [[{partition, Partition},
                   {fetch_offset, Offset},
-                  {max_bytes, MaxBytes},
-                  {log_start_offset, -1} %% irelevant to clients
+                  {partition_max_bytes, MaxBytes},
+                  {log_start_offset, -1}, %% irelevant to clients
+                  {current_leader_epoch, LeaderEpoch}
                  ]]}]]},
      % we alwyas fetch from one single topic-partition
      % never need to forget any
-     {forgetten_topics_data, []}
+     {forgotten_topics_data, []},
+     {rack_id, RackID}
     ],
   make(fetch, Vsn, Fields).
 

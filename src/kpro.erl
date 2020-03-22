@@ -184,7 +184,8 @@
 -type wait() :: non_neg_integer().
 -type required_acks() :: -1..1 | all_isr | none | leader_only.
 -type primitive() :: integer() | string() | binary() | atom().
--type field_name() :: atom().
+-type field_tag() :: integer().
+-type field_name() :: atom() | field_tag().
 -type field_value() :: primitive() | [primitive()] | struct() | [struct()].
 -type struct() :: #{field_name() => field_value()}
                 | [{field_name(), field_value()}].

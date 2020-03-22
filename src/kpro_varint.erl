@@ -41,7 +41,7 @@ encode_unsigned(Int) when Int >= 0 ->
   enc_varint(Int).
 
 %% @doc Decode unsigned varint.
--spec decode_unsigned(binary()) -> non_neg_integer().
+-spec decode_unsigned(binary()) -> {non_neg_integer(), binary()}.
 decode_unsigned(Bin) ->
   dec_varint(Bin).
 

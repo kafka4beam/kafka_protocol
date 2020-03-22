@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2018, Klarna AB
+%%%   Copyright (c) 2018-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ test_incemental_fetch(Connection, Vsn) ->
   %% session-id=0 and epoch=0 to initialize a session
   Req0 = kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, 0,
                             #{ session_id => 0
-                             , epoch => 0
+                             , session_epoch => 0
                              , max_bytes => 1
                              }),
   {ok, Rsp0} = kpro:request_sync(Connection, Req0, ?TIMEOUT),
@@ -64,13 +64,13 @@ test_incemental_fetch(Connection, Vsn) ->
   #{last_stable_offset := LatestOffset} = Header0,
   Req1 = kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, LatestOffset,
                             #{ session_id => SessionId
-                             , epoch => 1 %% 0 + 1
+                             , session_epoch => 1 %% 0 + 1
                              , max_bytes => 1
                              , max_wait_time => 10 %% ms
                              }),
   {ok, Rsp1} = kpro:request_sync(Connection, Req1, ?TIMEOUT),
   ?assertMatch(#kpro_rsp{msg = #{ error_code := no_error
-                                , responses := []
+                                , responses := [] %% no change since last fetch
                                 , session_id := SessionId
                                 }}, Rsp1).
 

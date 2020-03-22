@@ -148,7 +148,7 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
       end
     , fun(#kpro_rsp{msg = Meta}) ->
           Brokers = kpro:find(brokers, Meta),
-          [TopicMeta] = kpro:find(topic_metadata, Meta),
+          [TopicMeta] = kpro:find(topics, Meta),
           ErrorCode = kpro:find(error_code, TopicMeta),
           case ErrorCode =:= ?no_error of
             true  -> {ok, {Brokers, TopicMeta}};
@@ -156,8 +156,8 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
           end
       end
     , fun({Brokers, TopicMeta}) ->
-          Partitions = kpro:find(partition_metadata, TopicMeta),
-          Pred = fun(P_Meta) -> kpro:find(partition, P_Meta) =:= Partition end,
+          Partitions = kpro:find(partitions, TopicMeta),
+          Pred = fun(P_Meta) -> kpro:find(partition_index, P_Meta) =:= Partition end,
           case lists:filter(Pred, Partitions) of
             [] ->
               %% Partition number is out of range
@@ -175,7 +175,7 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
           end
       end
     , fun({Brokers, PartitionMeta}) ->
-          LeaderBrokerId = kpro:find(leader, PartitionMeta),
+          LeaderBrokerId = kpro:find(leader_id, PartitionMeta),
           Pred = fun(BrokerMeta) ->
                      kpro:find(node_id, BrokerMeta) =:= LeaderBrokerId
                  end,

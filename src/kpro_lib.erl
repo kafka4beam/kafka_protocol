@@ -187,6 +187,8 @@ decode(int64, Bin) ->
   {Value, Rest};
 decode(varint, Bin) ->
   kpro_varint:decode(Bin);
+decode(unsigned_varint, Bin) ->
+  kpro_varint:decode_unsigned(Bin);
 decode(string, Bin) ->
   <<Size:16/?INT, Rest/binary>> = Bin,
   copy_bytes(Size, Rest);
@@ -195,12 +197,25 @@ decode(bytes, Bin) ->
   copy_bytes(Size, Rest);
 decode(nullable_string, Bin) ->
   decode(string, Bin);
+decode(compact_string, Bin) ->
+  {Length, Body} = decode(unsigned_varint, Bin),
+  true = (Length > 0), %% not nullable
+  copy_bytes(Length - 1, Body);
+decode(compact_nullable_string, Bin) ->
+  {Length, Body} = decode(unsigned_varint, Bin),
+  case Length == 0 of
+    true  -> {?kpro_null, Body};
+    false -> copy_bytes(Length - 1, Body)
+  end;
 decode(records, Bin) ->
-  decode(bytes, Bin).
+  decode(bytes, Bin);
+decode(tagged_fields, Bin0) ->
+  {Count, Bin1} = decode(unsigned_varint, Bin0),
+  decode_tagged_fields(Count, Bin1, #{}).
 
 %% @doc Make a copy of the head instead of keeping referencing the original.
 -spec copy_bytes(-1 | count(), binary()) -> {binary(), binary()}.
-copy_bytes(-1, Bin) ->
+copy_bytes(Size, Bin) when Size =< 0 ->
   {<<>>, Bin};
 copy_bytes(Size, Bin) ->
   <<Bytes:Size/binary, Rest/binary>> = Bin,
@@ -381,6 +396,13 @@ do_ok_pipe(_FunList, {error, Reason}) ->
   {error, Reason}.
 
 make_corr_id() -> rand:uniform(1 bsl 31).
+
+decode_tagged_fields(0, Tail, Fields) -> {Fields, Tail};
+decode_tagged_fields(N, Tail0, Fields) ->
+  {Tag, Tail1} = decode(unsigned_varint, Tail0),
+  {Length, Tail2} = decode(unsigned_varint, Tail1),
+  {Value, Tail} = copy_bytes(Length, Tail2),
+  decode_tagged_fields(N - 1, Tail, Fields#{Tag => Value}).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
