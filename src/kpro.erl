@@ -288,7 +288,7 @@ encode_request(ClientId, CorrId, Req) ->
 %% @doc Encode message batch for produce request.
 -spec encode_batch(magic(), batch_input(), compress_option()) -> binary().
 encode_batch(Magic, Batch, Compression) ->
-  kpro_batch:encode(Magic, Batch, Compression).
+  iolist_to_binary(kpro_batch:encode(Magic, Batch, Compression)).
 
 %% @doc The message-set is not decoded upon receiving (in connection process).
 %% It is passed as binary to the consumer process and decoded there.

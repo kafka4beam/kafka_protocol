@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2018, Klarna Bank AB (publ)
+%%%   Copyright (c) 2018-2020, Klarna Bank AB (publ)
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -54,6 +54,9 @@
 -define(DEFAULT_ACK_TIMEOUT, 10000).
 -define(FIELD_ENCODE_ERROR(Reason, EncoderStack),
         {field_encode_error, Reason, EncoderStack}).
+-define(IS_NON_EMPTY_KV_LIST(L), (is_list(L) andalso L =/= [] andalso is_tuple(hd(L)))).
+-define(IS_STRUCT_DATA(S), (is_map(S) orelse ?IS_NON_EMPTY_KV_LIST(S))).
+-define(IS_STRUCT_SCHEMA(S), (is_list(S) orelse is_map(S))).
 
 -type vsn() :: kpro:vsn().
 -type topic() :: kpro:topic().
@@ -190,6 +193,7 @@ produce(Vsn, Topic, Partition, Batch) ->
 -spec produce(vsn(), topic(), partition(),
               binary() | batch_input(), produce_opts()) -> req().
 produce(Vsn, Topic, Partition, Batch, Opts) ->
+  ok = assert_known_api_and_vsn(produce, Vsn),
   RequiredAcks = required_acks(maps:get(required_acks, Opts, all_isr)),
   Compression = maps:get(compression, Opts, ?no_compression),
   AckTimeout = maps:get(ack_timeout, Opts, ?DEFAULT_ACK_TIMEOUT),
@@ -209,18 +213,22 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
         true = FirstSequence >= 0, %% assert
         kpro_batch:encode_tx(Batch, Compression, FirstSequence, TxnCtx)
     end,
-  Fields =
-    [{transactional_id, transactional_id(TxnCtx)},
-     {acks, RequiredAcks},
-     {timeout, AckTimeout},
-     {topic_data, [[{topic, Topic},
-                    {data, [[{partition, Partition},
-                             {record_set, EncodedBatch}
-                            ]]}
-                   ]]}
+  Msg =
+    [ [encode(string, transactional_id(TxnCtx)) || Vsn > 2]
+    , encode(int16, RequiredAcks)
+    , encode(int32, AckTimeout)
+    , encode(int32, 1) %% topic array header
+    , encode(string, Topic)
+    , encode(int32, 1) %% partition array header
+    , encode(int32, Partition)
+    , encode(bytes, EncodedBatch)
     ],
-  Req = make(produce, Vsn, Fields),
-  Req#kpro_req{no_ack = RequiredAcks =:= 0}.
+  #kpro_req{ api = produce
+           , vsn = Vsn
+           , msg = Msg
+           , ref = make_ref()
+           , no_ack = RequiredAcks =:= 0
+           }.
 
 %% @doc Make `end_txn' request.
 -spec end_txn(txn_ctx(), commit | abort) -> req().
@@ -352,16 +360,17 @@ required_acks(leader_only) -> 1;
 required_acks(all_isr) -> -1;
 required_acks(I) when I >= -1 andalso I =< 1 -> I.
 
-encode_struct(_API, _Vsn, Bin) when is_binary(Bin) -> Bin;
-encode_struct(API, Vsn, Fields) ->
+encode_struct(API, Vsn, Fields) when ?IS_STRUCT_DATA(Fields) ->
   Schema = kpro_lib:get_req_schema(API, Vsn),
   try
-    bin(enc_struct(Schema, Fields, [{API, Vsn}]))
+    enc_struct(Schema, Fields, [{API, Vsn}])
   catch
     throw : ?FIELD_ENCODE_ERROR(Reason, Stack) ?BIND_STACKTRACE(Trace) ->
       ?GET_STACKTRACE(Trace),
       erlang:raise(error, {Reason, Stack, Fields}, Trace)
-  end.
+  end;
+encode_struct(_API, _Vsn, IoData) ->
+  IoData.
 
 %% Encode struct.
 enc_struct([], _Values, _Stack) -> [];
@@ -391,7 +400,7 @@ enc_struct_field({array, Schema}, Values, Stack) ->
     false ->
       erlang:throw(?FIELD_ENCODE_ERROR(not_array, Stack))
   end;
-enc_struct_field(Schema, Value, Stack) when ?IS_STRUCT(Schema) ->
+enc_struct_field(Schema, Value, Stack) when ?IS_STRUCT_SCHEMA(Schema) ->
   enc_struct(Schema, Value, Stack);
 enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
   try

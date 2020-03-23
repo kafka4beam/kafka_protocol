@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2018, Klarna AB
+%%%   Copyright (c) 2018-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -38,15 +38,15 @@
 -define(NO_META, ?KPRO_NO_BATCH_META).
 
 %% @doc Encode a list of batch inputs into byte stream.
--spec encode(magic(), batch_input(), compress_option()) -> binary().
+-spec encode(magic(), batch_input(), compress_option()) -> iodata().
 encode(_MagicVsn = 2, Batch, Compression) ->
   FirstSequence = -1,
   NonTxn = #{ producer_id => -1
             , producer_epoch => -1
             },
-  iolist_to_binary(encode_tx(Batch, Compression, FirstSequence, NonTxn));
+  encode_tx(Batch, Compression, FirstSequence, NonTxn);
 encode(MagicVsn, Batch, Compression) ->
-  iolist_to_binary(kpro_batch_v01:encode(MagicVsn, Batch, Compression)).
+  kpro_batch_v01:encode(MagicVsn, Batch, Compression).
 
 %% @doc Encode a batch of magic version 2.
 % RecordBatch =>
@@ -93,15 +93,14 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
     , enc(int32, Count)           % {Count,           T8} = dec(int32, T7),
     , EncodedBatch
     ],
-  Body1 = iolist_to_binary(Body0),
-  CRC = crc32cer:nif(Body1),
+  CRC = crc32cer:nif(Body0),
   Body =
     [ enc(int32, PartitionLeaderEpoch)
     , enc(int8,  Magic)
     , enc(int32, CRC)
-    , Body1
+    , Body0
     ],
-  Size = kpro_lib:data_size(Body),
+  Size = iolist_size(Body),
   [ enc(int64, FirstOffset)
   , enc(int32, Size)
   | Body
@@ -280,7 +279,7 @@ enc_record(Offset, TsBase, #{value := Value} = M) ->
          , enc(bytes, Value)
          , enc_headers(Headers)
          ],
-  Size = kpro_lib:data_size(Body),
+  Size = iolist_size(Body),
   [enc(varint, Size), Body].
 
 enc_headers(Headers) ->
