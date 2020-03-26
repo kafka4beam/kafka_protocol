@@ -195,11 +195,11 @@ discover_coordinator(Connection, Type, Id, Timeout) ->
   FL =
     [ fun() -> get_api_vsn_range(Connection, find_coordinator) end
     , fun({_, 0}) when Type =:= group ->
-          {ok, kpro:make_request(find_coordinator, 0, [{group_id, Id}])};
+          {ok, kpro:make_request(find_coordinator, 0, [{key, Id}])};
          ({_, 0}) when Type =:= txn ->
           {error, {bad_vsn, [{api, find_coordinator}, {type, txn}]}};
          ({_, V}) ->
-          Fields = [ {coordinator_key, Id}, {coordinator_type, Type}],
+          Fields = [ {key, Id}, {key_type, Type}],
           {ok, kpro:make_request(find_coordinator, V, Fields)}
       end
     , fun(Req) -> kpro_connection:request_sync(Connection, Req, Timeout) end
@@ -208,9 +208,8 @@ discover_coordinator(Connection, Type, Id, Timeout) ->
           ErrMsg = kpro:find(error_message, Rsp, ?kpro_null),
           case ErrorCode =:= ?no_error of
             true ->
-              CoorInfo = kpro:find(coordinator, Rsp),
-              Host = kpro:find(host, CoorInfo),
-              Port = kpro:find(port, CoorInfo),
+              Host = kpro:find(host, Rsp),
+              Port = kpro:find(port, Rsp),
               {ok, {Host, Port}};
             false when ErrMsg =:= ?kpro_null ->
               %% v0

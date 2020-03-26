@@ -175,7 +175,7 @@ fetch(Vsn, Topic, Partition, Offset, Opts) ->
   SessionID = maps:get(session_id, Opts, 0),
   Epoch = maps:get(session_epoch, Opts, -1),
   %% Leader epoch is returned from topic-partition metadata.
-  %% kafka partition leader make use of this number ot fence consumers with
+  %% kafka partition leader make use of this number to fence consumers with
   %% stale metadata.
   LeaderEpoch = maps:get(leader_epoch, Opts, -1),
   %% Rack ID is to allow consumers fetching from closet replica (instead the leader)
@@ -443,6 +443,8 @@ enc_struct([{Name, FieldSc} | Schema], Values, Stack) ->
     try
       kpro_lib:find(Name, Values)
     catch
+      error : {no_such_field, tagged_fields} ->
+        [];
       error : {no_such_field, _} ->
         erlang:error({field_missing, [ {stack, lists:reverse(NewStack)}
                                      , {input, Values}]})
@@ -483,13 +485,13 @@ enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
 %% Translate embedded bytes to structs or enum values to enum symbols.
 translate([isolation_level | _] , Value) ->
   ?ISOLATION_LEVEL_INTEGER(Value);
-translate([protocol_metadata | _] = Stack, Value) ->
+translate([metadata, protocols | _] = Stack, Value) ->
   Schema = kpro_lib:get_prelude_schema(cg_protocol_metadata, 0),
   bin(enc_struct(Schema, Value, Stack));
-translate([member_assignment | _] = Stack, Value) ->
+translate([assignment, assignments | _] = Stack, Value) ->
   Schema = kpro_lib:get_prelude_schema(cg_memeber_assignment, 0),
   bin(enc_struct(Schema, Value, Stack));
-translate([coordinator_type | _], Value) ->
+translate([key_type | _], Value) ->
   case Value of
     group -> 0;
     txn -> 1;

@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2018, Klarna AB
+%%%   Copyright (c) 2018-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -40,13 +40,14 @@
 %% 5. leave_group
 full_flow_test() ->
   GroupId = make_group_id(full_flow_test),
+  StaticMemberID = <<"member-1">>,
   % find_coordinator (group)
   {ok, Connection} = connect_coordinator(GroupId),
   % join_group
   #{ member_id := MemberId
    , generation_id := Generation
-   } = join_group(Connection, GroupId),
-  ok = sync_group(Connection, GroupId, MemberId, Generation),
+   } = join_group(Connection, GroupId, StaticMemberID),
+  ok = sync_group(Connection, GroupId, MemberId, Generation, StaticMemberID),
   % send hartbeats, there should be a generation_id in heartbeat requests,
   % generation bumps whenever there is a group re-balance, however since
   % we are testing with only one group member, we do not expect any group
@@ -72,29 +73,31 @@ connect_coordinator(GroupId) ->
   Args = #{type => group, id => GroupId},
   kpro:connect_coordinator(Cluster, ConnCfg, Args).
 
-join_group(Connection, GroupId) ->
+%% NOTE: MemberId is only relevant for join_group request version 4 or later.
+join_group(Connection, GroupId, StaticMemberId) ->
   Meta = #{ version => 0
           , topics => [?TOPIC]
           , user_data => <<"magic-1">>
           },
   Fields = #{ group_id => GroupId
-            , session_timeout => timer:seconds(10)
-            , rebalance_timeout => timer:seconds(10)
+            , session_timeout_ms => timer:seconds(10)
+            , rebalance_timeout_ms => timer:seconds(10)
             , member_id => <<>>
             , protocol_type => <<"consumer">>
-            , group_protocols =>
-                [ #{ protocol_name => <<"test-v1">>
-                   , protocol_metadata => Meta
+            , group_instance_id  => StaticMemberId
+            , protocols =>
+                [ #{ name => <<"test-v1">>
+                   , metadata => Meta
                    }
                 ]
             },
   Rsp = rand_vsn_request_sync(Connection, join_group, Fields),
   #{ error_code := no_error
-   , group_protocol := <<"test-v1">>
-   , leader_id := LeaderId
+   , protocol_name := <<"test-v1">>
+   , leader := LeaderId
    , member_id := MemberId
    , members := [#{ member_id := MemberId1
-                  , member_metadata := Meta
+                  , metadata := Meta
                   }]
    } = Rsp,
   %% only member in grou, leader must be self
@@ -102,7 +105,7 @@ join_group(Connection, GroupId) ->
   ?assertEqual(MemberId, MemberId1),
   Rsp.
 
-sync_group(Connection, GroupId, MemberId, Generation) ->
+sync_group(Connection, GroupId, MemberId, Generation, StaticMemberId) ->
   MemberAssignment =
     #{ version => 0
      , topic_partitions => [#{ topic => ?TOPIC
@@ -112,23 +115,24 @@ sync_group(Connection, GroupId, MemberId, Generation) ->
      },
   Assignment =
     [ #{ member_id => MemberId
-       , member_assignment => MemberAssignment
+       , assignment => MemberAssignment
        }
     ],
   Fields = #{ group_id => GroupId
             , generation_id => Generation
             , member_id => MemberId
-            , group_assignment => Assignment
+            , assignments => Assignment
+            , group_instance_id => StaticMemberId
             },
   Rsp = rand_vsn_request_sync(Connection, sync_group, Fields),
   #{ error_code := no_error
-   , member_assignment := MemberAssignment
+   , assignment := MemberAssignment
    } = Rsp,
   ok.
 
 describe_groups(Connection, GroupId) ->
   Groups = [GroupId, <<"unknown-group">>],
-  Body = #{group_ids => Groups},
+  Body = #{groups => Groups, include_authorized_operations => true},
   Rsp = rand_vsn_request_sync(Connection, describe_groups, Body),
   #{groups := RspGroups} = Rsp,
   lists:foreach(
@@ -150,7 +154,7 @@ leave_group(Connection, GroupId, MemberId) ->
   ok.
 
 heartbeat(Connection, GroupId, MemberId, Generation) ->
-  {ok, {Min, Max}} = kpro:get_api_vsn_range(Connection, heartbeat),
+  {Min, Max} = get_api_vsn_range(Connection, heartbeat),
   SendFun =
     fun() ->
         Vsn = rand(Min, Max),
@@ -177,7 +181,7 @@ heartbeat_loop(SendFun) ->
   end.
 
 rand_vsn_request_sync(Connection, API, Body) ->
-  {ok, {Min, Max}} = kpro:get_api_vsn_range(Connection, API),
+  {Min, Max} = get_api_vsn_range(Connection, API),
   Vsn = rand(Min, Max),
   Req = kpro:make_request(API, Vsn, Body),
   {ok, #kpro_rsp{msg = Rsp}} = kpro:request_sync(Connection, Req, ?TIMEOUT),
@@ -198,6 +202,20 @@ rand() ->
 
 rand(Min, Max) ->
   rand() rem (Max - Min + 1) + Min.
+
+get_api_vsn_range(Connection, API) ->
+  {ok, KafkaSupportedRange} = kpro:get_api_vsn_range(Connection, API),
+  kpro_api_vsn:intersect(KafkaSupportedRange, range(API)).
+
+%% Max version for consumer group APIs are all before the introduction of
+%% group_instance_id (see KIP-345). we are not testing it so far.
+%% TODO: Add tests to support group_instance_id
+range(join_group) -> {0, 4};
+range(heartbeat) -> {0, 2};
+range(leave_group) -> {0, 2};
+range(sync_group) -> {0, 2};
+range(describe_groups) -> {0, 4};
+range(list_groups) -> {0, 100}.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

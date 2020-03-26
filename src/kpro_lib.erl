@@ -155,8 +155,11 @@ encode(compact_bytes, B) when is_binary(B) orelse is_list(B) ->
 encode(records, B) ->
   encode(bytes, B);
 encode(compact_string, ?kpro_null) ->
+  error(not_nullable);
+encode(compact_nullable_string, ?kpro_null) ->
   0;
-encode(compact_string, S) ->
+encode(C, S) when C =:= compact_string orelse
+                  C =:= compact_nullable_string ->
   B = iolist_to_binary(S),
   [encode(unsigned_varint, size(B) + 1), B];
 encode(tagged_fields, _) ->
@@ -195,6 +198,10 @@ decode(string, Bin) ->
 decode(bytes, Bin) ->
   <<Size:32/?INT, Rest/binary>> = Bin,
   copy_bytes(Size, Rest);
+decode(compact_bytes, Bin) ->
+  {Length, Body} = decode(unsigned_varint, Bin),
+  true = (Length > 0), %% not nullable
+  copy_bytes(Length - 1, Body);
 decode(nullable_string, Bin) ->
   decode(string, Bin);
 decode(compact_string, Bin) ->

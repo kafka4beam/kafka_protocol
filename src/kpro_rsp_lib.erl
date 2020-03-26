@@ -123,15 +123,15 @@ translate([api_key | _], ApiKey) ->
   end;
 translate([error_code | _], ErrorCode) ->
   kpro_schema:ec(ErrorCode);
-translate([member_metadata | _] = Stack, Bin) ->
+translate([metadata, members | _] = Stack, Bin) ->
   Schema = kpro_lib:get_prelude_schema(cg_member_metadata, 0),
   case Bin =:= <<>> of
     true  -> ?kpro_cg_no_member_metadata;
     false -> dec_struct_clean(Schema, [{cg_member_metadata, 0} | Stack], Bin)
   end;
-translate([member_assignment | _], <<>>) ->
+translate([assignment | _], <<>>) ->
   ?kpro_cg_no_assignment; %% no assignment for this member
-translate([member_assignment | _] = Stack, Bin) ->
+translate([assignment | _] = Stack, Bin) ->
   Schema = kpro_lib:get_prelude_schema(cg_memeber_assignment, 0),
   dec_struct_clean(Schema, [{cg_memeber_assignment, 0} | Stack], Bin);
 translate([isolation_level | _], Integer) ->
