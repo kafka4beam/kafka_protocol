@@ -1,3 +1,6 @@
+* 2.3.6
+   - Upgrade snappyer and crc32cer to fix build in windows
+
 * 2.3.5
   - Improve produce request encoding performance by 35%
 
