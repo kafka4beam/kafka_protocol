@@ -180,6 +180,16 @@ parse_rsp(#kpro_rsp{ api = create_partitions
                    , msg = Msg
                    }) ->
   error_if_any(kpro:find(topic_errors, Msg));
+parse_rsp(#kpro_rsp{ api = describe_configs
+                   , msg = Msg
+                   }) ->
+  Resources = kpro:find(resources, Msg),
+  ok = error_if_any(Resources),
+  Resources;
+parse_rsp(#kpro_rsp{ api = alter_configs
+                   , msg = Msg
+                   }) ->
+  error_if_any(kpro:find(resources, Msg));
 parse_rsp(#kpro_rsp{msg = Msg}) ->
   Msg.
 

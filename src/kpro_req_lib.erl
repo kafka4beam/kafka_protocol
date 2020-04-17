@@ -43,6 +43,10 @@
         , delete_topics/3
         ]).
 
+-export([ describe_configs/3
+        , alter_configs/3
+        ]).
+
 -export([ encode/3
         , make/3
         ]).
@@ -285,7 +289,7 @@ add_offsets_to_txn(TxnCtx, CgId) ->
 %% @doc Make `create_topics' request.
 %% if 0 is given as `timeout' option the request will trigger a creation
 %% but return immediately.
-%% `validate_only' option is only relavent when the API version is
+%% `validate_only' option is only relevant when the API version is
 %% greater than 0.
 -spec create_topics(vsn(), [Topics :: kpro:struct()],
                     #{timeout => kpro:int32(),
@@ -320,6 +324,28 @@ delete_topics(Vsn, Topics, Opts) ->
           , timeout => Timeout
           },
   make(delete_topics, Vsn, Body).
+
+%% @doc Make a `describe_configs' request.
+%% `include_synonyms' option is only relevant when the API version is
+%% greater than 0.
+-spec describe_configs(vsn(), [Resources :: kpro:struct()],
+                       #{include_synonyms => boolean()}) -> req().
+describe_configs(Vsn, Resources, Opts) ->
+  IncludeSynonyms = maps:get(include_synonyms, Opts, false),
+  Body = #{ resources => Resources
+          , include_synonyms => IncludeSynonyms
+          },
+  make(describe_configs, Vsn, Body).
+
+%% @doc Make an `alter_configs' request.
+-spec alter_configs(vsn(), [Resources :: kpro:struct()],
+                    #{validate_only => boolean()}) -> req().
+alter_configs(Vsn, Resources, Opts) ->
+  ValidateOnly = maps:get(validate_only, Opts, false),
+  Body = #{ resources => Resources
+          , validate_only => ValidateOnly
+          },
+  make(alter_configs, Vsn, Body).
 
 %% @doc Help function to make a request body.
 -spec make(api(), vsn(), struct()) -> req().
