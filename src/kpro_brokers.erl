@@ -281,22 +281,15 @@ api_vsn_range_intersection(undefined) ->
 api_vsn_range_intersection(Vsns) ->
   maps:fold(
     fun(API, {Min, Max}, Acc) ->
-        case api_vsn_range_intersection(API, Min, Max) of
+        case api_vsn_range_intersection(API, {Min, Max}) of
           false -> Acc;
           Intersection -> Acc#{API => Intersection}
         end
     end, #{}, Vsns).
 
 %% Intersect received api version range with supported range.
-api_vsn_range_intersection(API, MinReceived, MaxReceived) ->
-  case kpro_api_vsn:range(API) of
-    {MinSupported, MaxSupported} ->
-      Min = max(MinSupported, MinReceived),
-      Max = min(MaxSupported, MaxReceived),
-      Min =< Max andalso {Min, Max};
-    false ->
-      false
-  end.
+api_vsn_range_intersection(API, Received) ->
+  kpro_api_vsn:intersect(kpro_api_vsn:range(API), Received).
 
 connect_any([], _Config, Errors) ->
   {error, lists:reverse(Errors)};
