@@ -106,23 +106,32 @@ test_alter_configs(false) ->
 test_alter_configs(Vsn) ->
   {ok, [Topic | _]} = get_test_topics(),
   AlterConfigsArgs =
-    #{ resource_type => ?RESOURCE_TYPE_TOPIC
-     , resource_name => Topic
-     , config_entries => [
-                          [ {config_name, "cleanup.policy"}
-                          , {config_value, <<"compact">>}]
-                         ]
-     },
+    fun(Policy) ->
+        #{ resource_type => ?RESOURCE_TYPE_TOPIC
+         , resource_name => Topic
+         , config_entries => [#{config_name => "cleanup.policy",
+                                config_value => Policy}]
+         }
+    end,
   Opts = #{validate_only => false},
-  Req = kpro_req_lib:alter_configs(Vsn, [AlterConfigsArgs], Opts),
+  Req = fun(Policy) ->
+            kpro_req_lib:alter_configs(Vsn, [AlterConfigsArgs(Policy)], Opts)
+        end,
   DescribeVsn = get_max_api_vsn(describe_configs),
+  GetPolicy = fun(Conn) ->
+                  get_topic_config(DescribeVsn, Conn, Topic, "cleanup.policy")
+              end,
   kpro_test_lib:with_connection(
     fun(Endpoints, Config) -> kpro:connect_controller(Endpoints, Config) end,
     fun(Conn) ->
-        validate_topic_config(DescribeVsn, Conn, Topic, "cleanup.policy", <<"delete">>),
-        {ok, Rsp} = kpro:request_sync(Conn, Req, infinity),
+        Before = GetPolicy(Conn),
+        After = case Before of
+                  <<"delete">> -> <<"compact">>;
+                  <<"compact">> -> <<"delete">>
+                end,
+        {ok, Rsp} = kpro:request_sync(Conn, Req(After), infinity),
         ok = kpro_test_lib:parse_rsp(Rsp),
-        validate_topic_config(DescribeVsn, Conn, Topic, "cleanup.policy", <<"compact">>)
+        ?assertEqual(After, GetPolicy(Conn))
     end).
 
 %% Delete all topics created in this test module.
@@ -198,9 +207,9 @@ get_max_api_vsn(API) ->
 
 rand() -> rand:uniform(1000000).
 
-validate_topic_config(false, _, _, _, _) ->
-  not_available;
-validate_topic_config(Vsn, Conn, Topic, ConfigName, ConfigValue) ->
+get_topic_config(false, _, _, _) ->
+  false;
+get_topic_config(Vsn, Conn, Topic, ConfigName) ->
   DescribeConfigArgs =
     #{ resource_type => ?RESOURCE_TYPE_TOPIC
      , resource_name => Topic
@@ -210,7 +219,7 @@ validate_topic_config(Vsn, Conn, Topic, ConfigName, ConfigValue) ->
   {ok, Rsp} = kpro:request_sync(Conn, Req, infinity),
   [Resource] = kpro_test_lib:parse_rsp(Rsp),
   [Entry] = kpro:find(config_entries, Resource),
-  ?assertEqual(ConfigValue, kpro:find(config_value, Entry)).
+  kpro:find(config_value, Entry).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
