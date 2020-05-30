@@ -100,6 +100,7 @@
              , int64/0
              , isolation_level/0
              , key/0
+             , leader_epoch/0
              , magic/0
              , message/0
              , msg_input/0
@@ -224,6 +225,7 @@
 -type group_id() :: binary().
 -type transactional_id() :: binary().
 -type producer_epoch() :: int16().
+-type leader_epoch() :: int32().
 -type txn_ctx() :: #{ connection => connection()
                     , transactional_id => transactional_id()
                     , producer_id => producer_id()

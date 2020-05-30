@@ -19,6 +19,7 @@
 
 -export([ list_offsets/4
         , list_offsets/5
+        , list_offsets/6
         ]).
 
 -export([ fetch/5
@@ -126,11 +127,18 @@ list_offsets(Vsn, Topic, Partition, Time) ->
 -spec list_offsets(vsn(), topic(), partition(),
                    latest | earliest | msg_ts(),
                    isolation_level()) -> req().
-list_offsets(Vsn, Topic, Partition, latest, IsolationLevel) ->
-  list_offsets(Vsn, Topic, Partition, -1, IsolationLevel);
-list_offsets(Vsn, Topic, Partition, earliest, IsolationLevel) ->
-  list_offsets(Vsn, Topic, Partition, -2, IsolationLevel);
 list_offsets(Vsn, Topic, Partition, Time, IsolationLevel) ->
+  list_offsets(Vsn, Topic, Partition, Time,
+               IsolationLevel, _LeaderEpoch = -1).
+
+%% @doc Extends `list_offsets/5' with leader-epoch number which can be obtained
+%% from metadata response for each partition.
+-spec list_offsets(vsn(), topic(), partition(),
+                   latest | earliest | msg_ts(),
+                   isolation_level(),
+                   kpro:leader_epoch()) -> req().
+list_offsets(Vsn, Topic, Partition, Time0, IsolationLevel, LeaderEpoch) ->
+  Time = offset_time(Time0),
   PartitionFields =
     case Vsn of
       0 ->
@@ -140,7 +148,8 @@ list_offsets(Vsn, Topic, Partition, Time, IsolationLevel) ->
       _ ->
         %% max_num_offsets is removed since version 1
         [{partition, Partition},
-         {timestamp, Time}
+         {timestamp, Time},
+         {current_leader_epoch, LeaderEpoch}
         ]
     end,
   Fields =
@@ -524,6 +533,10 @@ assert_known_api_and_vsn(API, Vsn) ->
 
 transactional_id(false) -> ?kpro_null;
 transactional_id(#{transactional_id := TxnId}) -> TxnId.
+
+offset_time(latest) -> -1;
+offset_time(earliest) -> -2;
+offset_time(T) when is_integer(T) -> T.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
