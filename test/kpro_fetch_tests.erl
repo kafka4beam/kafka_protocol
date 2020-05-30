@@ -52,8 +52,11 @@ incremental_fetch_test() ->
   end.
 
 test_incemental_fetch(Connection, Vsn) ->
+  %% resolve latest offset
+  LatestOffset = kpro_test_lib:list_offset(Connection, ?TOPIC, ?PARTI,
+                                           latest, 5000),
   %% session-id=0 and epoch=0 to initialize a session
-  Req0 = kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, 0,
+  Req0 = kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, LatestOffset,
                             #{ session_id => 0
                              , session_epoch => 0
                              , max_bytes => 1
@@ -61,7 +64,8 @@ test_incemental_fetch(Connection, Vsn) ->
   {ok, Rsp0} = kpro:request_sync(Connection, Req0, ?TIMEOUT),
   #{session_id := SessionId} = Rsp0#kpro_rsp.msg,
   #{header := Header0} = kpro_test_lib:parse_rsp(Rsp0),
-  #{last_stable_offset := LatestOffset} = Header0,
+  #{last_stable_offset := LatestOffset1} = Header0,
+  ?assertEqual(LatestOffset, LatestOffset1),
   Req1 = kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, LatestOffset,
                             #{ session_id => SessionId
                              , session_epoch => 1 %% 0 + 1
@@ -70,9 +74,11 @@ test_incemental_fetch(Connection, Vsn) ->
                              }),
   {ok, Rsp1} = kpro:request_sync(Connection, Req1, ?TIMEOUT),
   ?assertMatch(#kpro_rsp{msg = #{ error_code := no_error
-                                , responses := [] %% no change since last fetch
                                 , session_id := SessionId
-                                }}, Rsp1).
+                                }}, Rsp1),
+  %% No change since last fetch, assert nothing in response
+  %% including topic-partition metadata.
+  ?assertEqual([], maps:get(responses, Rsp1#kpro_rsp.msg)).
 
 fetch_and_verify(_Connection, _Topic, _Vsn, _BeginOffset, []) -> ok;
 fetch_and_verify(Connection, Topic, Vsn, BeginOffset, Messages) ->
