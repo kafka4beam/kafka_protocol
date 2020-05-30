@@ -38,11 +38,11 @@ test_create_topic_partition(false, _) ->
 test_create_topic_partition(CreateTopicsVsn, CreatePartitionsVsn) ->
   Topic = make_random_topic_name(),
   CreateTopicArgs =
-    #{ topic => Topic
+    #{ name => Topic
      , num_partitions => 1
      , replication_factor => 1
-     , replica_assignment => []
-     , config_entries => []
+     , assignments => []
+     , configs => []
      },
   AssignNewPartitionsTo = [[ _BrokerId = 0 ]],
   CreatePartitionArgs =
@@ -168,13 +168,13 @@ get_test_topics(Connection) ->
           kpro_connection:request_sync(Connection, Req, 5000)
       end
     , fun(#kpro_rsp{msg = Meta}) ->
-          Topics = kpro:find(topic_metadata, Meta),
+          Topics = kpro:find(topics, Meta),
           Result =
             lists:foldl(
               fun(Topic, Acc) ->
                   ErrorCode = kpro:find(error_code, Topic),
                   ErrorCode = ?no_error, %% assert
-                  Name = kpro:find(topic, Topic),
+                  Name = kpro:find(name, Topic),
                   case lists:prefix(atom_to_list(?MODULE),
                                     binary_to_list(Name)) of
                     true -> [Name | Acc];

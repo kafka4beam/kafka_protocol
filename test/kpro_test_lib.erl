@@ -173,7 +173,7 @@ parse_rsp(#kpro_rsp{ api = fetch
 parse_rsp(#kpro_rsp{ api = create_topics
                    , msg = Msg
                    }) ->
-  error_if_any(kpro:find(topic_errors, Msg));
+  error_if_any(kpro:find(topics, Msg));
 parse_rsp(#kpro_rsp{ api = delete_topics
                    , msg = Msg
                    }) ->

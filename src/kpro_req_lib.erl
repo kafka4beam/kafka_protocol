@@ -333,8 +333,8 @@ add_offsets_to_txn(TxnCtx, CgId) ->
 create_topics(Vsn, Topics, Opts) ->
   Timeout = maps:get(timeout, Opts, 0),
   ValidateOnly = maps:get(validate_only, Opts, false),
-  Body = #{ create_topic_requests => Topics
-          , timeout => Timeout
+  Body = #{ topics => Topics
+          , timeout_ms => Timeout
           , validate_only => ValidateOnly
           },
   make(create_topics, Vsn, Body).
