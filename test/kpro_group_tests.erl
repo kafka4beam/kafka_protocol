@@ -31,6 +31,7 @@
 
 -define(TIMEOUT, 10000).
 -define(TOPIC, <<"t1">>).
+-define(STATIC_MEMBER_ID, <<"member-1">>).
 
 %% A typical group member live-cycle:
 %% 1. find_coordinator, to figure out which broker to connect to
@@ -45,7 +46,7 @@ full_flow_test_() ->
 
 test_full_flow(KafkaVsn) ->
   GroupId = make_group_id(full_flow_test),
-  StaticMemberID = <<>>,
+  StaticMemberID = ?STATIC_MEMBER_ID,
   % find_coordinator (group)
   {ok, Connection} = connect_coordinator(GroupId),
   % join_group
@@ -173,6 +174,10 @@ list_groups(Connection, KafkaVsn) ->
 leave_group(Connection, GroupId, MemberId, KafkaVsn) ->
   Fields = #{ group_id => GroupId
             , member_id => MemberId
+              %% members field since 2.3
+            , members => [#{member_id => MemberId,
+                            group_instance_id => ?STATIC_MEMBER_ID
+                           }]
             },
   Rsp = request_sync(Connection, leave_group, Fields, KafkaVsn),
   ?assertMatch(#{error_code := no_error}, Rsp),
@@ -184,6 +189,7 @@ heartbeat(Connection, GroupId, MemberId, Generation, KafkaVsn) ->
                           [ {group_id, GroupId}
                           , {generation_id, Generation}
                           , {member_id, MemberId}
+                          , {group_instance_id, ?STATIC_MEMBER_ID}
                           ]),
   SendFun =
     fun() ->
@@ -224,9 +230,7 @@ rand() ->
   I.
 
 kafka_vsns() ->
-  [v0_9, v0_10, v0_11, v1_0, v2_0, v2_1, v2_2
-   %%,v2_3, v2_4 % commented out, TODO: test group_instance_id
-  ].
+  [v0_9, v0_10, v0_11, v1_0, v2_0, v2_1, v2_2, v2_3, v2_4].
 
 max_vsn(v0_9) -> max_vsn(v0_10);
 max_vsn(v0_10) ->
