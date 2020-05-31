@@ -1,3 +1,7 @@
+* 3.0.0
+  - API support for Kafka 2.4
+    Non backward compatible changes in request/response struct field names.
+
 * 2.4.1
   - Upgrade snappyer (1.2.6) and crc32cer (0.1.8):
     no need to link erl_interface for nif build
