@@ -290,7 +290,7 @@ add_partitions_to_txn(TxnCtx, TopicPartitionList) ->
             Topic, fun(PL) -> [Partition | PL] end,
             [Partition], Acc)
       end, #{}, TopicPartitionList),
-  Body = TxnCtx#{topics => tp_map_to_array(Grouped)},
+  Body = TxnCtx#{topics => tp_map_to_array(topic, Grouped)},
   make(add_partitions_to_txn, _Vsn = 0, Body).
 
 %% @doc Make a `txn_offset_commit' request.
@@ -307,13 +307,14 @@ txn_offset_commit(GrpId, TxnCtx, Offsets, DefaultUserData) ->
               {O, D} -> {O, D};
               O      -> {O, DefaultUserData}
             end,
-          PD = #{ partition => Partition
-                , offset => Offset
-                , metadata => UserData
+          PD = #{ partition_index => Partition
+                , committed_offset => Offset
+                , committed_leader_epoch => -1
+                , committed_metadata => UserData
                 },
           kpro_lib:update_map(Topic, fun(PDL) -> [PD | PDL] end, [PD], Acc)
       end, #{}, Offsets),
-  Body = TxnCtx#{topics => tp_map_to_array(All), group_id => GrpId},
+  Body = TxnCtx#{topics => tp_map_to_array(name, All), group_id => GrpId},
   make(txn_offset_commit, _Vsn = 0, Body).
 
 %% @doc Make `add_offsets_to_txn' request.
@@ -418,11 +419,11 @@ encode(ClientName, CorrId, Req) ->
 %%%_* Internal functions =======================================================
 
 %% Turn #{Topic => PartitionsArray} into
-%% [#{topic => Topic, partitions => PartitionsArray}]
-tp_map_to_array(TPM) ->
+%% [#{TopicNameField => Topic, partitions => PartitionsArray}]
+tp_map_to_array(TopicNameField, TPM) ->
   maps:fold(
     fun(Topic, Partitions, Acc) ->
-        [ #{ topic => Topic
+        [ #{ TopicNameField => Topic
            , partitions => Partitions
            } | Acc ]
     end, [], TPM).
