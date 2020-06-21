@@ -1,6 +1,13 @@
 * 3.0.0
   - API support for Kafka 2.4
     Non backward compatible changes in request/response struct field names.
+    New Kafka APIs:
+      - `offset_for_leader_epoch`
+      - `elect_leaders`
+      - `incremental_alter_configs`
+      - `alter_partition_reassignments`
+      - `list_partition_reassignments`
+      - `offset_delete`
 
 * 2.4.1
   - Upgrade snappyer (1.2.6) and crc32cer (0.1.8):
