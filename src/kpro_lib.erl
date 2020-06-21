@@ -172,7 +172,7 @@ decode_corr_id(<<ID:32/unsigned-integer, Body/binary>>) ->
   {ID, Body}.
 
 %% @doc Decode primitives.
--spec decode(kpro:primitive_type(), binary()) -> {primitive(), binary()}.
+-spec decode(tagged_fields | kpro:primitive_type(), binary()) -> {primitive(), binary()}.
 decode(boolean, Bin) ->
   <<Value:8/?INT, Rest/binary>> = Bin,
   {Value =/= 0, Rest};
