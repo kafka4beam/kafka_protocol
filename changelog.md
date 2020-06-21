@@ -8,6 +8,43 @@
       - `alter_partition_reassignments`
       - `list_partition_reassignments`
       - `offset_delete`
+    New versions of old APIs:
+      - `produce`: 6-8
+      - `fetch`: 8-11
+      - `list_offsets`: 3-5
+      - `metadata`: 6-9
+      - `offset_commit`: 4-8
+      - `offset_fetch`: 4-6
+      - `find_coordinator`: 2-3
+      - `join_group`: 3-6
+      - `heartbeat`: 2-4
+      - `leave_group`: 2-4
+      - `sync_group`: 2-4
+      - `describe_groups`: 2-5
+      - `list_groups`: 2-3
+      - `api_versions`: 2-3
+      - `create_topics`: 3-5
+      - `delete_topics`: 2-4
+      - `delete_records`: 1
+      - `init_producer_id`: 1-2
+      - `add_partitions_to_txn`: 1
+      - `add_offsets_to_txn`: 1
+      - `end_txn`: 1
+      - `txn_offset_commit`: 1-2
+      - `describe_acls`: 1
+      - `create_acls`: 1
+      - `delete_acls`: 1
+      - `describe_configs`: 2
+      - `alter_configs`: 1
+      - `alter_replica_log_dirs`: 1
+      - `describe_log_dirs`: 1
+      - `sasl_authenticate`: 1
+      - `create_partitions`: 1
+      - `create_delegation_token`: 1-2
+      - `renew_delegation_token`: 1
+      - `expire_delegation_token`: 1
+      - `describe_delegation_token`: 1
+      - `delete_groups`: 1-2
 
 * 2.4.1
   - Upgrade snappyer (1.2.6) and crc32cer (0.1.8):
