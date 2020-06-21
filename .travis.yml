@@ -33,8 +33,8 @@ script:
     if [ $OTP_VSN -eq 21 ]; then
       make dialyze
     fi
+  - export KAFKA_VERSION=2.4  && make testbed && make eunit
   - export KAFKA_VERSION=1.1  && make testbed && make eunit
-  - export KAFKA_VERSION=1.0  && make testbed && make eunit
   - export KAFKA_VERSION=0.11 && make testbed && make eunit
   - export KAFKA_VERSION=0.10 && make testbed && make eunit
   - export KAFKA_VERSION=0.9  && make testbed && export KPRO_TEST_KAFKA_09=1 && make eunit
