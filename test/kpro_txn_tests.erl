@@ -244,7 +244,7 @@ topic() -> kpro_test_lib:get_topic().
 partition() -> 0.
 
 make_random_batch() ->
-  N = rand(10),
+  N = rand:uniform(10),
   [#{ key => integer_to_binary(I)
     , value => term_to_binary(os:system_time())
     } || I <- lists:seq(0, N)
@@ -275,16 +275,13 @@ connect_group_coordinator(GroupId) ->
 
 %% Make a random transactional id, so test cases would not interfere each other.
 make_transactional_id() ->
-  bin([atom_to_list(?MODULE), "-txn-", bin(rand())]).
+  bin([atom_to_list(?MODULE), "-txn-", rand()]).
 
 make_group_id() ->
-  bin([atom_to_list(?MODULE), "-grp-", bin(rand())]).
+  bin([atom_to_list(?MODULE), "-grp-", rand()]).
 
-rand() -> rand:uniform(1000000000).
+rand() -> base64:encode(crypto:strong_rand_bytes(8)).
 
-rand(N) -> rand() rem N.
-
-bin(I) when is_integer(I) -> integer_to_binary(I);
 bin(Str) -> iolist_to_binary(Str).
 
 %% returns a list of supported produce versions and the highest fetch version.
