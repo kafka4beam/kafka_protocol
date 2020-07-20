@@ -29,14 +29,11 @@
 -define(TIMEOUT, 5000).
 
 %% basic test of begin -> write -> commit
-txn_produce_test() ->
-  {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
-  {MinProduceVsn, MaxProduceVsn} = maps:get(produce, Versions),
-  {_, FetchVsn} = maps:get(fetch, Versions),
-  case MaxProduceVsn >= ?MIN_MAGIC_2_PRODUCE_API_VSN of
-    true -> test_txn_produce(rand(MinProduceVsn, MaxProduceVsn), FetchVsn);
-    false -> io:format(user, " skipped (vsn = ~p)", [MaxProduceVsn])
-  end.
+txn_produce_test_() ->
+  {Vsns, FetchVsn} = produce_fetch_versions(),
+  [{"vsn=" ++ integer_to_list(V),
+    fun() -> test_txn_produce(V, FetchVsn) end
+   } || V <- Vsns].
 
 test_txn_produce(ProduceVsn, FetchVsn) ->
   Topic = topic(),
@@ -73,15 +70,11 @@ test_txn_produce(ProduceVsn, FetchVsn) ->
 
 %% basic test of begin -> read (fetch) write -> commit;
 %% commit implies 1) commit fetched offset, 2) commit produced messages
-txn_fetch_produce_test() ->
-  {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
-  {MinProduceVsn, MaxProduceVsn} = maps:get(produce, Versions),
-  ProduceVsn = rand(MinProduceVsn, MaxProduceVsn),
-  {_, FetchVsn} = maps:get(fetch, Versions),
-  case MaxProduceVsn >= ?MIN_MAGIC_2_PRODUCE_API_VSN of
-    true -> test_txn_fetch_produce_test(ProduceVsn, FetchVsn);
-    false -> io:format(user, " skipped (vsn = ~p)", [MaxProduceVsn])
-  end.
+txn_fetch_produce_test_() ->
+  {Vsns, FetchVsn} = produce_fetch_versions(),
+  [{"vsn=" ++ integer_to_list(V),
+    fun() -> test_txn_fetch_produce_test(V, FetchVsn) end
+   } || V <- Vsns].
 
 test_txn_fetch_produce_test(ProduceVsn, FetchVsn) ->
   Topic = topic(),
@@ -123,14 +116,11 @@ test_txn_fetch_produce_test(ProduceVsn, FetchVsn) ->
 
 %% test two transactions for the same transactional producer
 %% without transaction context re-init
-txn_produce_2_tx_test() ->
-  {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
-  {MinProduceVsn, MaxProduceVsn} = maps:get(produce, Versions),
-  {_, FetchVsn} = maps:get(fetch, Versions),
-  case MaxProduceVsn >= ?MIN_MAGIC_2_PRODUCE_API_VSN of
-    true -> test_txn_produce_2(rand(MinProduceVsn, MaxProduceVsn), FetchVsn);
-    false -> io:format(user, " skipped (vsn = ~p)", [MaxProduceVsn])
-  end.
+txn_produce_2_tx_test_() ->
+  {Vsns, FetchVsn} = produce_fetch_versions(),
+  [{"vsn=" ++ integer_to_list(V),
+    fun() -> test_txn_produce_2(V, FetchVsn) end
+   } || V <- Vsns].
 
 test_txn_produce_2(ProduceVsn, FetchVsn) ->
   Topic = topic(),
@@ -254,7 +244,7 @@ topic() -> kpro_test_lib:get_topic().
 partition() -> 0.
 
 make_random_batch() ->
-  N = rand(10),
+  N = rand:uniform(10),
   [#{ key => integer_to_binary(I)
     , value => term_to_binary(os:system_time())
     } || I <- lists:seq(0, N)
@@ -285,20 +275,27 @@ connect_group_coordinator(GroupId) ->
 
 %% Make a random transactional id, so test cases would not interfere each other.
 make_transactional_id() ->
-  bin([atom_to_list(?MODULE), "-txn-", bin(rand())]).
+  bin([atom_to_list(?MODULE), "-txn-", rand()]).
 
 make_group_id() ->
-  bin([atom_to_list(?MODULE), "-grp-", bin(rand())]).
+  bin([atom_to_list(?MODULE), "-grp-", rand()]).
 
-rand() -> rand:uniform(1000000).
+rand() -> base64:encode(crypto:strong_rand_bytes(8)).
 
-rand(N) -> rand() rem N.
-
-rand(Min, Max) ->
-  Min + rand(Max - Min + 1).
-
-bin(I) when is_integer(I) -> integer_to_binary(I);
 bin(Str) -> iolist_to_binary(Str).
+
+%% returns a list of supported produce versions and the highest fetch version.
+produce_fetch_versions() ->
+  {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),
+  {_, MaxProduceVsn} = maps:get(produce, Versions),
+  {_, FetchVsn} = maps:get(fetch, Versions),
+  case MaxProduceVsn >= ?MIN_MAGIC_2_PRODUCE_API_VSN of
+    true ->
+      Vsns = lists:seq(?MIN_MAGIC_2_PRODUCE_API_VSN, MaxProduceVsn),
+      {Vsns, FetchVsn};
+    false ->
+      {[], 0}
+  end.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

@@ -4,11 +4,14 @@ Rules.
 
 % longest match wins, first match if both of the same length. "prims" are all caps.
 ARRAY : {token, {'ARRAY', TokenLine}}.
+TAG_BUFFER : {token, {'TAG_BUFFER', TokenLine}}.
 [A-Z][_0-9A-Z]* : {token, {prim, TokenLine, list_to_atom(string:to_lower(TokenChars))}}.
 [A-Za-z][_0-9a-zA-Z]* : {token, {name, TokenLine, list_to_atom(TokenChars)}}.
 => : {token, {'=>', TokenLine}}.
 \[ : {token, {'[', TokenLine}}.
 \] : {token, {']', TokenLine}}.
+\{ : {token, {'{', TokenLine}}.
+\} : {token, {'}', TokenLine}}.
 \( : {token, {'(', TokenLine}}.
 \) : {token, {')', TokenLine}}.
 \| : {token, {'|', TokenLine}}.

@@ -17,6 +17,7 @@
 {delete_topics, 20}.
 {delete_records, 21}.
 {init_producer_id, 22}.
+{offset_for_leader_epoch, 23}.
 {add_partitions_to_txn, 24}.
 {add_offsets_to_txn, 25}.
 {end_txn, 26}.
@@ -35,3 +36,8 @@
 {expire_delegation_token, 40}.
 {describe_delegation_token, 41}.
 {delete_groups, 42}.
+{elect_leaders, 43}.
+{incremental_alter_configs, 44}.
+{alter_partition_reassignments, 45}.
+{list_partition_reassignments, 46}.
+{offset_delete, 47}.

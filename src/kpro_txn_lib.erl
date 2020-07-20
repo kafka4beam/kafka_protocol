@@ -107,7 +107,7 @@ txn_offset_commit(GrpConnection, GrpId, TxnCtx, Offsets, Opts) ->
 %%%_* Internals ================================================================
 
 parse_txn_offset_commit_rsp(#{topics := Topics}) ->
-  FP = fun(#{ partition := Partition
+  FP = fun(#{ partition_index := Partition
             , error_code := EC
             }, Acc) ->
            case ?no_error =:= EC of
@@ -115,7 +115,7 @@ parse_txn_offset_commit_rsp(#{topics := Topics}) ->
              false -> [{Partition, EC} | Acc]
            end
        end,
-  FT = fun(#{ topic := Topic
+  FT = fun(#{ name := Topic
             , partitions := Partitions
             }, Acc) ->
            PartitionErrs = lists:foldl(FP, [], Partitions),

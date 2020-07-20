@@ -19,6 +19,10 @@
         , decode/1
         ]).
 
+-export([ encode_unsigned/1
+        , decode_unsigned/1
+        ]).
+
 -define(MAX_BITS, 63).
 
 %% @doc Decode varint.
@@ -30,6 +34,16 @@ decode(Bin) ->
 -spec encode(kpro:int64()) -> iodata().
 encode(Int) ->
   enc_varint(enc_zigzag(Int)).
+
+%% @doc Encode unsigned varint.
+-spec encode_unsigned(non_neg_integer()) -> iodata().
+encode_unsigned(Int) when Int >= 0 ->
+  enc_varint(Int).
+
+%% @doc Decode unsigned varint.
+-spec decode_unsigned(binary()) -> {non_neg_integer(), binary()}.
+decode_unsigned(Bin) ->
+  dec_varint(Bin).
 
 -spec enc_zigzag(integer()) -> non_neg_integer().
 enc_zigzag(Int) ->

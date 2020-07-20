@@ -55,15 +55,15 @@ auth(_Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn) ->
             ?ERROR({Reason, Stack})
         end
     end,
-  %% Embed raw bytes in sasl_auth_bytes field.
+  %% Embed raw bytes in auth_bytes field.
   SendRecv =
     fun(Bytes) ->
         Req = kpro_req_lib:make(sasl_authenticate, _AuthReqVsn = 0,
-                                [{sasl_auth_bytes, Bytes}]),
+                                [{auth_bytes, Bytes}]),
         Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
         EC = kpro:find(error_code, Rsp),
         case EC =:= ?no_error of
-          true -> kpro:find(sasl_auth_bytes, Rsp);
+          true -> kpro:find(auth_bytes, Rsp);
           false -> ?ERROR(kpro:find(error_message, Rsp))
                    end
     end,

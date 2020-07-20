@@ -148,7 +148,7 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
       end
     , fun(#kpro_rsp{msg = Meta}) ->
           Brokers = kpro:find(brokers, Meta),
-          [TopicMeta] = kpro:find(topic_metadata, Meta),
+          [TopicMeta] = kpro:find(topics, Meta),
           ErrorCode = kpro:find(error_code, TopicMeta),
           case ErrorCode =:= ?no_error of
             true  -> {ok, {Brokers, TopicMeta}};
@@ -156,8 +156,8 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
           end
       end
     , fun({Brokers, TopicMeta}) ->
-          Partitions = kpro:find(partition_metadata, TopicMeta),
-          Pred = fun(P_Meta) -> kpro:find(partition, P_Meta) =:= Partition end,
+          Partitions = kpro:find(partitions, TopicMeta),
+          Pred = fun(P_Meta) -> kpro:find(partition_index, P_Meta) =:= Partition end,
           case lists:filter(Pred, Partitions) of
             [] ->
               %% Partition number is out of range
@@ -175,7 +175,7 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
           end
       end
     , fun({Brokers, PartitionMeta}) ->
-          LeaderBrokerId = kpro:find(leader, PartitionMeta),
+          LeaderBrokerId = kpro:find(leader_id, PartitionMeta),
           Pred = fun(BrokerMeta) ->
                      kpro:find(node_id, BrokerMeta) =:= LeaderBrokerId
                  end,
@@ -195,11 +195,11 @@ discover_coordinator(Connection, Type, Id, Timeout) ->
   FL =
     [ fun() -> get_api_vsn_range(Connection, find_coordinator) end
     , fun({_, 0}) when Type =:= group ->
-          {ok, kpro:make_request(find_coordinator, 0, [{group_id, Id}])};
+          {ok, kpro:make_request(find_coordinator, 0, [{key, Id}])};
          ({_, 0}) when Type =:= txn ->
           {error, {bad_vsn, [{api, find_coordinator}, {type, txn}]}};
          ({_, V}) ->
-          Fields = [ {coordinator_key, Id}, {coordinator_type, Type}],
+          Fields = [ {key, Id}, {key_type, Type}],
           {ok, kpro:make_request(find_coordinator, V, Fields)}
       end
     , fun(Req) -> kpro_connection:request_sync(Connection, Req, Timeout) end
@@ -208,9 +208,8 @@ discover_coordinator(Connection, Type, Id, Timeout) ->
           ErrMsg = kpro:find(error_message, Rsp, ?kpro_null),
           case ErrorCode =:= ?no_error of
             true ->
-              CoorInfo = kpro:find(coordinator, Rsp),
-              Host = kpro:find(host, CoorInfo),
-              Port = kpro:find(port, CoorInfo),
+              Host = kpro:find(host, Rsp),
+              Port = kpro:find(port, Rsp),
               {ok, {Host, Port}};
             false when ErrMsg =:= ?kpro_null ->
               %% v0
@@ -281,22 +280,15 @@ api_vsn_range_intersection(undefined) ->
 api_vsn_range_intersection(Vsns) ->
   maps:fold(
     fun(API, {Min, Max}, Acc) ->
-        case api_vsn_range_intersection(API, Min, Max) of
+        case api_vsn_range_intersection(API, {Min, Max}) of
           false -> Acc;
           Intersection -> Acc#{API => Intersection}
         end
     end, #{}, Vsns).
 
 %% Intersect received api version range with supported range.
-api_vsn_range_intersection(API, MinReceived, MaxReceived) ->
-  case kpro_api_vsn:range(API) of
-    {MinSupported, MaxSupported} ->
-      Min = max(MinSupported, MinReceived),
-      Max = min(MaxSupported, MaxReceived),
-      Min =< Max andalso {Min, Max};
-    false ->
-      false
-  end.
+api_vsn_range_intersection(API, Received) ->
+  kpro_api_vsn:intersect(kpro_api_vsn:range(API), Received).
 
 connect_any([], _Config, Errors) ->
   {error, lists:reverse(Errors)};

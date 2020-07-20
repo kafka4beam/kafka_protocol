@@ -1,12 +1,14 @@
-#!/bin/bash -e
+#!/bin/bash
+
+set -euo pipefail
 
 cd $(dirname "$0")
 
 # test against 1.1 by default
-VERSION="${1:-1.1}"
+VERSION="${1:-2.4}"
 
 IMAGE="zmstone/kafka:${VERSION}"
-sudo docker pull $IMAGE
+#sudo docker pull $IMAGE
 
 ZK='zookeeper'
 KAFKA_1='kafka-1'
@@ -67,7 +69,11 @@ if [[ "$VERSION" != 0.9* ]]; then
 fi
 
 # this is to warm-up kafka group coordinator for deterministic in tests
-sudo docker exec $KAFKA_1 /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --new-consumer --group test-group --describe > /dev/null 2>&1
+maybe_new_consumer=""
+if [[ "$VERSION" != 2.* ]] ; then
+  maybe_new_consumer="--new-consumer"
+fi
+sudo docker exec $KAFKA_1 /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 $maybe_new_consumer --group test-group --describe > /dev/null 2>&1
 
 # for kafka 0.11 or later, add sasl-scram test credentials
 if [[ "$VERSION" != 0.9* ]] && [[ "$VERSION" != 0.10* ]]; then

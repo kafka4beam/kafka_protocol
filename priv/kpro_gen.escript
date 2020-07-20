@@ -2,7 +2,7 @@
 %% -*- erlang -*-
 
 %%%
-%%%   Copyright (c) 2014-2016, Klarna AB
+%%%   Copyright (c) 2014-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ main(_Args) ->
 
 -define(SCHEMA_MODULE_HEADER,"%% generated code, do not edit!
 -module(kpro_schema).
--export([all_apis/0, vsn_range/1, api_key/1, req/2, rsp/2, ec/1]).
+-export([all_apis/0, vsn_range/1, min_flexible_vsn/1, api_key/1, req/2, rsp/2, ec/1]).
 ").
 
 generate_schema_module(GroupedTypes) ->
@@ -46,6 +46,7 @@ generate_schema_module(GroupedTypes) ->
     [?SCHEMA_MODULE_HEADER, "\n",
      generate_all_apis_fun(GroupedTypes),
      generate_version_range_clauses(GroupedTypes),
+     generate_min_flexible_vsn_clauses(GroupedTypes),
      generate_api_key_clauses(),
      generate_req_rsp_clauses(GroupedTypes),
      generate_ec_clauses()
@@ -89,6 +90,29 @@ generate_all_apis_fun(GroupedTypes) ->
   ["all_apis() ->\n[", infix(APIs, ",\n"), "].\n\n"].
 
 generate_version_range_clauses(GroupedTypes) ->
+  IsFlexible = fun(Fields) ->
+                   lists:keyfind(tagged_fields, 1, Fields) =/= false
+               end,
+  F = fun({Name, VersionedFields}, Acc) ->
+          case split_name(Name) of
+            {API, "req"} ->
+              Versions = [V || {V, Fields} <- VersionedFields, IsFlexible(Fields)],
+              case Versions =:= [] of
+                true ->
+                  Acc;
+                false ->
+                  Min = integer_to_list(lists:min(Versions)),
+                  Clause = ["min_flexible_vsn(", API, ") -> ", Min, ";\n"],
+                  [Clause | Acc]
+              end;
+            {_API, "rsp"} ->
+              Acc
+          end
+      end,
+  Clauses = lists:foldr(F, [], GroupedTypes),
+  [Clauses, "min_flexible_vsn(_) -> 9999.\n\n"].
+
+generate_min_flexible_vsn_clauses(GroupedTypes) ->
   F = fun({Name, VersionedFields}, Acc) ->
           case split_name(Name) of
             {API, "req"} ->
@@ -103,6 +127,7 @@ generate_version_range_clauses(GroupedTypes) ->
       end,
   Clauses = lists:foldr(F, [], GroupedTypes),
   [Clauses, "vsn_range(_) -> false.\n\n"].
+
 
 generate_req_clauses(PerNameTypes) ->
   generate_schema_clauses(PerNameTypes, "req").
@@ -158,10 +183,13 @@ merge_versions([{V1, Fields1}, {V2, Fields2} | Rest]) ->
   end.
 
 split_name_version({Tag, Fields}) ->
-  [Vsn, $v, $_ | NameReversed] =
-    lists:reverse(underscorize(atom_to_list(Tag))),
-  Name = lists:reverse(NameReversed),
-  Version = Vsn - $0,
+  {Version, Name} =
+    case lists:reverse(underscorize(atom_to_list(Tag))) of
+      [Vsn, $v, $_ | NameReversed] ->
+        {Vsn - $0, lists:reverse(NameReversed)};
+      [Vsn1, Vsn0, $v, $_ | NameReversed] ->
+        {(Vsn0 - $0) * 10 + (Vsn1 - $0), lists:reverse(NameReversed)}
+    end,
   {Name, Version, Fields}.
 
 split_name(Name) ->
@@ -173,19 +201,26 @@ split_name(Name) ->
 expand([{Tag, Fields} | Refs]) ->
   {Tag, expand_fields(Fields, Refs)}.
 
+-define(IS_ARRAY(A), (A =:= array orelse A =:= compact_array)).
 expand_fields([], _Refs) -> [];
+expand_fields([tagged_fields | Rest], Refs) ->
+  [{tagged_fields, tagged_fields} | expand_fields(Rest, Refs)];
 expand_fields([Name | Rest], Refs) when is_atom(Name) ->
+  try
   {Name, Type0} = lists:keyfind(Name, 1, Refs),
   Type = expand_type(Type0, Refs),
-  [{Name, Type} | expand_fields(Rest, Refs)];
-expand_fields([{array, Name} | Rest], Refs) ->
+  [{Name, Type} | expand_fields(Rest, Refs)]
+  catch error : _ ->
+  throw({Name, Refs})
+  end;
+expand_fields([{Array, Name} | Rest], Refs) when ?IS_ARRAY(Array) ->
   {Name, Type0} = lists:keyfind(Name, 1, Refs),
   Type = expand_type(Type0, Refs),
-  [{Name, {array, Type}} | expand_fields(Rest, Refs)].
+  [{Name, {Array, Type}} | expand_fields(Rest, Refs)].
 
-expand_type({array, Type}, Refs) ->
+expand_type({Array, Type}, Refs) when ?IS_ARRAY(Array) ->
   %% Array of array
-  {array, expand_type(Type, Refs)};
+  {Array, expand_type(Type, Refs)};
 expand_type(Fields, Refs) when is_list(Fields) ->
   expand_fields(Fields, Refs);
 expand_type(Type, _Refs) ->

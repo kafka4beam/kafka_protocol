@@ -19,6 +19,7 @@
 
 -export([ list_offsets/4
         , list_offsets/5
+        , list_offsets/6
         ]).
 
 -export([ fetch/5
@@ -85,7 +86,8 @@
                        , max_bytes => count()
                        , isolation_level => isolation_level()
                        , session_id => kpro:int32()
-                       , epoch => kpro:int32()
+                       , session_epoch => kpro:int32()
+                       , rack_id => iodata()
                        }.
 
 %% @doc Make a `metadata' request
@@ -97,14 +99,21 @@ metadata(Vsn, Topics) ->
 -spec metadata(vsn(), all | [topic()], boolean()) -> req().
 metadata(Vsn, [], IsAutoCreateAllowed) ->
   metadata(Vsn, all, IsAutoCreateAllowed);
-metadata(Vsn, Topics0, IsAutoCreateAllowed) ->
-  Topics = case Topics0 of
-             all when Vsn =:= 0 -> [];
-             all -> ?kpro_null;
-             List -> List
-           end,
-  make(metadata, Vsn, [{topics, Topics},
-                       {allow_auto_topic_creation, IsAutoCreateAllowed}]).
+metadata(Vsn, Topics, IsAutoCreateAllowed) ->
+  make(metadata, Vsn,
+       #{topics => metadata_topics_list(Vsn, Topics),
+         allow_auto_topic_creation => IsAutoCreateAllowed,
+         include_cluster_authorized_operations => false,
+         include_topic_authorized_operations => false,
+         tagged_fields => #{}
+        }).
+
+%% version 0 expects an empty array for 'all'
+%% all later versions expect 'null' for 'all'
+metadata_topics_list(0, all) -> [];
+metadata_topics_list(_, all) -> ?kpro_null;
+metadata_topics_list(_, Names) ->
+  [#{name => Name, tagged_fields => #{}} || Name <- Names].
 
 %% @doc Help function to contruct a `list_offset' request
 %% against one single topic-partition.
@@ -118,11 +127,18 @@ list_offsets(Vsn, Topic, Partition, Time) ->
 -spec list_offsets(vsn(), topic(), partition(),
                    latest | earliest | msg_ts(),
                    isolation_level()) -> req().
-list_offsets(Vsn, Topic, Partition, latest, IsolationLevel) ->
-  list_offsets(Vsn, Topic, Partition, -1, IsolationLevel);
-list_offsets(Vsn, Topic, Partition, earliest, IsolationLevel) ->
-  list_offsets(Vsn, Topic, Partition, -2, IsolationLevel);
 list_offsets(Vsn, Topic, Partition, Time, IsolationLevel) ->
+  list_offsets(Vsn, Topic, Partition, Time,
+               IsolationLevel, _LeaderEpoch = -1).
+
+%% @doc Extends `list_offsets/5' with leader-epoch number which can be obtained
+%% from metadata response for each partition.
+-spec list_offsets(vsn(), topic(), partition(),
+                   latest | earliest | msg_ts(),
+                   isolation_level(),
+                   kpro:leader_epoch()) -> req().
+list_offsets(Vsn, Topic, Partition, Time0, IsolationLevel, LeaderEpoch) ->
+  Time = offset_time(Time0),
   PartitionFields =
     case Vsn of
       0 ->
@@ -132,7 +148,8 @@ list_offsets(Vsn, Topic, Partition, Time, IsolationLevel) ->
       _ ->
         %% max_num_offsets is removed since version 1
         [{partition, Partition},
-         {timestamp, Time}
+         {timestamp, Time},
+         {current_leader_epoch, LeaderEpoch}
         ]
     end,
   Fields =
@@ -153,8 +170,25 @@ fetch(Vsn, Topic, Partition, Offset, Opts) ->
   MinBytes = maps:get(min_bytes, Opts, 0),
   MaxBytes = maps:get(max_bytes, Opts, 1 bsl 20), %% 1M
   IsolationLevel = maps:get(isolation_level, Opts, ?kpro_read_committed),
+  %% See: https://cwiki.apache.org/confluence/display/KAFKA/KIP-227%3A+Introduce+Incremental+FetchRequests+to+Increase+Partition+Scalability
+  %% Consumer session is useful when fetch request spans across multiple
+  %% topic-partitions, so that:
+  %% 1. The consumer may fetch from only a subset of the topic-partitions
+  %%    in case e.g. avoid immediately fetch again from partitions which
+  %%    have messages recently received.
+  %% 2. The broker do not have to send a topic/partition response at all
+  %%    if there is not any new messages appended or no metadata change
+  %%    sice the last fetch response.
+  %%    i.e. Send only changed data.
+  %% The default values are to disable fetch session.
   SessionID = maps:get(session_id, Opts, 0),
-  Epoch = maps:get(epoch, Opts, -1),
+  Epoch = maps:get(session_epoch, Opts, -1),
+  %% Leader epoch is returned from topic-partition metadata.
+  %% kafka partition leader make use of this number to fence consumers with
+  %% stale metadata.
+  LeaderEpoch = maps:get(leader_epoch, Opts, -1),
+  %% Rack ID is to allow consumers fetching from closet replica (instead the leader)
+  RackID = maps:get(rack_id, Opts, ?kpro_null),
   Fields =
     [{replica_id, ?KPRO_REPLICA_ID},
      {max_wait_time, MaxWaitTime},
@@ -162,17 +196,19 @@ fetch(Vsn, Topic, Partition, Offset, Opts) ->
      {min_bytes, MinBytes},
      {isolation_level, IsolationLevel},
      {session_id, SessionID},
-     {epoch, Epoch},
+     {session_epoch, Epoch},
      {topics,[[{topic, Topic},
                {partitions,
                 [[{partition, Partition},
                   {fetch_offset, Offset},
-                  {max_bytes, MaxBytes},
-                  {log_start_offset, -1} %% irelevant to clients
+                  {partition_max_bytes, MaxBytes},
+                  {log_start_offset, -1}, %% irelevant to clients
+                  {current_leader_epoch, LeaderEpoch}
                  ]]}]]},
      % we alwyas fetch from one single topic-partition
      % never need to forget any
-     {forgetten_topics_data, []}
+     {forgotten_topics_data, []},
+     {rack_id, RackID}
     ],
   make(fetch, Vsn, Fields).
 
@@ -254,7 +290,7 @@ add_partitions_to_txn(TxnCtx, TopicPartitionList) ->
             Topic, fun(PL) -> [Partition | PL] end,
             [Partition], Acc)
       end, #{}, TopicPartitionList),
-  Body = TxnCtx#{topics => tp_map_to_array(Grouped)},
+  Body = TxnCtx#{topics => tp_map_to_array(topic, Grouped)},
   make(add_partitions_to_txn, _Vsn = 0, Body).
 
 %% @doc Make a `txn_offset_commit' request.
@@ -271,13 +307,14 @@ txn_offset_commit(GrpId, TxnCtx, Offsets, DefaultUserData) ->
               {O, D} -> {O, D};
               O      -> {O, DefaultUserData}
             end,
-          PD = #{ partition => Partition
-                , offset => Offset
-                , metadata => UserData
+          PD = #{ partition_index => Partition
+                , committed_offset => Offset
+                , committed_leader_epoch => -1
+                , committed_metadata => UserData
                 },
           kpro_lib:update_map(Topic, fun(PDL) -> [PD | PDL] end, [PD], Acc)
       end, #{}, Offsets),
-  Body = TxnCtx#{topics => tp_map_to_array(All), group_id => GrpId},
+  Body = TxnCtx#{topics => tp_map_to_array(name, All), group_id => GrpId},
   make(txn_offset_commit, _Vsn = 0, Body).
 
 %% @doc Make `add_offsets_to_txn' request.
@@ -297,8 +334,8 @@ add_offsets_to_txn(TxnCtx, CgId) ->
 create_topics(Vsn, Topics, Opts) ->
   Timeout = maps:get(timeout, Opts, 0),
   ValidateOnly = maps:get(validate_only, Opts, false),
-  Body = #{ create_topic_requests => Topics
-          , timeout => Timeout
+  Body = #{ topics => Topics
+          , timeout_ms => Timeout
           , validate_only => ValidateOnly
           },
   make(create_topics, Vsn, Body).
@@ -362,21 +399,31 @@ make(API, Vsn, Fields) ->
 encode(ClientName, CorrId, Req) ->
   #kpro_req{api = API, vsn = Vsn, msg = Msg} = Req,
   ApiKey = kpro_schema:api_key(API),
-  [ encode(int16, ApiKey)
-  , encode(int16, Vsn)
-  , encode(int32, CorrId)
-  , encode(string, ClientName)
-  , encode_struct(API, Vsn, Msg)
-  ].
+  % There are 3 versions of request headers.
+  % (but the header itself has no version number indicator).
+  % Version 0 was never supported in this library.
+  % Version 1 added the client-name string field
+  % Version 2 added the flexible tagged fields (which is always null so far)
+  Header =
+    [ encode(int16, ApiKey)
+    , encode(int16, Vsn)
+    , encode(int32, CorrId)
+    , encode(string, ClientName)
+    | case Vsn >= kpro_schema:min_flexible_vsn(API) of
+        true  -> [0]; %% NULL for tagged fields in request header (version 2)
+        false -> [] %% request header version 1
+      end
+    ],
+  [Header | encode_struct(API, Vsn, Msg)].
 
 %%%_* Internal functions =======================================================
 
 %% Turn #{Topic => PartitionsArray} into
-%% [#{topic => Topic, partitions => PartitionsArray}]
-tp_map_to_array(TPM) ->
+%% [#{TopicNameField => Topic, partitions => PartitionsArray}]
+tp_map_to_array(TopicNameField, TPM) ->
   maps:fold(
     fun(Topic, Partitions, Acc) ->
-        [ #{ topic => Topic
+        [ #{ TopicNameField => Topic
            , partitions => Partitions
            } | Acc ]
     end, [], TPM).
@@ -406,6 +453,8 @@ enc_struct([{Name, FieldSc} | Schema], Values, Stack) ->
     try
       kpro_lib:find(Name, Values)
     catch
+      error : {no_such_field, tagged_fields} ->
+        [];
       error : {no_such_field, _} ->
         erlang:error({field_missing, [ {stack, lists:reverse(NewStack)}
                                      , {input, Values}]})
@@ -417,10 +466,16 @@ enc_struct([{Name, FieldSc} | Schema], Values, Stack) ->
 
 enc_struct_field({array, _Schema}, ?null, _Stack) ->
   encode(int32, -1); %% NULL
-enc_struct_field({array, Schema}, Values, Stack) ->
+enc_struct_field({compact_array, _Schema}, ?null, _Stack) ->
+  0; %% NULL
+enc_struct_field({A, Schema}, Values, Stack) when A =:= array orelse
+                                                  A =:= compact_array ->
   case is_list(Values) of
     true ->
-      [ encode(int32, length(Values))
+      [ case A of
+          array -> encode(int32, length(Values));
+          compact_array -> encode(unsigned_varint, length(Values) + 1)
+        end
       | [enc_struct_field(Schema, Value, Stack) || Value <- Values]
       ];
     false ->
@@ -440,13 +495,13 @@ enc_struct_field(Primitive, Value, Stack) when is_atom(Primitive) ->
 %% Translate embedded bytes to structs or enum values to enum symbols.
 translate([isolation_level | _] , Value) ->
   ?ISOLATION_LEVEL_INTEGER(Value);
-translate([protocol_metadata | _] = Stack, Value) ->
+translate([metadata, protocols | _] = Stack, Value) ->
   Schema = kpro_lib:get_prelude_schema(cg_protocol_metadata, 0),
   bin(enc_struct(Schema, Value, Stack));
-translate([member_assignment | _] = Stack, Value) ->
+translate([assignment, assignments | _] = Stack, Value) ->
   Schema = kpro_lib:get_prelude_schema(cg_memeber_assignment, 0),
   bin(enc_struct(Schema, Value, Stack));
-translate([coordinator_type | _], Value) ->
+translate([key_type | _], Value) ->
   case Value of
     group -> 0;
     txn -> 1;
@@ -479,6 +534,10 @@ assert_known_api_and_vsn(API, Vsn) ->
 
 transactional_id(false) -> ?kpro_null;
 transactional_id(#{transactional_id := TxnId}) -> TxnId.
+
+offset_time(latest) -> -1;
+offset_time(earliest) -> -2;
+offset_time(T) when is_integer(T) -> T.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

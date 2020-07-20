@@ -74,3 +74,20 @@
 {"GROUP_ID_NOT_FOUND", 69, "False", "The group id The group id does not exist was not found"}.
 {"FETCH_SESSION_ID_NOT_FOUND", 70, "True", "The fetch session ID was not found"}.
 {"INVALID_FETCH_SESSION_EPOCH", 71, "True", "The fetch session epoch is invalid"}.
+{"LISTENER_NOT_FOUND", 72, "True", "There is no listener on the leader broker that matches the listener on which metadata request was processed."}.
+{"TOPIC_DELETION_DISABLED", 73, "False", "Topic deletion is disabled."}.
+{"FENCED_LEADER_EPOCH", 74, "True", "The leader epoch in the request is older than the epoch on the broker"}.
+{"UNKNOWN_LEADER_EPOCH", 75, "True", "The leader epoch in the request is newer than the epoch on the broker"}.
+{"UNSUPPORTED_COMPRESSION_TYPE", 76, "False", "The requesting client does not support the compression type of given partition."}.
+{"STALE_BROKER_EPOCH", 77, "False", "Broker epoch has changed"}.
+{"OFFSET_NOT_AVAILABLE", 78, "True", "The leader high watermark has not caught up from a recent leader election so the offsets cannot be guaranteed to be monotonically increasing"}.
+{"MEMBER_ID_REQUIRED", 79, "False", "The group member needs to have a valid member id before actually entering a consumer group"}.
+{"PREFERRED_LEADER_NOT_AVAILABLE", 80, "True", "The preferred leader was not available"}.
+{"GROUP_MAX_SIZE_REACHED", 81, "False", "The consumer group has reached its max size."}.
+{"FENCED_INSTANCE_ID", 82, "False", "The broker rejected this static consumer since another consumer with the same group.instance.id has registered with a different member.id."}.
+{"ELIGIBLE_LEADERS_NOT_AVAILABLE", 83, "True", "Eligible topic partition leaders are not available"}.
+{"ELECTION_NOT_NEEDED", 84, "True", "Leader election not needed for topic partition"}.
+{"NO_REASSIGNMENT_IN_PROGRESS", 85, "False", "No partition reassignment is in progress."}.
+{"GROUP_SUBSCRIBED_TO_TOPIC", 86, "False", "Deleting offsets of a topic is forbidden while the consumer group is actively subscribed to it."}.
+{"INVALID_RECORD", 87, "False", "This record has failed the validation on broker and hence be rejected."}.
+{"UNSTABLE_OFFSET_COMMIT", 88, "True", "There are unstable offsets that need to be cleared"}.

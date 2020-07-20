@@ -28,6 +28,35 @@ list_offsets_test_() ->
     Ts <- [earliest, latest, kpro_lib:now_ts()]
   ].
 
+list_offsets_with_leader_epoch_test() ->
+  {_Min, Max} = get_api_vsn_rage(),
+  case Max < 4 of
+    true -> ok;
+    false -> list_offsets_with_leader_epoch(Max)
+  end.
+
+list_offsets_with_leader_epoch(Vsn) ->
+  Test = fun(Pid, Req, ExpectedErrorCode) ->
+             {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
+             ?assertEqual(ExpectedErrorCode,
+                          maps:get(error_code, kpro_test_lib:parse_rsp(Rsp)))
+         end,
+  %% try to list with 0 leader-epoch
+  Req1 = kpro_req_lib:list_offsets(Vsn, ?TOPIC, ?PARTI, latest,
+                                   ?kpro_read_committed, -1),
+  BadLeaderEpoch = -2,
+  Req2 = kpro_req_lib:list_offsets(Vsn, ?TOPIC, ?PARTI, latest,
+                                   ?kpro_read_committed, BadLeaderEpoch),
+  T = fun(Pid) ->
+          Test(Pid, Req1, no_error),
+          Test(Pid, Req2, fenced_leader_epoch)
+      end,
+  ConnFun =
+    fun(Endpoints, Config) ->
+      kpro:connect_partition_leader(Endpoints, Config, ?TOPIC, ?PARTI)
+    end,
+ kpro_test_lib:with_connection(ConnFun, T).
+
 make_test_case(Vsn, Ts) ->
   {lists:flatten(io_lib:format("vsn = ~p, ts = ~p", [Vsn, Ts])),
   fun() ->
@@ -52,6 +81,7 @@ get_api_vsn_rage() ->
   F = fun(Pid) -> kpro:get_api_versions(Pid) end,
   {ok, Versions} = kpro_test_lib:with_connection(F),
   maps:get(list_offsets, Versions).
+
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

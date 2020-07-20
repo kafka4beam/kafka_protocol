@@ -40,6 +40,8 @@
         , parse_rsp/1
         ]).
 
+-export([list_offset/5]).
+
 -include("kpro_private.hrl").
 
 -type conn() :: kpro_connection:connection().
@@ -171,7 +173,7 @@ parse_rsp(#kpro_rsp{ api = fetch
 parse_rsp(#kpro_rsp{ api = create_topics
                    , msg = Msg
                    }) ->
-  error_if_any(kpro:find(topic_errors, Msg));
+  error_if_any(kpro:find(topics, Msg));
 parse_rsp(#kpro_rsp{ api = delete_topics
                    , msg = Msg
                    }) ->
@@ -192,6 +194,12 @@ parse_rsp(#kpro_rsp{ api = alter_configs
   error_if_any(kpro:find(resources, Msg));
 parse_rsp(#kpro_rsp{msg = Msg}) ->
   Msg.
+
+list_offset(Connection, Topic, Partition, Time, Timeout) ->
+  Req = kpro_req_lib:list_offsets(0, Topic, Partition, Time),
+  {ok, Rsp} = kpro:request_sync(Connection, Req, Timeout),
+  #{offset := Offset} = parse_rsp(Rsp),
+  Offset.
 
 %%%_* Internal functions =======================================================
 

@@ -1,3 +1,128 @@
+* 3.0.0
+  - API support for Kafka 2.4
+    Non backward compatible changes in request/response struct field names.
+
+    New Kafka APIs:
+      - `offset_for_leader_epoch`
+      - `elect_leaders`
+      - `incremental_alter_configs`
+      - `alter_partition_reassignments`
+      - `list_partition_reassignments`
+      - `offset_delete`
+
+    New versions of old APIs:
+      - `produce`: 6-8
+      - `fetch`: 8-11
+      - `list_offsets`: 3-5
+      - `metadata`: 6-9
+      - `offset_commit`: 4-8
+      - `offset_fetch`: 4-6
+      - `find_coordinator`: 2-3
+      - `join_group`: 3-6
+      - `heartbeat`: 2-4
+      - `leave_group`: 2-4
+      - `sync_group`: 2-4
+      - `describe_groups`: 2-5
+      - `list_groups`: 2-3
+      - `api_versions`: 2-3
+      - `create_topics`: 3-5
+      - `delete_topics`: 2-4
+      - `delete_records`: 1
+      - `init_producer_id`: 1-2
+      - `add_partitions_to_txn`: 1
+      - `add_offsets_to_txn`: 1
+      - `end_txn`: 1
+      - `txn_offset_commit`: 1-2
+      - `describe_acls`: 1
+      - `create_acls`: 1
+      - `delete_acls`: 1
+      - `describe_configs`: 2
+      - `alter_configs`: 1
+      - `alter_replica_log_dirs`: 1
+      - `describe_log_dirs`: 1
+      - `sasl_authenticate`: 1
+      - `create_partitions`: 1
+      - `create_delegation_token`: 1-2
+      - `renew_delegation_token`: 1
+      - `expire_delegation_token`: 1
+      - `describe_delegation_token`: 1
+      - `delete_groups`: 1-2
+
+    Changed Fields:
+      - `fetch`:
+        - `epoch` -> `session_epoch`
+        - `topics[]`:
+          - `partitions[]`:
+            - `max_bytes` -> `partition_max_bytes`
+        - `forgetten_topics_data` -> `forgotten_topics_data[]`:
+          - `partitions[]`:
+            - `max_bytes` -> `partition_max_bytes`
+      - `metadata`:
+        - `topics[]`:
+          - `string` -> `[{name,string}]`
+      - `offset_commit`:
+        - `retention_time` -> `retention_time_ms`
+        - `topics[]`:
+          - `topic` -> `name`
+          - `partitions[]`:
+            - `partition` -> `partition_index`
+            - `offset` -> `committed_offset`
+            - `metadata` -> `committed_metadata`
+      - `offset_fetch`:
+        - `topics[]`:
+          - `topic` -> `name`
+          - `partitions` -> `partition_indexes[]`:
+            - `[{partition,int32}]` -> `int32`
+      - `find_coordinator`:
+        - `coordinator_key` -> `key`
+        - `coordinator_type` -> `key_type`
+      - `join_group`:
+        - `session_timeout` -> `session_timeout_ms`
+        - `rebalance_timeout` -> `rebalance_timeout_ms`
+        - `group_protocols` -> `protocols[]`:
+          - `protocol_name` -> `name`
+          - `protocol_metadata` -> `metadata`
+      - `sync_group`:
+        - `group_assignment` -> `assignments[]`:
+          - `member_assignment` -> `assignment`
+      - `describe_groups`:
+        - `group_ids` -> `groups`
+      - `create_topics`:
+        - `create_topic_requests` -> `topics[]`:
+          - `topic` -> `name`
+          - `replica_assignment` -> `assignments[]`:
+            - `partition` -> `partition_index`
+            - `replicas` -> `broker_ids`
+          - `config_entries` -> `configs[]`:
+            - `config_name` -> `name`
+            - `config_value` -> `value`
+        - `timeout` -> `timeout_ms`
+      - `delete_topics`:
+        - `topics` -> `topic_names`
+        - `timeout` -> `timeout_ms`
+      - `txn_offset_commit`:
+        - `topics[]`:
+          - `topic` -> `name`
+          - `partitions[]`:
+            - `partition` -> `partition_index`
+            - `offset` -> `committed_offset`
+            - `metadata` -> `committed_metadata`
+      - `sasl_authenticate`:
+        - `sasl_auth_bytes` -> `auth_bytes`
+      - `create_delegation_token`:
+        - `renewers[]`:
+          - `name` -> `principal_name`
+        - `max_life_time` -> `max_lifetime_ms`
+      - `renew_delegation_token`:
+        - `renew_time_period` -> `renew_period_ms`
+      - `expire_delegation_token`:
+        - `expiry_time_period` -> `expiry_time_period_ms`
+      - `describe_delegation_token`:
+        - `owners[]`:
+          - `name` -> `principal_name`
+      - `delete_groups`:
+        - `groups` -> `groups_names`
+
 * 2.4.1
   - Upgrade snappyer (1.2.6) and crc32cer (0.1.8):
     no need to link erl_interface for nif build
