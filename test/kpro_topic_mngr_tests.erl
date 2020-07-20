@@ -28,10 +28,13 @@
 
 %% Create a random-name partition with 1 partition 1 replica
 %% Increase partition number to 2
-create_topic_partition_test() ->
+create_topic_partition_test_() ->
   CreateTopicsVsn = get_max_api_vsn(create_topics),
   CreatePartitionsVsn = get_max_api_vsn(create_partitions),
-  test_create_topic_partition(CreateTopicsVsn, CreatePartitionsVsn).
+  {timeout, 30,
+   fun() ->
+       test_create_topic_partition(CreateTopicsVsn, CreatePartitionsVsn)
+   end}.
 
 test_create_topic_partition(false, _) ->
   io:format(user, " skipped ", []);
