@@ -1,3 +1,5 @@
+* 3.0.1
+  - remove old rebar from app.src
 * 3.0.0
   - API support for Kafka 2.4
     Non backward compatible changes in request/response struct field names.
