@@ -1,5 +1,5 @@
 %%%
-%%%   Copyright (c) 2014-2018, Klarna AB
+%%%   Copyright (c) 2014-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -101,11 +101,16 @@ start(Host, Port, Config) ->
   proc_lib:start_link(?MODULE, init, [self(), host(Host), Port, Config]).
 
 %% @doc Same as @link request_async/2.
-%% Only that the message towards connection process is a cast (not a call).
-%% Always return 'ok'.
+%% Only that the message towards connection process is a cast (not a call),
+%% unless the request requires no ack from Kafka, in which case call is
+%% used to avoid message overflow.
+%% It always return 'ok'.
 -spec send(connection(), kpro:req()) -> ok.
+send(Pid, #kpro_req{no_ack = true} = Request) ->
+  _ = call(Pid, {send, Request}),
+  ok;
 send(Pid, Request) ->
-  erlang:send(Pid, {{self(), noreply}, {send, Request}}),
+  _ = erlang:send(Pid, {{self(), noreply}, {send, Request}}),
   ok.
 
 %% @doc Send a request. Caller should expect to receive a response
@@ -412,10 +417,10 @@ handle_msg({From, {send, Request}},
       #kpro_req{ref = Ref} ->
         kpro_sent_reqs:add(Requests, Caller, Ref, API, Vsn)
     end,
-  RequestBin = kpro_req_lib:encode(ClientId, CorrId, Request),
+  RequestIoData = kpro_req_lib:encode(ClientId, CorrId, Request),
   Res = case Mod of
-          gen_tcp -> gen_tcp:send(Sock, RequestBin);
-          ssl     -> ssl:send(Sock, RequestBin)
+          gen_tcp -> gen_tcp:send(Sock, RequestIoData);
+          ssl     -> ssl:send(Sock, RequestIoData)
         end,
   case Res of
     ok ->

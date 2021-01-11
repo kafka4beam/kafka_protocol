@@ -1,5 +1,5 @@
 %%%
-%%%   Copyright (c) 2018, Klarna AB
+%%%   Copyright (c) 2018-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 -module(kpro_lib).
 
 -export([ copy_bytes/2
-        , data_size/1
         , decode/2
         , decode_corr_id/1
         , encode/2
@@ -77,9 +76,9 @@ send_and_recv_raw(Req, Sock, Mod, Timeout) ->
 send_and_recv(#kpro_req{api = API, vsn = Vsn} = Req,
                  Sock, Mod, ClientId, Timeout) ->
   CorrId = make_corr_id(),
-  ReqBin = kpro_req_lib:encode(ClientId, CorrId, Req),
+  ReqIoData = kpro_req_lib:encode(ClientId, CorrId, Req),
   try
-    RspBin = send_and_recv_raw(ReqBin, Sock, Mod, Timeout),
+    RspBin = send_and_recv_raw(ReqIoData, Sock, Mod, Timeout),
     {CorrId, Body} = decode_corr_id(RspBin), %% assert match CorrId
     #kpro_rsp{api = API, vsn = Vsn, msg = Msg} = %% assert match API and Vsn
       kpro_rsp_lib:decode(API, Vsn, Body, _DummyRef = false),
@@ -126,11 +125,6 @@ parse_endpoints(Protocol, Str) ->
         end
     end, [], string:tokens(Str, ",\n")).
 
-%% @doc Return number of bytes in the given `iodata()'.
--spec data_size(iodata()) -> count().
-data_size(IoData) ->
-  iolist_size(IoData).
-
 %% @doc Encode primitives.
 -spec encode(primitive_type(), kpro:primitive()) -> iodata().
 encode(boolean, true) -> <<1:8/?INT>>;
@@ -144,15 +138,12 @@ encode(nullable_string, ?null) -> <<-1:16/?INT>>;
 encode(nullable_string, Str) -> encode(string, Str);
 encode(string, Atom) when is_atom(Atom) ->
   encode(string, atom_to_binary(Atom, utf8));
-encode(string, <<>>) -> <<0:16/?INT>>;
-encode(string, L) when is_list(L) ->
-  encode(string, iolist_to_binary(L));
-encode(string, B) when is_binary(B) ->
-  Length = size(B),
-  <<Length:16/?INT, B/binary>>;
+encode(string, Str) ->
+  Length = iolist_size(Str),
+  [encode(int16, Length), Str];
 encode(bytes, ?null) -> <<-1:32/?INT>>;
 encode(bytes, B) when is_binary(B) orelse is_list(B) ->
-  Size = data_size(B),
+  Size = iolist_size(B),
   case Size =:= 0 of
     true  -> <<-1:32/?INT>>;
     false -> [<<Size:32/?INT>>, B]

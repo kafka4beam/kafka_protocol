@@ -1,4 +1,4 @@
-%%%   Copyright (c) 2014-2017, Klarna AB
+%%%   Copyright (c) 2014-2020, Klarna AB
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -76,8 +76,6 @@
 
 
 -define(SCHEMA_MODULE, kpro_schema).
-
--define(IS_STRUCT(S), (is_list(S) orelse is_map(S))).
 
 -define(MIN_MAGIC_2_PRODUCE_API_VSN, 3). %% since kafka 0.11
 -define(MIN_MAGIC_2_FETCH_API_VSN, 4). %% since kafka 0.11
