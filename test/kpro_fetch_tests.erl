@@ -181,25 +181,25 @@ with_vsn_topic(Vsn, Topic) ->
     random_config(),
     Topic,
     fun(Connection) ->
-        {BaseOffset, Messages} = produce_randomly(Connection, Topic),
+        {BaseOffset, Messages} = produce_randomly(Vsn, Connection, Topic),
         fetch_and_verify(Connection, Topic, Vsn, BaseOffset, Messages)
     end).
 
-produce_randomly(Connection, Topic) ->
-  produce_randomly(Connection, Topic, rand_num(?RAND_PRODUCE_BATCH_COUNT), []).
+produce_randomly(TestVsn, Connection, Topic) ->
+  produce_randomly(TestVsn, Connection, Topic, rand_num(?RAND_PRODUCE_BATCH_COUNT), []).
 
-produce_randomly(_Connection, _Topic, 0, Acc0) ->
+produce_randomly(_TestVsn, _Connection, _Topic, 0, Acc0) ->
   [{BaseOffset, _, _, _} | _] = Acc = lists:reverse(Acc0),
   {BaseOffset, lists:append([lists:map(fun(M) -> {Vsn, LAT, M} end, Msg)
                              || {_, Vsn, LAT, Msg} <- Acc])};
-produce_randomly(Connection, Topic, Count, Acc) ->
+produce_randomly(TestVsn, Connection, Topic, Count, Acc) ->
   {ok, Versions} = kpro:get_api_versions(Connection),
   {MinVsn, MaxVsn} = maps:get(produce, Versions),
   Vsn = case MinVsn =:= MaxVsn of
           true -> MinVsn;
           false -> MinVsn + rand_num(MaxVsn - MinVsn) - 1
         end,
-  Opts = rand_produce_opts(),
+  Opts = rand_produce_opts(Vsn, TestVsn),
   Batch = make_random_batch(rand_num(?RAND_BATCH_SIZE)),
   Req = kpro_req_lib:produce(Vsn, Topic, ?PARTI, Batch, Opts),
   {ok, Rsp0} = kpro:request_sync(Connection, Req, ?TIMEOUT),
@@ -207,10 +207,16 @@ produce_randomly(Connection, Topic, Count, Acc) ->
    , base_offset := Offset
    } = Rsp = kpro_test_lib:parse_rsp(Rsp0),
   LogAppendTime = maps:get(log_append_time, Rsp, undefined),
-  produce_randomly(Connection, Topic, Count - 1, [{Offset, Vsn, LogAppendTime, Batch} | Acc]).
+  produce_randomly(TestVsn, Connection, Topic, Count - 1, [{Offset, Vsn, LogAppendTime, Batch} | Acc]).
 
-rand_produce_opts() ->
-  #{ compression => rand_element([no_compression, gzip, snappy])
+rand_produce_opts(ProduceVsn, FetchVsn) ->
+  Common = [no_compression, gzip, snappy],
+  #{ compression => rand_element(case ProduceVsn < 2 orelse FetchVsn < 2 of
+                                   %% avoid test old api with lz4
+                                   %% for more check KIP-57 - Interoperable LZ4 Framing
+                                   true -> Common;
+                                   false -> [lz4 | Common]
+                                 end)
    , required_acks => rand_element([leader_only, all_isr, 1, -1])
    }.
 
