@@ -1,3 +1,6 @@
+* 4.0.0
+  - Remove hard dependencies on snappyer and lz4b.
+    See 'Compression Support' section in README for more details.
 * 3.0.1
   - remove old rebar from app.src
 * 3.0.0
