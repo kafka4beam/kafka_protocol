@@ -4,6 +4,7 @@
               {registered,[]},
               {applications,[kernel,stdlib,ssl,crc32cer]},
               {env,[]},
+              {mod, {kpro_app, []}},
               {modules,[]},
               {licenses,["Apache License 2.0"]},
               {links,[{"Github","https://github.com/kafka4beam/kafka_protocol"}]},

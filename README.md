@@ -14,19 +14,27 @@ See [brod](https://github.com/kafka4beam/brod) for a complete kafka client imple
 Since 4.0, this lib no longer includes [snappyer](https://github.com/kafka4beam/snappyer) and
 [lz4b](https://github.com/kafka4beam/lz4b) as rebar dependencies.
 However `kafka_protocol` still defaults to use `snappyer` and `lz4b_frame` for compress and
-decompress. User may call `kpro:provide_compression` to provide snappy or lz4 compression
-module override. e.g. To use another lz4 implementation:
+decompress.
+
+### Provide compression module overrides
+
+User may override default compression libs with modules having below APIs implemented:
 
 ```
-kpro:provide_compression([{lz4, another_lz4_module}]).
+-callback compress(iodata()) -> iodata().
+-callback decompress(binary()) -> iodata().
 ```
 
-Where `another_lz4_module` should provide two APIs:
+There are two approaches to inject such dynamic dependencies to `kakfa_protocol`:
 
-```
--spec compress(iodata()) -> {ok, iodata()}.
--spec decompress(binary()) -> {ok, iodata()}.
-```
+#### Set application environment
+
+e.g. Set `{provide_compression, [{lz4, my_lz4_module}]}` in `kafka_protocol` application
+environment, (or provide from sys.config).
+
+#### Call `kpro:provide_compression`
+
+e.g. `kpro:provide_compression([{lz4, my_lz4_module}]).`
 
 ## Test (`make eunit`)
 

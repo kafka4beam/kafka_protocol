@@ -49,21 +49,36 @@ encode_decode_test_() ->
 provide_compression_test() ->
   kpro:provide_compression([{snappy, ?MODULE}]),
   try
-    Encoded = kpro_batch:encode(2, [#{ts => kpro_lib:now_ts(),
-                                      headers => [{<<"foo">>, <<"bar">>}],
-                                      value => <<"v">>}], snappy),
-    ?assertMatch({_, _}, binary:match(bin(Encoded), <<"snappy-compressed">>)),
-    [{_DummyMeta, [Decoded]}] = kpro_batch:decode(bin(Encoded)),
-    #kafka_message{value = Value} = Decoded,
-    ?assertMatch(<<"v">>, Value)
+    test_provide_compression(snappy)
   after
     persistent_term:erase({kpro_compress, snappy})
   end.
 
-%% fake compression for test
-compress(IoData) -> {ok, ["snappy-compressed", IoData]}.
+provide_compression_from_app_env_test() ->
+  ?assertEqual("notset", persistent_term:get({kpro_compress, lz4}, "notset")),
+  application:load(?APPLICATION),
+  application:set_env(?APPLICATION, provide_compression, [{lz4, ?MODULE}]),
+  application:ensure_all_started(?APPLICATION),
+  ?assertEqual(?MODULE, persistent_term:get({kpro_compress, lz4})),
+  try
+    test_provide_compression(lz4)
+  after
+    persistent_term:erase({kpro_compress, lz4})
+  end.
 
-decompress(<<"snappy-compressed", Data/binary>>) -> Data.
+test_provide_compression(Name) ->
+  Encoded = kpro_batch:encode(2, [#{ts => kpro_lib:now_ts(),
+                                    headers => [{<<"foo">>, <<"bar">>}],
+                                    value => <<"v">>}], Name),
+  ?assertMatch({_, _}, binary:match(bin(Encoded), <<"fake-compressed">>)),
+  [{_DummyMeta, [Decoded]}] = kpro_batch:decode(bin(Encoded)),
+  #kafka_message{value = Value} = Decoded,
+  ?assertMatch(<<"v">>, Value).
+
+%% fake compression for test
+compress(IoData) -> {ok, ["fake-compressed", IoData]}.
+
+decompress(<<"fake-compressed", Data/binary>>) -> Data.
 
 bin(X) ->
   iolist_to_binary(X).
