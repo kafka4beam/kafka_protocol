@@ -1,3 +1,5 @@
+* 3.1.0
+  - Experimental support for lz4 compression. 
 * 3.0.1
   - remove old rebar from app.src
 * 3.0.0
