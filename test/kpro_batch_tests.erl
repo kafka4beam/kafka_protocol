@@ -17,6 +17,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("kpro.hrl").
 
+-export([compress/1, decompress/1]).
+
 encode_decode_test_() ->
   F = fun(V, Compression) ->
           Encoded = kpro_batch:encode(V, [#{ts => kpro_lib:now_ts(),
@@ -37,13 +39,31 @@ encode_decode_test_() ->
           end,
           ?assertMatch(<<"v">>, Value)
       end,
-  [{"magic 0 no compression", fun() -> F(0, no_compression) end},
-   {"magic 1 no compression", fun() -> F(1, no_compression) end},
-   {"magic 2 no compression", fun() -> F(2, no_compression) end},
-   {"magic 0 gzip", fun() -> F(0, gzip) end},
-   {"magic 1 gzip", fun() -> F(1, gzip) end},
-   {"magic 2 gzip", fun() -> F(2, gzip) end}
-  ].
+  MagicVersions = [0, 1, 2],
+  CompressionOpts = [no_compression, gzip, snappy, lz4],
+  [{atom_to_list(CompressionOpt), " magic v" ++ integer_to_list(MagicV),
+    fun() -> F(MagicV, CompressionOpt) end} ||
+   CompressionOpt <- CompressionOpts,
+   MagicV <- MagicVersions].
+
+provide_compression_test() ->
+  kpro:provide_compression([{snappy, ?MODULE}]),
+  try
+    Encoded = kpro_batch:encode(2, [#{ts => kpro_lib:now_ts(),
+                                      headers => [{<<"foo">>, <<"bar">>}],
+                                      value => <<"v">>}], snappy),
+    ?assertMatch({_, _}, binary:match(bin(Encoded), <<"snappy-compressed">>)),
+    [{_DummyMeta, [Decoded]}] = kpro_batch:decode(bin(Encoded)),
+    #kafka_message{value = Value} = Decoded,
+    ?assertMatch(<<"v">>, Value)
+  after
+    persistent_term:erase({kpro_compress, snappy})
+  end.
+
+%% fake compression for test
+compress(IoData) -> {ok, ["snappy-compressed", IoData]}.
+
+decompress(<<"snappy-compressed", Data/binary>>) -> Data.
 
 bin(X) ->
   iolist_to_binary(X).

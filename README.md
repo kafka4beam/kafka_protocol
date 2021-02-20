@@ -7,7 +7,26 @@ This library provides:
 * Kafka RPC primitives
 * Utility functions to help building requests and parsing responses
 
-See [brod](https://github.com/klarna/brod) for a complete kafka client implementation.
+See [brod](https://github.com/kafka4beam/brod) for a complete kafka client implementation.
+
+## Compression Support
+
+Since 4.0, this lib no longer includes [snappyer](https://github.com/kafka4beam/snappyer) and
+[lz4b](https://github.com/kafka4beam/lz4b) as rebar dependencies.
+However `kafka_protocol` still defaults to use `snappyer` and `lz4b_frame` for compress and
+decompress. User may call `kpro:provide_compression` to provide snappy or lz4 compression
+module override. e.g. To use another lz4 implementation:
+
+```
+kpro:provide_compression([{lz4, another_lz4_module}]).
+```
+
+Where `another_lz4_module` should provide two APIs:
+
+```
+-spec compress(iodata()) -> {ok, iodata()}.
+-spec decompress(binary()) -> {ok, iodata()}.
+```
 
 ## Test (`make eunit`)
 

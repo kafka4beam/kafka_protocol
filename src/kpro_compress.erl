@@ -19,9 +19,18 @@
         , decompress/2
         , codec_to_method/1
         , method_to_codec/1
+        , provide/1
         ]).
 
 -include("kpro_private.hrl").
+
+%% @doc Set snappy or lz4 compression modules.
+%% This should override the default usage of `snappyer` and `lz4b_frame`.
+-spec provide([{snappy | lz4, module()}]) -> ok.
+provide(Libs) ->
+  lists:foreach(fun({Name, Module}) ->
+                    persistent_term:put({?MODULE, Name}, Module)
+                end, Libs).
 
 %% @doc Translate codec in kafka batch attributes to compression method.
 -spec codec_to_method(byte()) -> kpro:compress_option().
@@ -39,16 +48,15 @@ method_to_codec(?no_compression) -> ?KPRO_COMPRESS_NONE.
 %% @doc Compress encoded batch.
 -spec compress(kpro:compress_option(), iodata()) -> iodata().
 compress(?no_compression, IoData) -> IoData;
-compress(?gzip, IoData)           -> zlib:gzip(IoData);
-compress(?snappy, IoData)         -> snappy_compress(IoData);
-compress(?lz4, IoData)            -> lz4_compress(IoData).
+compress(?gzip, IoData) -> zlib:gzip(IoData);
+compress(Name, IoData) -> do_compress(Name, IoData).
 
 %% @doc Decompress batch.
 -spec decompress(kpro:compress_option(), binary()) -> binary().
 decompress(?no_compression, Bin) -> Bin;
 decompress(?gzip, Bin)           -> zlib:gunzip(Bin);
 decompress(?snappy, Bin)         -> java_snappy_unpack(Bin);
-decompress(?lz4, Bin)            -> lz4_decompress(Bin).
+decompress(?lz4, Bin)            -> do_decompress(?lz4, Bin).
 
 %%%_* Internals ================================================================
 
@@ -58,7 +66,7 @@ java_snappy_unpack(<<130, "SNAPPY", 0,
                      _Version:32, _MinCompatibleV:32, Chunks/binary>>) ->
   java_snappy_unpack_chunks(Chunks, []);
 java_snappy_unpack(Bin) ->
-  snappy_decompress(Bin).
+  do_decompress(snappy, Bin).
 
 java_snappy_unpack_chunks(<<>>, Acc) ->
   iolist_to_binary(Acc);
@@ -70,27 +78,29 @@ java_snappy_unpack_chunks(Chunks, Acc) ->
       Acc;
     false ->
       <<Data:Len/binary, Tail/binary>> = Rest,
-      Decompressed = snappy_decompress(Data),
+      Decompressed = do_decompress(?snappy, Data),
       java_snappy_unpack_chunks(Tail, [Acc, Decompressed])
   end.
 
-snappy_decompress(BinData) ->
-  {ok, Decompressed} = snappyer:decompress(BinData),
-  Decompressed.
+do_compress(Name, IoData) ->
+    Module = get_module(Name),
+    iodata(Module:compress(IoData)).
 
-snappy_compress(IoData) ->
-  {ok, Compressed} = snappyer:compress(IoData),
-  Compressed.
+do_decompress(Name, Bin) ->
+    Module = get_module(Name),
+    iodata(Module:decompress(Bin)).
 
-lz4_compress(IoList) when is_list(IoList) ->
-  lz4_compress(iolist_to_binary(IoList));
-lz4_compress(Bin) ->
-  {ok, Compressed} = lz4b_frame:compress(Bin),
-  Compressed.
+get_module(snappy) ->
+    get_module(snappy, snappyer);
+get_module(lz4) ->
+    get_module(lz4, lz4b_frame).
 
-lz4_decompress(Bin) ->
-  {ok, Data} = lz4b_frame:decompress(Bin),
-  Data.
+get_module(Name, Default) ->
+    persistent_term:get({?MODULE, Name}, Default).
+
+iodata({ok, IoData}) -> IoData;
+iodata({error, Reason}) -> error(Reason);
+iodata(IoData) when is_list(IoData) orelse is_binary(IoData) -> IoData.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
