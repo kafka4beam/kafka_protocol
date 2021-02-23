@@ -1,10 +1,10 @@
 Kafka protocol library for Erlang/Elixir
-Copyright 2014-2018 Klarna AB
+Copyright 2014-2018 Klarna Bank AB (publ)
 
 This product includes software developed by
-Klarna AB (https://www.klarna.com)
+Klarna Bank AB (publ) (https://www.klarna.com)
 
 === EXTENDED NOTICE 202102 =====================================================
 
-This lib is a fork of upstream repo https://github.com/klarna/kafka_protocol
+This lib includes external contributions.
 There is so far no heavy rewrite of original code.
