@@ -9,7 +9,7 @@
 
 %% @doc Application behaviour callback
 start(_StartType, _StartArgs) ->
-    Provides = application:get_env(?APPLICATION, provide_compression, []),
+    Provides = application:get_env(kafka_protocol, provide_compression, []),
     kpro:provide_compression(Provides),
     {ok, self()}.
 

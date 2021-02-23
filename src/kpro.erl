@@ -268,7 +268,7 @@
 %%%_* APIs =====================================================================
 
 %% @doc Set snappy or lz4 compression modules.
-%% This should override the default usage of `snappyer` and `lz4b_frame`.
+%% This should override the default usage of `snappyer' and `lz4b_frame'.
 -spec provide_compression([{?snappy | ?lz4, module()}]) -> ok.
 provide_compression(Modules) -> kpro_compress:provide(Modules).
 

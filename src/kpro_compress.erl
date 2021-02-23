@@ -25,7 +25,7 @@
 -include("kpro_private.hrl").
 
 %% @doc Set snappy or lz4 compression modules.
-%% This should override the default usage of `snappyer` and `lz4b_frame`.
+%% This should override the default usage of `snappyer' and `lz4b_frame'.
 -spec provide([{snappy | lz4, module()}]) -> ok.
 provide(Libs) ->
   lists:foreach(fun({Name, Module}) ->
