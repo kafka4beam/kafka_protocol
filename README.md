@@ -1,4 +1,4 @@
-[![kafka_protocol](https://github.com/kafka4beam/kafka_protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/kafka4beam/kafka_protocol/actions/workflows/ci.yml)
+[![kafka_protocol](https://github.com/klarna/kafka_protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/klarna/kafka_protocol/actions/workflows/ci.yml)
 
 # Kafka protocol library for Erlang/Elixir
 
@@ -9,7 +9,7 @@ This library provides:
 * Kafka RPC primitives
 * Utility functions to help building requests and parsing responses
 
-See [brod](https://github.com/kafka4beam/brod) for a complete kafka client implementation.
+See [brod](https://github.com/klarna/brod) for a complete kafka client implementation.
 
 ## Compression Support
 
