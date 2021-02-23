@@ -1,0 +1,64 @@
+name: kafka_protocol
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - platform: ubuntu-20.04
+            lsb_release: focal
+            otp-version: 23.2.3-1
+            kafka-version: 2.4
+          - platform: ubuntu-20.04
+            lsb_release: focal
+            otp-version: 22.3.4.8-1
+            kafka-version: 1.1
+          - platform: ubuntu-20.04
+            lsb_release: focal
+            otp-version: 21.3.8.17-1
+            kafka-version: 0.11
+    runs-on: ${{ matrix.platform }}
+    steps:
+
+    # Setup
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Cache Hex packages
+      uses: actions/cache@v1
+      with:
+        path: ~/.cache/rebar3/hex/hexpm/packages
+        key: ${{ runner.os }}-hex-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
+        restore-keys: |
+          ${{ runner.os }}-hex-
+    - name: Cache Dialyzer PLTs
+      uses: actions/cache@v1
+      with:
+        path: ~/.cache/rebar3/rebar3_*_plt
+        key: ${{ runner.os }}-dialyzer-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
+        restore-keys: |
+          ${{ runner.os }}-dialyzer-
+
+    # Install Erlang
+    - name: Install Erlang/OTP
+      run: |
+        DEB_NAME="esl-erlang_${{ matrix.otp-version }}~ubuntu~${{ matrix.lsb_release }}_amd64.deb"
+        curl -f https://packages.erlang-solutions.com/erlang/debian/pool/$DEB_NAME -o $DEB_NAME
+        sudo dpkg --install $DEB_NAME
+
+    # Compile
+    - name: Compile
+      run: rebar3 do compile, dialyzer, #edoc , xref Temorary workaround, see #3, #4
+
+    # Tests
+    - name: Run tests
+      run: |
+          export KAFKA_VERSION=${{ matrix.kafka-version }}
+          sudo make testbed
+          make eunit

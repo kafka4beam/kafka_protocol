@@ -1,3 +1,5 @@
+[![kafka_protocol](https://github.com/kafka4beam/kafka_protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/kafka4beam/kafka_protocol/actions/workflows/ci.yml)
+
 # Kafka protocol library for Erlang/Elixir
 
 This library provides:
