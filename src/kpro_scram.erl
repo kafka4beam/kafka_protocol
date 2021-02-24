@@ -92,7 +92,7 @@ validate(Scram, ServerFinalMsg) ->
    } = Scram,
   #{signature := ServerSignature0} = parse(ServerFinalMsg),
   ServerSignature = base64:decode(ServerSignature0),
-  HMAC = fun(A, B) -> crypto:hmac(Sha, A, B) end,
+  HMAC = fun(A, B) -> hmac(Sha, A, B) end,
   ServerKey = HMAC(SaltedPassword, <<"Server Key">>),
   ServerSignature = HMAC(ServerKey, AuthMessage), %% assert
   ok.
@@ -100,15 +100,15 @@ validate(Scram, ServerFinalMsg) ->
 %%%_* Internal functions =======================================================
 
 proof(Sha, SaltedPassword, AuthMsg) ->
-  ClientKey  = crypto:hmac(Sha, SaltedPassword, <<"Client Key">>),
+  ClientKey  = hmac(Sha, SaltedPassword, <<"Client Key">>),
   StoredKey = crypto:hash(Sha, ClientKey),
-  ClientSignature = crypto:hmac(Sha, StoredKey, AuthMsg),
+  ClientSignature = hmac(Sha, StoredKey, AuthMsg),
   ClientProof = crypto:exor(ClientKey, ClientSignature),
   base64:encode(ClientProof).
 
 hi(Sha, Password, Salt0, Iterations) when Iterations > 0 ->
   Salt1 = <<Salt0/binary, 0, 0, 0, 1>>,
-  HMAC = fun(SaltIn) -> crypto:hmac(Sha, Password, SaltIn) end,
+  HMAC = fun(SaltIn) -> hmac(Sha, Password, SaltIn) end,
   H1 = HMAC(Salt1),
   HL = hi(HMAC, [H1], Iterations - 1),
   lists:foldl(fun crypto:exor/2, hd(HL), tl(HL)).
@@ -131,9 +131,18 @@ int(I) -> binary_to_integer(I).
 
 bin(S) -> iolist_to_binary(S).
 
+%% `crypto:mac' was introduced in OTP22.1; `crypto:hmac' has been
+%% deprecated in OTP23.
+-if(?OTP_RELEASE >= 23).
+hmac(Sha, Key, Data) ->
+  crypto:mac(hmac, Sha, Key, Data).
+-else.
+hmac(Sha, Key, Data) ->
+  crypto:hmac(Sha, Key, Data).
+-endif.
+
 %%%_* Emacs ====================================================================
 %%% Local Variables:
 %%% allout-layout: t
 %%% erlang-indent-level: 2
 %%% End:
-

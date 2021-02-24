@@ -54,7 +54,8 @@ jobs:
 
     # Compile
     - name: Compile
-      run: rebar3 do compile, dialyzer, #edoc , xref Temorary workaround, see #3, #4
+      run: |
+        rebar3 do compile, dialyzer, edoc, xref
 
     # Tests
     - name: Run tests
