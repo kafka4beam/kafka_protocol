@@ -17,6 +17,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("kpro.hrl").
 
+-export([compress/1, decompress/1]).
+
 encode_decode_test_() ->
   F = fun(V, Compression) ->
           Encoded = kpro_batch:encode(V, [#{ts => kpro_lib:now_ts(),
@@ -37,13 +39,46 @@ encode_decode_test_() ->
           end,
           ?assertMatch(<<"v">>, Value)
       end,
-  [{"magic 0 no compression", fun() -> F(0, no_compression) end},
-   {"magic 1 no compression", fun() -> F(1, no_compression) end},
-   {"magic 2 no compression", fun() -> F(2, no_compression) end},
-   {"magic 0 gzip", fun() -> F(0, gzip) end},
-   {"magic 1 gzip", fun() -> F(1, gzip) end},
-   {"magic 2 gzip", fun() -> F(2, gzip) end}
-  ].
+  MagicVersions = [0, 1, 2],
+  CompressionOpts = [no_compression, gzip, snappy, lz4],
+  [{atom_to_list(CompressionOpt), " magic v" ++ integer_to_list(MagicV),
+    fun() -> F(MagicV, CompressionOpt) end} ||
+   CompressionOpt <- CompressionOpts,
+   MagicV <- MagicVersions].
+
+provide_compression_test() ->
+  kpro:provide_compression([{snappy, ?MODULE}]),
+  try
+    test_provide_compression(snappy)
+  after
+    persistent_term:erase({kpro_compress, snappy})
+  end.
+
+provide_compression_from_app_env_test() ->
+  ?assertEqual("notset", persistent_term:get({kpro_compress, lz4}, "notset")),
+  application:load(?APPLICATION),
+  application:set_env(?APPLICATION, provide_compression, [{lz4, ?MODULE}]),
+  application:ensure_all_started(?APPLICATION),
+  ?assertEqual(?MODULE, persistent_term:get({kpro_compress, lz4})),
+  try
+    test_provide_compression(lz4)
+  after
+    persistent_term:erase({kpro_compress, lz4})
+  end.
+
+test_provide_compression(Name) ->
+  Encoded = kpro_batch:encode(2, [#{ts => kpro_lib:now_ts(),
+                                    headers => [{<<"foo">>, <<"bar">>}],
+                                    value => <<"v">>}], Name),
+  ?assertMatch({_, _}, binary:match(bin(Encoded), <<"fake-compressed">>)),
+  [{_DummyMeta, [Decoded]}] = kpro_batch:decode(bin(Encoded)),
+  #kafka_message{value = Value} = Decoded,
+  ?assertMatch(<<"v">>, Value).
+
+%% fake compression for test
+compress(IoData) -> {ok, ["fake-compressed", IoData]}.
+
+decompress(<<"fake-compressed", Data/binary>>) -> Data.
 
 bin(X) ->
   iolist_to_binary(X).

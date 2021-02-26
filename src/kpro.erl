@@ -15,6 +15,8 @@
 
 -module(kpro).
 
+-export([provide_compression/1]).
+
 %% Connection
 -export([ close_connection/1
         , connect/2
@@ -264,6 +266,11 @@
 -define(BATCH_LEADING_BYTES, 12).
 
 %%%_* APIs =====================================================================
+
+%% @doc Set snappy or lz4 compression modules.
+%% This should override the default usage of `snappyer' and `lz4b_frame'.
+-spec provide_compression([{?snappy | ?lz4, module()}]) -> ok.
+provide_compression(Modules) -> kpro_compress:provide(Modules).
 
 %% Get batch magic version from produce API version.
 -spec produce_api_vsn_to_magic_vsn(vsn()) -> magic().
