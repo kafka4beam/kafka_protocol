@@ -61,6 +61,10 @@ hex-publish: distclean
 	$(verbose) rebar3 hex publish
 	$(verbose) rebar3 hex docs
 
+.PHONY: test-env
+test-env:
+	@./scripts/setup-test-env.sh
+
 .PHONY: testbed
 testbed:
 	@$(verbose) ./scripts/setup-testbed.sh $(KAFKA_VERSION)
