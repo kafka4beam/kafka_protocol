@@ -65,10 +65,6 @@ hex-publish: distclean
 test-env:
 	@./scripts/setup-test-env.sh
 
-.PHONY: testbed
-testbed:
-	@$(verbose) ./scripts/setup-testbed.sh $(KAFKA_VERSION)
-
 .PHONY: cover
 cover:
 	@rebar3 cover -v
