@@ -1,3 +1,6 @@
+* 4.0.1
+  - Swap test environment to match docker-compose setup from `brod`
+  - Fix keys in delete_topics and tests to use the correct field names
 * 4.0.0
   - Remove hard dependencies on snappyer and lz4b.
     See 'Compression Support' section in README for more details.
@@ -242,4 +245,3 @@
   - decode ouptuts from records to proplists
   - `kpro:fetch_request`, `kpro:offsets_request` APIs have args list changed
   - Maximum correlation ID changed to (1 bsl 24 - 1)
-

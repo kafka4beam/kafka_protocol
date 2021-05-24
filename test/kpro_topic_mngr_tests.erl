@@ -138,7 +138,7 @@ test_alter_configs(Vsn) ->
     end).
 
 %% Delete all topics created in this test module.
-delete_topics_test() ->
+delete_topics_test_() ->
   Timeout = case is_integer(get_max_api_vsn(create_partitions)) of
               true ->
                 %% Kafka 1.0 or above

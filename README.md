@@ -40,7 +40,7 @@ e.g. `kpro:provide_compression([{lz4, my_lz4_module}]).`
 
 ## Test (`make eunit`)
 
-To make a testbed locally (requires docker) run `make testbed`.
+To make a testing environment locally (requires docker) run `make test-env`.
 To test against a specific kafka version (e.g. `0.9`), set environment variable `KAFKA_VERSION`. e.g. `export KAFKA_VERSION=0.9`
 
 To test with an existing kafka cluster set below environment variables:

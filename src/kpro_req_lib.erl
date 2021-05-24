@@ -357,8 +357,8 @@ create_partitions(Vsn, Topics, Opts) ->
 -spec delete_topics(vsn(), [topic()], #{timeout => kpro:int32()}) -> req().
 delete_topics(Vsn, Topics, Opts) ->
   Timeout = maps:get(timeout, Opts, 0),
-  Body = #{ topics => Topics
-          , timeout => Timeout
+  Body = #{ topic_names => Topics
+          , timeout_ms => Timeout
           },
   make(delete_topics, Vsn, Body).
 
