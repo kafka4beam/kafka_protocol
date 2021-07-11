@@ -137,6 +137,7 @@ encode(varint, I) when is_integer(I) -> kpro_varint:encode(I);
 encode(unsigned_varint, I) when is_integer(I) -> kpro_varint:encode_unsigned(I);
 encode(nullable_string, ?null) -> <<-1:16/?INT>>;
 encode(nullable_string, Str) -> encode(string, Str);
+encode(string, ?null) -> encode(string, "");
 encode(string, Atom) when is_atom(Atom) ->
   encode(string, atom_to_binary(Atom, utf8));
 encode(string, Str) ->

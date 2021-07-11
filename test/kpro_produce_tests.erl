@@ -123,14 +123,14 @@ get_api_vsn_range() ->
 with_connection(Fun) ->
   ConnFun =
     fun(Endpoints, Cfg) ->
-            kpro:connect_partition_leader(Endpoints, Cfg, topic(), ?PARTI)
+        kpro:connect_partition_leader(Endpoints, Cfg, topic(), ?PARTI)
     end,
   kpro_test_lib:with_connection(ConnFun, Fun).
 
 with_connection(Config, Fun) ->
   ConnFun =
     fun(Endpoints, Cfg) ->
-            kpro:connect_partition_leader(Endpoints, Cfg, topic(), ?PARTI)
+        kpro:connect_partition_leader(Endpoints, Cfg, topic(), ?PARTI)
     end,
   kpro_test_lib:with_connection(Config, ConnFun, Fun).
 
