@@ -267,9 +267,9 @@
 
 %%%_* APIs =====================================================================
 
-%% @doc Set snappy or lz4 compression modules.
-%% This should override the default usage of `snappyer' and `lz4b_frame'.
--spec provide_compression([{?snappy | ?lz4, module()}]) -> ok.
+%% @doc Set `snappy', `lz4' or `zstd' compression modules.
+%% The module must implement `compress/1' and and `decompress/1'.
+-spec provide_compression([{?snappy | ?lz4 | ?zstd, module()}]) -> ok.
 provide_compression(Modules) -> kpro_compress:provide(Modules).
 
 %% Get batch magic version from produce API version.

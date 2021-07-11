@@ -96,19 +96,28 @@ non_monotoic_ts_in_batch_test() ->
   end.
 
 %% batches can be encoded by caller before making a produce request
-encode_batch_beforehand_test() ->
+encode_batch_beforehand(Compression) ->
   {_, Vsn} = get_api_vsn_range(),
   Batch = [#{ts => kpro_lib:now_ts(),
              value => make_value(?LINE),
              headers => []}],
   Magic = kpro_lib:produce_api_vsn_to_magic_vsn(Vsn),
-  Bin = kpro:encode_batch(Magic, Batch, no_compression),
+  Bin = kpro:encode_batch(Magic, Batch, Compression),
   Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Bin),
   with_connection(
     fun(Pid) ->
         {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
         ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
     end).
+
+encode_batch_beforehand_test_() ->
+    Methods0 = [?no_compression, ?gzip, ?snappy],
+    Methods = case kpro_test_lib:get_kafka_version() >= ?KAFKA_2_1 of
+                  true -> Methods0 ++ [?zstd];
+                  false -> Methods0
+              end,
+    [{atom_to_list(Method), fun() -> encode_batch_beforehand(Method) end}
+     || Method <- Methods].
 
 %% async send test
 async_send_test() ->

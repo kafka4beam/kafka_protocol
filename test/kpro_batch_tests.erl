@@ -40,7 +40,7 @@ encode_decode_test_() ->
           ?assertMatch(<<"v">>, Value)
       end,
   MagicVersions = [0, 1, 2],
-  CompressionOpts = [no_compression, gzip, snappy, lz4],
+  CompressionOpts = [no_compression, gzip, snappy, lz4, zstd],
   [{atom_to_list(CompressionOpt), " magic v" ++ integer_to_list(MagicV),
     fun() -> F(MagicV, CompressionOpt) end} ||
    CompressionOpt <- CompressionOpts,

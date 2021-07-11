@@ -1,4 +1,5 @@
 %%%   Copyright (c) 2018-2021, Klarna Bank AB (publ)
+%%%   Copyright (c) 2022-2025, Kafka4beam contributors.
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -24,9 +25,9 @@
 
 -include("kpro_private.hrl").
 
-%% @doc Set snappy or lz4 compression modules.
-%% This should override the default usage of `snappyer' and `lz4b_frame'.
--spec provide([{snappy | lz4, module()}]) -> ok.
+%% @doc Set snappy, lz4 or zstd compression modules.
+%% This should override the default usage of `snappyer', `lz4b_frame' and `ezstd'.
+-spec provide([{snappy | lz4 | zstd, module()}]) -> ok.
 provide(Libs) ->
   lists:foreach(fun({Name, Module}) ->
                     persistent_term:put({?MODULE, Name}, Module)
@@ -37,12 +38,14 @@ provide(Libs) ->
 codec_to_method(A) when ?KPRO_IS_GZIP_ATTR(A) -> ?gzip;
 codec_to_method(A) when ?KPRO_IS_SNAPPY_ATTR(A) -> ?snappy;
 codec_to_method(A) when ?KPRO_IS_LZ4_ATTR(A) -> ?lz4;
+codec_to_method(A) when ?KPRO_IS_ZSTD_ATTR(A) -> ?zstd;
 codec_to_method(_) -> ?no_compression.
 
 %% @doc Translate compression method to bits for kafka batch attributes.
 method_to_codec(?gzip) -> ?KPRO_COMPRESS_GZIP;
 method_to_codec(?snappy) -> ?KPRO_COMPRESS_SNAPPY;
 method_to_codec(?lz4) -> ?KPRO_COMPRESS_LZ4;
+method_to_codec(?zstd) -> ?KPRO_COMPRESS_ZSTD;
 method_to_codec(?no_compression) -> ?KPRO_COMPRESS_NONE.
 
 %% @doc Compress encoded batch.
@@ -56,7 +59,8 @@ compress(Name, IoData) -> do_compress(Name, IoData).
 decompress(?no_compression, Bin) -> Bin;
 decompress(?gzip, Bin)           -> zlib:gunzip(Bin);
 decompress(?snappy, Bin)         -> java_snappy_unpack(Bin);
-decompress(?lz4, Bin)            -> do_decompress(?lz4, Bin).
+decompress(?lz4, Bin)            -> do_decompress(?lz4, Bin);
+decompress(?zstd, Bin)           -> do_decompress(?zstd, Bin).
 
 %%%_* Internals ================================================================
 
@@ -90,10 +94,12 @@ do_decompress(Name, Bin) ->
     Module = get_module(Name),
     iodata(Module:decompress(Bin)).
 
-get_module(snappy) ->
-    get_module(snappy, snappyer);
-get_module(lz4) ->
-    get_module(lz4, lz4b_frame).
+get_module(?snappy) ->
+    get_module(?snappy, snappyer);
+get_module(?lz4) ->
+    get_module(?lz4, lz4b_frame);
+get_module(?zstd) ->
+    get_module(?zstd, ezstd).
 
 get_module(Name, Default) ->
     persistent_term:get({?MODULE, Name}, Default).

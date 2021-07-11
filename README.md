@@ -11,14 +11,18 @@ This library provides:
 
 See [brod](https://github.com/kafka4beam/brod) for a complete kafka client implementation.
 
-## Compression Support
+## Compression
 
-Since 4.0, this lib no longer includes [snappyer](https://github.com/kafka4beam/snappyer) and
-[lz4b](https://github.com/kafka4beam/lz4b) as rebar dependencies.
-However `kafka_protocol` still defaults to use `snappyer` and `lz4b_frame` for compress and
-decompress.
+Since version 4.0, `kafka_protocol` no longer includes compression libraries as dependencies.
+You must add your desired dependencies to the wrapping project's rebar or mix config.
 
-### Provide compression module overrides
+| Compression Algorithm | Default Library                                    |
+|-----------------------|----------------------------------------------------|
+| Snappy                | [snappyer](https://github.com/kafka4beam/snappyer) |
+| Lz4                   | [lz4b](https://github.com/kafka4beam/lz4b)         |
+| Zstd                  | [zstd](https://github.com/silviucpp/ezstd)         |
+
+### Override default compression dependencies
 
 User may override default compression libs with modules having below APIs implemented:
 
@@ -31,12 +35,14 @@ There are two approaches to inject such dynamic dependencies to `kakfa_protocol`
 
 #### Set application environment
 
-e.g. Set `{provide_compression, [{snappy, my_snappy_module}, {lz4, my_lz4_module}]}`
+e.g. Set `{provide_compression, [{snappy, my_snappy_module}, {lz4, my_lz4_module}, {zstd, my_zstd_module}]}`
 in `kafka_protocol` application environment, (or provide from sys.config).
+
+Starting from 4.2, the compression modules are cached in `persistent_term`, which can be overridden by calling `kpro:provide_compression`.
 
 #### Call `kpro:provide_compression`
 
-e.g. `kpro:provide_compression([{snappy, my_snappy_module}, {lz4, my_lz4_module}]).`
+e.g. `kpro:provide_compression([{snappy, my_snappy_module}, {lz4, my_lz4_module}, {zstd, my_zstd_module}]).`
 
 ## Test (`make eunit`)
 
