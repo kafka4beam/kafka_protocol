@@ -146,10 +146,7 @@ encode(bytes, ?null) -> <<-1:32/?INT>>;
 encode(compact_bytes, ?null) -> 0;
 encode(bytes, B) when is_binary(B) orelse is_list(B) ->
   Size = iolist_size(B),
-  case Size =:= 0 of
-    true  -> <<-1:32/?INT>>;
-    false -> [<<Size:32/?INT>>, B]
-  end;
+  [<<Size:32/?INT>>, B];
 encode(compact_bytes, B) when is_binary(B) orelse is_list(B) ->
   [encode(unsigned_varint, iolist_size(B) + 1), B];
 encode(records, B) ->
