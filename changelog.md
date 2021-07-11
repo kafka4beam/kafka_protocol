@@ -1,3 +1,5 @@
+* 4.1.0
+  - Add support for `zstd` compression codec
 * 4.0.2
    - Bug fix: empty bytes is encoded to `0`, but not `-1`
    - Respect `connect` API's timeout parameter as an overall timeout, rather not the timeout for each internal step
