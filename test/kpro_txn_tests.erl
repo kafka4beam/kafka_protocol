@@ -31,9 +31,9 @@
 %% basic test of begin -> write -> commit
 txn_produce_test_() ->
   {Vsns, FetchVsn} = produce_fetch_versions(),
-  [{"vsn=" ++ integer_to_list(V),
-    fun() -> test_txn_produce(V, FetchVsn) end
-   } || V <- Vsns].
+  {inorder, [{"vsn=" ++ integer_to_list(V),
+              fun() -> test_txn_produce(V, FetchVsn) end
+             } || V <- Vsns]}.
 
 test_txn_produce(ProduceVsn, FetchVsn) ->
   Topic = topic(),
