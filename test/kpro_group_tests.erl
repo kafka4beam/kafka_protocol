@@ -40,9 +40,10 @@
 %% 4. heartbeat-cycle, to tell broker that it is still alive
 %% 5. leave_group
 full_flow_test_() ->
-  [{atom_to_list(KafkaVsn),
-    fun() -> test_full_flow(KafkaVsn) end }
-   || KafkaVsn <- kafka_vsns()].
+  [{timeout, 60,
+    {atom_to_list(KafkaVsn),
+     fun() -> test_full_flow(KafkaVsn) end }}
+     || KafkaVsn <- kafka_vsns()].
 
 test_full_flow(KafkaVsn) ->
   GroupId = make_group_id(full_flow_test),
@@ -157,7 +158,7 @@ sync_group(Connection, GroupId, MemberId, Generation,
   ok.
 
 describe_groups(Connection, GroupId, KafkaVsn) ->
-  Groups = [GroupId, <<"unknown-group">>],
+  Groups = [GroupId],
   Body = #{groups => Groups, include_authorized_operations => true},
   Rsp = request_sync(Connection, describe_groups, Body, KafkaVsn),
   #{groups := RspGroups} = Rsp,
@@ -206,7 +207,7 @@ heartbeat_loop(SendFun) ->
     stop ->
       exit(normal)
   after
-    100 ->
+    1000 ->
       heartbeat_loop(SendFun)
   end.
 

@@ -72,7 +72,7 @@ which is generated from `priv/kafka.bnf`.
 The root level `schema` is always a `struct`.
 A `struct` consists of fields having lower level (maybe nested) `schema`
 
-Struct fileds are documented in `priv/kafka.bnf` as comments,
+Struct fields are documented in `priv/kafka.bnf` as comments,
 but the comments are not generated as Erlang comments in `kpro_schema.erl`
 
 Take `produce` API for example
