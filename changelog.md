@@ -1,3 +1,6 @@
+* 4.0.2
+   - Bug fix: empty bytes is encoded to `0`, but not `-1`
+   - Respect `connect` API's timeout parameter as an overall timeout, rather not the timeout for each internal step
 * 4.0.1
   - Swap test environment to match docker-compose setup from `brod`
   - Fix keys in delete_topics and tests to use the correct field names
