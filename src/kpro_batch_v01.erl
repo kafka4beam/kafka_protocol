@@ -147,7 +147,7 @@ decode_loop(<<O:64/?INT, L:32/?INT, Body:L/binary, Rest/binary>>, OuterMsg, Acc)
 
 %% Assign relative offsets to help kafka save some CPU when compressed.
 %% Kafka will decompress to validate CRC, and assign real or relative offsets
-%% depending on kafka verson and/or broker config. For 0.10 or later if relative
+%% depending on kafka version and/or broker config. For 0.10 or later if relative
 %% offsets are correctly assigned by producer, kafka will take the original
 %% compressed batch as-is instead of reassign offsets then re-compress.
 %% ref: https://cwiki.apache.org/confluence/display/KAFKA/ \

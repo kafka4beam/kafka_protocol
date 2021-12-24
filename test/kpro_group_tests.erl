@@ -59,7 +59,7 @@ test_full_flow(KafkaVsn) ->
   % send hartbeats, there should be a generation_id in heartbeat requests,
   % generation bumps whenever there is a group re-balance, however since
   % we are testing with only one group member, we do not expect any group
-  % rebalancing, hence generation_id should not change (alwyas send the same)
+  % rebalancing, hence generation_id should not change (always send the same)
   F = fun() ->
           heartbeat(Connection, GroupId, MemberId, Generation, KafkaVsn)
       end,

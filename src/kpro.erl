@@ -237,7 +237,7 @@
 -type batch_meta_key() ::
         is_transaction % if this message was produced in a transaction
       | is_control % for read_uncommitted clients
-      | last_offset % client wont have to do lists:last(Messages)
+      | last_offset % client won't have to do lists:last(Messages)
       | max_ts % client don't have to scan the messages for max
       | producer_id. % it can be referenced by a future fetch response in
                      % its aborted_transactions field
@@ -411,7 +411,7 @@ connect_controller(Bootstrap, ConnConfig, Opts) ->
 
 %% @doc Connect to group or transaction coordinator.
 %% If the first arg is not a connection pid but a list of bootstrapping
-%% endpoints, it will frist try to connect to any of the nodes
+%% endpoints, it will first try to connect to any of the nodes
 %% NOTE: 'txn' type only applicable to kafka 0.11 or later
 -spec connect_coordinator(connection() | [endpoint()], conn_config(),
                           #{ type => coordinator_type()

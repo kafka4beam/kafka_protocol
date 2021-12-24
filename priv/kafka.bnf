@@ -4265,9 +4265,9 @@ TxnOffsetCommitRequestV0 => transactional_id group_id producer_id producer_epoch
 # group_id: The ID of the group.
 # producer_id: The current producer ID in use by the transactional ID.
 # producer_epoch: The current epoch associated with the producer ID.
-# topics: Each topic that we want to committ offsets for.
+# topics: Each topic that we want to commit offsets for.
 # name: The topic name.
-# partitions: The partitions inside the topic that we want to committ offsets for.
+# partitions: The partitions inside the topic that we want to commit offsets for.
 # partition_index: The index of the partition within the topic.
 # committed_offset: The message offset to be committed.
 # committed_metadata: Any associated metadata the client wants to keep.
@@ -4289,9 +4289,9 @@ TxnOffsetCommitRequestV1 => transactional_id group_id producer_id producer_epoch
 # group_id: The ID of the group.
 # producer_id: The current producer ID in use by the transactional ID.
 # producer_epoch: The current epoch associated with the producer ID.
-# topics: Each topic that we want to committ offsets for.
+# topics: Each topic that we want to commit offsets for.
 # name: The topic name.
-# partitions: The partitions inside the topic that we want to committ offsets for.
+# partitions: The partitions inside the topic that we want to commit offsets for.
 # partition_index: The index of the partition within the topic.
 # committed_offset: The message offset to be committed.
 # committed_metadata: Any associated metadata the client wants to keep.
@@ -4314,9 +4314,9 @@ TxnOffsetCommitRequestV2 => transactional_id group_id producer_id producer_epoch
 # group_id: The ID of the group.
 # producer_id: The current producer ID in use by the transactional ID.
 # producer_epoch: The current epoch associated with the producer ID.
-# topics: Each topic that we want to committ offsets for.
+# topics: Each topic that we want to commit offsets for.
 # name: The topic name.
-# partitions: The partitions inside the topic that we want to committ offsets for.
+# partitions: The partitions inside the topic that we want to commit offsets for.
 # partition_index: The index of the partition within the topic.
 # committed_offset: The message offset to be committed.
 # committed_leader_epoch: The leader epoch of the last consumed record.

@@ -52,13 +52,13 @@
 %% Value Fields (when key version is 0 | 1):
 %%   version     :: 0 | 1
 %%   offset      :: integer()
-%%   metdata     :: binary()
+%%   metadata     :: binary()
 %%   timestamp   :: integer() when version = 0
 %%   commit_time :: integer() when version = 1
 %%   expire_time :: integer() when version = 1
 %%
 %% Value Fields (when key version is 2):
-%%   version       :: integer() %% up to the consuemr implementation
+%%   version       :: integer() %% up to the consumer implementation
 %%   protocol_type :: binary()  %% should be `<<"consumer">>' but not must
 %%   generation_id :: integer()
 %%   protocol      :: binary()  %% `<<"roundrobin">>' etc.
