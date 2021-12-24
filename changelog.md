@@ -192,7 +192,7 @@
   - Moved make_ref to function impl from record definition
 
 * 2.2.0
-  - Add truely async send API `kpro:send/2`
+  - Add truly async send API `kpro:send/2`
 
 * 2.1.2
   - Bump crc32cer to 0.1.3 to support alpine/busybox build
@@ -203,7 +203,7 @@
 
 * 2.1.0
   - Simplify batch input. Batch magic version is derived from produce API version.
-    no longer depends on batch input format to determin magic version.
+    no longer depends on batch input format to determine magic version.
 
 * 2.0.1
   - Bump `crc32cer` to from `0.1.0` to `0.1.1` to fix build issue in OSX
@@ -245,6 +245,6 @@
 * 0.9 -> 1.0 incompatible changes
   - changed from erlang.mk to rebar/rebar3
   - encode inputs from records to proplists
-  - decode ouptuts from records to proplists
+  - decode outputs from records to proplists
   - `kpro:fetch_request`, `kpro:offsets_request` APIs have args list changed
   - Maximum correlation ID changed to (1 bsl 24 - 1)

@@ -91,7 +91,7 @@ send_and_recv(#kpro_req{api = API, vsn = Vsn} = Req,
 
 %% @doc Function pipeline.
 %% The first function takes no args, all succeeding ones should be arity-0 or 1
-%% functions. All functions should retrun
+%% functions. All functions should return
 %% `ok' | `{ok, Result}' | `{error, Reason}'.
 %% where `Result' is the input arg of the next function,
 %% or the result of pipeline if it's the last pipe node.

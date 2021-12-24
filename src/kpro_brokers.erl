@@ -84,7 +84,7 @@ connect_partition_leader(Bootstrap, Config, Topic, Partition, Opts) ->
 
 %% @doc Connect group or transaction coordinator.
 %% If the first arg is not a connection pid but a list of bootstrapping
-%% endpoints, it will frist try to connect to any of the nodes
+%% endpoints, it will first try to connect to any of the nodes
 %% NOTE: 'txn' type only applicable to kafka 0.11 or later
 -spec connect_coordinator(connection() | [endpoint()], config(),
                           #{ type => kpro:coordinator_type()
@@ -98,7 +98,7 @@ connect_coordinator(Bootstrap, Config, #{ type := Type
   DiscoverFun = fun(Conn) -> discover_coordinator(Conn, Type, Id, Timeout) end,
   discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
 
-%% @doc Conect to the controller broker of the kafka cluster.
+%% @doc Connect to the controller broker of the kafka cluster.
 -spec connect_controller(connection() | [endpoint()], config(),
                          #{timeout => timeout()}) ->
         {ok, connection()} | {error, any()}.

@@ -66,7 +66,7 @@ dec_struct([{Name, FieldSc} | Schema], Fields, Stack, Bin) ->
 
 %%%_* Internal functions =======================================================
 
-%% Decode prmitives.
+%% Decode primitives.
 dec(Type, Bin) -> kpro_lib:decode(Type, Bin).
 
 decode_struct(API, Vsn, Bin) ->

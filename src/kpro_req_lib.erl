@@ -115,13 +115,13 @@ metadata_topics_list(_, all) -> ?kpro_null;
 metadata_topics_list(_, Names) ->
   [#{name => Name, tagged_fields => #{}} || Name <- Names].
 
-%% @doc Help function to contruct a `list_offset' request
+%% @doc Help function to construct a `list_offset' request
 %% against one single topic-partition.
 -spec list_offsets(vsn(), topic(), partition(), msg_ts()) -> req().
 list_offsets(Vsn, Topic, Partition, Time) ->
   list_offsets(Vsn, Topic, Partition, Time, ?kpro_read_committed).
 
-%% @doc Help function to contruct a `list_offset' request against one single
+%% @doc Help function to construct a `list_offset' request against one single
 %% topic-partition. In transactional mode,
 %% set `IsolationLevel = ?kpro_read_uncommitted' to list uncommitted offsets.
 -spec list_offsets(vsn(), topic(), partition(),
@@ -205,7 +205,7 @@ fetch(Vsn, Topic, Partition, Offset, Opts) ->
                   {log_start_offset, -1}, %% irelevant to clients
                   {current_leader_epoch, LeaderEpoch}
                  ]]}]]},
-     % we alwyas fetch from one single topic-partition
+     % we always fetch from one single topic-partition
      % never need to forget any
      {forgotten_topics_data, []},
      {rack_id, RackID}
@@ -510,7 +510,7 @@ translate([key_type | _], Value) ->
   end;
 translate(_Stack, Value) -> Value.
 
-%% Encode prmitives.
+%% Encode primitives.
 encode(Type, Value) -> kpro_lib:encode(Type, Value).
 
 bin(X) -> iolist_to_binary(X).
