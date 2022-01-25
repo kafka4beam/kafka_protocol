@@ -24,12 +24,14 @@
 -define(gzip, gzip).
 -define(snappy, snappy).
 -define(lz4, lz4).
+-define(zstd, zstd).
 
 %% Compression attributes
 -define(KPRO_COMPRESS_NONE,   0).
 -define(KPRO_COMPRESS_GZIP,   1).
 -define(KPRO_COMPRESS_SNAPPY, 2).
 -define(KPRO_COMPRESS_LZ4,    3).
+-define(KPRO_COMPRESS_ZSTD,   4).
 
 -define(KPRO_COMPRESSION_MASK, 2#111).
 -define(KPRO_IS_GZIP_ATTR(ATTR),
@@ -38,6 +40,9 @@
         ((?KPRO_COMPRESSION_MASK band ATTR) =:= ?KPRO_COMPRESS_SNAPPY)).
 -define(KPRO_IS_LZ4_ATTR(ATTR),
         ((?KPRO_COMPRESSION_MASK band ATTR) =:= ?KPRO_COMPRESS_LZ4)).
+-define(KPRO_IS_ZSTD_ATTR(ATTR),
+        ((?KPRO_COMPRESSION_MASK band ATTR) =:= ?KPRO_COMPRESS_ZSTD)).
+
 
 -define(KPRO_TS_TYPE_CREATE, 0).
 -define(KPRO_TS_TYPE_APPEND, 2#1000).
@@ -95,6 +100,7 @@
 -define(KAFKA_0_11, 11).
 -define(KAFKA_1_0, 100).
 -define(KAFKA_1_1, 110).
+-define(KAFKA_2_1, 210).
 
 -ifdef(OTP_RELEASE).
 -define(BIND_STACKTRACE(Var), :Var).
