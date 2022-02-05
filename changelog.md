@@ -1,3 +1,5 @@
+* 4.0.3
+   - Fix type spec for `hostname()` to include `inet:ip_address()`
 * 4.0.2
    - Bug fix: empty bytes is encoded to `0`, but not `-1`
    - Respect `connect` API's timeout parameter as an overall timeout, rather not the timeout for each internal step
