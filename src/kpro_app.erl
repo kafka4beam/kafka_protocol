@@ -11,6 +11,6 @@
 start(_StartType, _StartArgs) ->
     Provides = application:get_env(kafka_protocol, provide_compression, []),
     kpro:provide_compression(Provides),
-    {ok, self()}.
+    kpro_sup:start_link().
 
 stop(_State) -> ok.
