@@ -1,3 +1,5 @@
+* 4.0.4
+   - The application ˋstartˋ method must return the `pid` of the top supervisor
 * 4.0.3
    - Fix type spec for `hostname()` to include `inet:ip_address()`
 * 4.0.2
