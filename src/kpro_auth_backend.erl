@@ -16,12 +16,19 @@
 
 -module(kpro_auth_backend).
 
--export([auth/7]).
+-export([auth/8]).
 
 -callback auth(Host :: string(), Sock :: gen_tcp:socket() | ssl:sslsocket(),
                Mod :: gen_tcp | ssl, ClientName :: binary(),
                Timeout :: pos_integer(), SaslOpts :: term()) ->
                  ok | {error, Reason :: term()}.
+
+-callback auth(Host :: string(), Sock :: gen_tcp:socket() | ssl:sslsocket(),
+               HandShakeVsn :: non_neg_integer(), Mod :: gen_tcp | ssl, ClientName :: binary(),
+               Timeout :: pos_integer(), SaslOpts :: term()) ->
+                 ok | {error, Reason :: term()}.
+
+-optional_callbacks([auth/6]).
 
 -spec auth(CallbackModule :: atom(), Host :: string(),
            Sock :: gen_tcp:socket() | ssl:sslsocket(),
@@ -30,6 +37,27 @@
             ok | {error, Reason :: term()}.
 auth(CallbackModule, Host, Sock, Mod, ClientName, Timeout, SaslOpts) ->
   CallbackModule:auth(Host, Sock, Mod, ClientName, Timeout, SaslOpts).
+
+-spec auth(CallbackModule :: atom(), Host :: string(),
+           Sock :: gen_tcp:socket() | ssl:sslsocket(),
+           HandShakeVsn :: non_neg_integer(),
+           Mod :: gen_tcp | ssl, ClientName :: binary(),
+           Timeout :: pos_integer(), SaslOpts :: term()) ->
+            ok | {error, Reason :: term()}.
+auth(CallbackModule, Host, Sock, Vsn, Mod, ClientName, Timeout, SaslOpts) ->
+    case is_exported(CallbackModule, auth, 7) of
+        true ->
+            CallbackModule:auth(Host, Sock, Vsn, Mod, ClientName, Timeout, SaslOpts);
+        false ->
+            auth(CallbackModule, Host, Sock, Mod, ClientName, Timeout, SaslOpts)
+    end.
+
+is_exported(M, F, A) ->
+  case erlang:module_loaded(M) of
+    false -> code:ensure_loaded(M);
+    true -> ok
+  end,
+  erlang:function_exported(M, F, A).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
