@@ -28,6 +28,7 @@
                Timeout :: pos_integer(), SaslOpts :: term()) ->
                  ok | {error, Reason :: term()}.
 
+-optional_callbacks([auth/6]).
 
 -spec auth(CallbackModule :: atom(), Host :: string(),
            Sock :: gen_tcp:socket() | ssl:sslsocket(),
