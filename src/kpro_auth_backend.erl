@@ -46,7 +46,7 @@ auth(CallbackModule, Host, Sock, Mod, ClientName, Timeout, SaslOpts) ->
 auth(CallbackModule, Host, Sock, Vsn, Mod, ClientName, Timeout, SaslOpts) ->
     case is_exported(CallbackModule, auth, 7) of
         true ->
-            CallbackModule:auth(Host, Sock, Mod, Vsn, ClientName, Timeout, SaslOpts);
+            CallbackModule:auth(Host, Sock, Vsn, Mod, ClientName, Timeout, SaslOpts);
         false ->
             auth(CallbackModule, Host, Sock, Mod, ClientName, Timeout, SaslOpts)
     end.
