@@ -34,8 +34,8 @@ auth(_Host, _Sock, _Mod, _ClientId, _Timeout, ?undef, _Vsn) ->
   %% no auth
   ok;
 auth(Host, Sock, Mod, ClientId, Timeout,
-     {callback, ModuleName, Opts}, _Vsn) ->
-  case kpro_auth_backend:auth(ModuleName, Host, Sock, Mod,
+     {callback, ModuleName, Opts}, Vsn) ->
+  case kpro_auth_backend:auth(ModuleName, Host, Sock, Vsn, Mod,
                               ClientId, Timeout, Opts) of
     ok ->
       ok;
