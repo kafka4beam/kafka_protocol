@@ -71,7 +71,7 @@ vsn_range(describe_configs) -> {0, 1};
 vsn_range(alter_configs) -> {0, 0};
 vsn_range(alter_replica_log_dirs) -> {0, 0};
 vsn_range(describe_log_dirs) -> {0, 0};
-vsn_range(sasl_authenticate) -> {0, 0};
+vsn_range(sasl_authenticate) -> {0, 1};
 vsn_range(create_partitions) -> {0, 0};
 vsn_range(create_delegation_token) -> {0, 0};
 vsn_range(renew_delegation_token) -> {0, 0};
@@ -419,7 +419,7 @@ req(alter_replica_log_dirs, 0) ->
                                      {partitions,{array,int32}}]}}]}}];
 req(describe_log_dirs, 0) ->
   [{topics,{array,[{topic,string},{partitions,{array,int32}}]}}];
-req(sasl_authenticate, 0) ->
+req(sasl_authenticate, V) when V >= 0, V =< 1 ->
   [{sasl_auth_bytes,bytes}];
 req(create_partitions, 0) ->
   [{topic_partitions,
@@ -950,6 +950,11 @@ rsp(describe_log_dirs, 0) ->
                               {is_future,boolean}]}}]}}]}}];
 rsp(sasl_authenticate, 0) ->
   [{error_code,int16},{error_message,nullable_string},{sasl_auth_bytes,bytes}];
+rsp(sasl_authenticate, 1) ->
+  [{error_code,int16},
+   {error_message,nullable_string},
+   {sasl_auth_bytes,bytes},
+   {session_lifetime_ms,int64}];
 rsp(create_partitions, 0) ->
   [{throttle_time_ms,int32},
    {topic_errors,{array,[{topic,string},

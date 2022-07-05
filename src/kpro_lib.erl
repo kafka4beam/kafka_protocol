@@ -226,18 +226,34 @@ get_prelude_schema(Tag, Vsn) ->
 -spec find(kpro:field_name(), kpro:struct()) -> kpro:field_value().
 find(Field, Struct) when is_map(Struct) ->
   try
-    maps:get(Field, Struct)
+      try 
+          maps:get(Field, Struct)
+      catch
+          error : {badkey, _} when Field =:= auth_bytes ->
+              maps:get(sasl_auth_bytes, Struct);
+          error : {badkey, _} when Field =:= sasl_auth_bytes ->
+              maps:get(auth_bytes, Struct)
+      end
   catch
     error : {badkey, _} ->
       erlang:error({no_such_field, Field})
   end;
 find(Field, Struct) when is_list(Struct) ->
-  case lists:keyfind(Field, 1, Struct) of
-    {_, Value} -> Value;
-    false -> erlang:error({no_such_field, Field})
-  end;
+  find_list_helper(Field, Struct, Field);
 find(_Field, Other) ->
   erlang:error({not_struct, Other}).
+
+find_list_helper(Field, Struct, OrgField) ->
+    case lists:keyfind(Field, 1, Struct) of
+        {_, Value} ->
+            Value;
+        false when Field =:= sasl_auth, Field =:= OrgField ->
+            find_list_helper(sasl_auth_bytes, Struct, OrgField);
+        false when Field =:= sasl_auth_bytes, Field =:= OrgField->
+            find_list_helper(auth_bytes, Struct, OrgField);
+        false ->
+            erlang:error({no_such_field, Field})
+    end.
 
 %% @doc Find struct field value, return `Default' if the field is not found.
 -spec find(kpro:field_name(), kpro:struct(), kpro:field_value()) ->
