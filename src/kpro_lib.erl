@@ -144,10 +144,7 @@ encode(string, Str) ->
 encode(bytes, ?null) -> <<-1:32/?INT>>;
 encode(bytes, B) when is_binary(B) orelse is_list(B) ->
   Size = iolist_size(B),
-  case Size =:= 0 of
-    true  -> <<-1:32/?INT>>;
-    false -> [<<Size:32/?INT>>, B]
-  end;
+  [<<Size:32/?INT>>, B];
 encode(records, B) ->
   encode(bytes, B).
 
