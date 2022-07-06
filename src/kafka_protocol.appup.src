@@ -1,6 +1,6 @@
 %% -*-: erlang -*-
 {"2.3.6.2", %% 2.3.6 from upstream with emqx changes on top
-  [ {<<"2.3.*">>, [ {load_module, kpro_connection, brutal_purge, soft_purge, []}
+  [ {<<"2\\.3\\..*">>, [ {load_module, kpro_connection, brutal_purge, soft_purge, []}
                   , {load_module, kpro, brutal_purge, soft_purge, []}
                   , {load_module, kpro_batch, brutal_purge, soft_purge, []}
                   , {load_module, kpro_batch_v01, brutal_purge, soft_purge, []}
@@ -9,7 +9,7 @@
                   , {load_module, kpro_schema, brutal_purge, soft_purge, []}
                   ]}
   ],
-  [ {<<"2.3.*">>, [ {load_module, kpro_connection, brutal_purge, soft_purge, []}
+  [ {<<"2\\.3\\..*">>, [ {load_module, kpro_connection, brutal_purge, soft_purge, []}
                   , {load_module, kpro, brutal_purge, soft_purge, []}
                   , {load_module, kpro_batch, brutal_purge, soft_purge, []}
                   , {load_module, kpro_batch_v01, brutal_purge, soft_purge, []}
