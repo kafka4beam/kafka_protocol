@@ -144,10 +144,7 @@ encode(string, Str) ->
 encode(bytes, ?null) -> <<-1:32/?INT>>;
 encode(bytes, B) when is_binary(B) orelse is_list(B) ->
   Size = iolist_size(B),
-  case Size =:= 0 of
-    true  -> <<-1:32/?INT>>;
-    false -> [<<Size:32/?INT>>, B]
-  end;
+  [<<Size:32/?INT>>, B];
 encode(records, B) ->
   encode(bytes, B).
 
@@ -224,20 +221,35 @@ get_prelude_schema(Tag, Vsn) ->
 %% Error exception `{no_such_field, FieldName}' is raised when
 %% the field is not found.
 -spec find(kpro:field_name(), kpro:struct()) -> kpro:field_value().
-find(Field, Struct) when is_map(Struct) ->
-  try
-    maps:get(Field, Struct)
-  catch
-    error : {badkey, _} ->
-      erlang:error({no_such_field, Field})
-  end;
-find(Field, Struct) when is_list(Struct) ->
-  case lists:keyfind(Field, 1, Struct) of
-    {_, Value} -> Value;
-    false -> erlang:error({no_such_field, Field})
-  end;
-find(_Field, Other) ->
-  erlang:error({not_struct, Other}).
+find(Field, Struct) ->
+    try do_find(Field, Struct)
+    catch
+        %% This translation is needed because the sasl_gssapi plugin is
+        %% designed to work with newer version `kafka_protocol' (3.* and 4.*)
+        %% which uses the filed name `auth_bytes' rather than the old (2.3.*)
+        %% name `sasl_auth_bytes'
+        error : {no_such_field, auth_bytes} ->
+            do_find(sasl_auth_bytes, Struct);
+        error : {no_such_field, sasl_auth_bytes} ->
+            do_find(auth_bytes, Struct)
+    end.
+
+do_find(Field, Struct) when is_map(Struct) ->
+    try
+        maps:get(Field, Struct)
+    catch
+        error : {badkey, _} ->
+            erlang:error({no_such_field, Field})
+    end;
+do_find(Field, Struct) when is_list(Struct) ->
+    case lists:keyfind(Field, 1, Struct) of
+        {_, Value} ->
+            Value;
+        false ->
+            erlang:error({no_such_field, Field})
+    end;
+do_find(_Field, Other) ->
+    erlang:error({not_struct, Other}).
 
 %% @doc Find struct field value, return `Default' if the field is not found.
 -spec find(kpro:field_name(), kpro:struct(), kpro:field_value()) ->
