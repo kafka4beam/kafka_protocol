@@ -374,11 +374,7 @@ encode_struct(_API, _Vsn, IoData) ->
 
 %% Encode struct.
 enc_struct([], _Values, _Stack) -> [];
-enc_struct([{Name0, FieldSc} | Schema], Values, Stack) ->
-  Name = case Name0 of
-             auth_bytes -> sasl_auth_bytes;
-             _ -> Name0
-         end,
+enc_struct([{Name, FieldSc} | Schema], Values, Stack) ->
   NewStack = [Name | Stack],
   Value0 =
     try

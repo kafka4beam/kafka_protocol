@@ -227,9 +227,9 @@ find(Field, Struct) when is_map(Struct) ->
           maps:get(Field, Struct)
       catch
           error : {badkey, _} when Field =:= auth_bytes ->
-              maps:get(sasl_auth_bytes, Struct);
-          error : {badkey, _} when Field =:= sasl_auth_bytes ->
-              maps:get(auth_bytes, Struct)
+               maps:get(sasl_auth_bytes, Struct)%;
+          % error : {badkey, _} when Field =:= sasl_auth_bytes ->
+              % maps:get(auth_bytes, Struct)
       end
   catch
     error : {badkey, _} ->
