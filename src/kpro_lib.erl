@@ -221,36 +221,35 @@ get_prelude_schema(Tag, Vsn) ->
 %% Error exception `{no_such_field, FieldName}' is raised when
 %% the field is not found.
 -spec find(kpro:field_name(), kpro:struct()) -> kpro:field_value().
-find(Field, Struct) when is_map(Struct) ->
-  try
-      try 
-          maps:get(Field, Struct)
-      catch
-          error : {badkey, _} when Field =:= auth_bytes ->
-               maps:get(sasl_auth_bytes, Struct)%;
-          % error : {badkey, _} when Field =:= sasl_auth_bytes ->
-              % maps:get(auth_bytes, Struct)
-      end
-  catch
-    error : {badkey, _} ->
-      erlang:error({no_such_field, Field})
-  end;
-find(Field, Struct) when is_list(Struct) ->
-  find_list_helper(Field, Struct, Field);
-find(_Field, Other) ->
-  erlang:error({not_struct, Other}).
+find(Field, Struct) ->
+    try do_find(Field, Struct)
+    catch
+        %% This translation is needed because the sasl_gssapi plugin is
+        %% designed to work with newer version `kafka_protocol' (3.* and 4.*)
+        %% which uses the filed name `auth_bytes' rather than the old (2.3.*)
+        %% name `sasl_auth_bytes'
+        error : {no_such_field, auth_bytes} ->
+            do_find(sasl_auth_bytes, Struct);
+        error : {no_such_field, sasl_auth_bytes} ->
+            do_find(auth_bytes, Struct)
+    end.
 
-find_list_helper(Field, Struct, OrgField) ->
+do_find(Field, Struct) when is_map(Struct) ->
+    try
+        maps:get(Field, Struct)
+    catch
+        error : {badkey, _} ->
+            erlang:error({no_such_field, Field})
+    end;
+do_find(Field, Struct) when is_list(Struct) ->
     case lists:keyfind(Field, 1, Struct) of
         {_, Value} ->
             Value;
-        false when Field =:= sasl_auth, Field =:= OrgField ->
-            find_list_helper(sasl_auth_bytes, Struct, OrgField);
-        false when Field =:= sasl_auth_bytes, Field =:= OrgField->
-            find_list_helper(auth_bytes, Struct, OrgField);
         false ->
             erlang:error({no_such_field, Field})
-    end.
+    end;
+do_find(_Field, Other) ->
+    erlang:error({not_struct, Other}).
 
 %% @doc Find struct field value, return `Default' if the field is not found.
 -spec find(kpro:field_name(), kpro:struct(), kpro:field_value()) ->
