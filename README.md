@@ -31,12 +31,12 @@ There are two approaches to inject such dynamic dependencies to `kakfa_protocol`
 
 #### Set application environment
 
-e.g. Set `{provide_compression, [{lz4, my_lz4_module}]}` in `kafka_protocol` application
-environment, (or provide from sys.config).
+e.g. Set `{provide_compression, [{snappy, my_snappy_module}, {lz4, my_lz4_module}]}`
+in `kafka_protocol` application environment, (or provide from sys.config).
 
 #### Call `kpro:provide_compression`
 
-e.g. `kpro:provide_compression([{lz4, my_lz4_module}]).`
+e.g. `kpro:provide_compression([{snappy, my_snappy_module}, {lz4, my_lz4_module}]).`
 
 ## Test (`make eunit`)
 
