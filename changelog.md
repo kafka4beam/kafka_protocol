@@ -1,3 +1,7 @@
+* 4.1.1
+   - Ported changes from EMQX's fork (based on 2.3.6) back to master branch
+     - Included an pushback twards 'no_acl' callers. https://github.com/emqx/kafka_protocol/pull/1
+   - Avoid crashing on decoding unknown error codes
 * 4.1.0
    - Added pass SASL version to kpro_auth_backend behaviour modules
    - The application ˋstartˋ method must return the `pid` of the top supervisor
