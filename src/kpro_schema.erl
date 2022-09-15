@@ -1060,4 +1060,6 @@ ec(67) -> invalid_principal_type;
 ec(68) -> non_empty_group;
 ec(69) -> group_id_not_found;
 ec(70) -> fetch_session_id_not_found;
-ec(71) -> invalid_fetch_session_epoch.
+ec(71) -> invalid_fetch_session_epoch;
+ec(87) -> invalid_recod;
+ec(UnkonwnCode) -> UnknownCode.
