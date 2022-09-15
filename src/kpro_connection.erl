@@ -1,4 +1,3 @@
-%%%
 %%%   Copyright (c) 2014-2021, Klarna Bank AB (publ)
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
@@ -101,11 +100,16 @@ start(Host, Port, Config) ->
   proc_lib:start_link(?MODULE, init, [self(), host(Host), Port, Config]).
 
 %% @doc Same as @link request_async/2.
-%% Only that the message towards connection process is a cast (not a call).
-%% Always return 'ok'.
+%% Only that the message towards connection process is a cast (not a call),
+%% unless the request requires no ack from Kafka, in which case call is
+%% used to avoid message overflow.
+%% It always return 'ok'.
 -spec send(connection(), kpro:req()) -> ok.
+send(Pid, #kpro_req{no_ack = true} = Request) ->
+  _ = call(Pid, {send, Request}),
+  ok;
 send(Pid, Request) ->
-  erlang:send(Pid, {{self(), noreply}, {send, Request}}),
+  _ = erlang:send(Pid, {{self(), noreply}, {send, Request}}),
   ok.
 
 %% @doc Send a request. Caller should expect to receive a response
