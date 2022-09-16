@@ -1893,4 +1893,4 @@ ec(85) -> no_reassignment_in_progress;
 ec(86) -> group_subscribed_to_topic;
 ec(87) -> invalid_record;
 ec(88) -> unstable_offset_commit;
-ec(Unknown) -> Unknown.
+ec(UnkonwnCode) -> UnknownCode.
