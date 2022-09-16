@@ -1,5 +1,8 @@
 name: kafka_protocol
 on:
+  push:
+    branches:
+      - '*'
   pull_request:
     branches:
       - master
