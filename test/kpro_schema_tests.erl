@@ -27,6 +27,12 @@ test_api(API) ->
                     ?assert(is_list(kpro_schema:rsp(API, V)))
                 end, lists:seq(MinV, MaxV)).
 
+error_code_test() ->
+    %% insure it's added (if we ever regenerate the schema module)
+    ?assertEqual(invalid_recod, kpro_schema:ec(87)),
+    %% unknown error code should not crash
+    ?assertEqual({unknown_error_code, 99999}, kpro_schema:ec(99999)).
+
 %%%_* Emacs ====================================================================
 %%% Local Variables:
 %%% allout-layout: t
