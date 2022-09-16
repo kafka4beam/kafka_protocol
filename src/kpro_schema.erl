@@ -1892,4 +1892,5 @@ ec(84) -> election_not_needed;
 ec(85) -> no_reassignment_in_progress;
 ec(86) -> group_subscribed_to_topic;
 ec(87) -> invalid_record;
-ec(88) -> unstable_offset_commit.
+ec(88) -> unstable_offset_commit;
+ec(UnknownCode) -> UnknownCode.

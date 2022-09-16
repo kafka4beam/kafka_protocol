@@ -65,7 +65,7 @@ auth(_Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn) ->
         case EC =:= ?no_error of
           true -> kpro:find(auth_bytes, Rsp);
           false -> ?ERROR(kpro:find(error_message, Rsp))
-                   end
+        end
     end,
   %% For version 0 handshake, the following auth request/responses
   %% are sent raw (without kafka protocol schema wrapper)
