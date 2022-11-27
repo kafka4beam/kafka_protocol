@@ -59,6 +59,27 @@
 
 -type cfg_val() :: term().
 -type config() :: [{cfg_key(), cfg_val()}] | #{cfg_key() => cfg_val()}.
+%% Connection configuration.
+%%
+%% It is a tuple list or map with following keys (all of them are optional):
+%% <ul>
+%%  <li>`connection_timeout': timeout (in ms) for the initial connection, defaults to 5 seconds</li>
+%%  <li>`client_id': string representing the client in Kafka, defaults to "kpro-client"</li>
+%%  <li>`extra_sock_opts': extra options passed down to `gen_tpc', defaults to []</li>
+%%  <li>`debug': debugging mode, defaults to false</li>
+%%  <li>`nolink': whether not to link the `kpro_connection' process to the caller, defaults to false</li>
+%%  <li>`query_api_version': whether to query Kafka for supported API versions at the beginning,
+%%       so that `kpro' can use newer APIs; the `ApiVersionRequest' was introduced in Kafka 0.10,
+%%       so set this to false when using an older version of Kafka; defaults to true</li>
+%%  <li>`request_timeout': timeout (in ms) for the actual request, defaults to 4 minutes</li>
+%%  <li>`sasl': configuration of SASL authentication, can be either `{Mechanism, Username, Password}'
+%%       or `{Mechanism, File}' or `undefined', where `Mechanism' is `plain | scram_sha_256 | scram_sha_512',
+%%       and `File' is the path to a text file which contains two lines, first line for username
+%%       and second line for password; defaults to `undefined'</li>
+%%  <li>`ssl': whether to use SSL, defaults to `false', more information can be found in
+%%       <a href="https://hexdocs.pm/brod/authentication.html">brod documentation</a></li>
+%% </ul>
+
 -type requests() :: kpro_sent_reqs:requests().
 -type hostname() :: kpro:hostname().
 -type portnum()  :: kpro:portnum().

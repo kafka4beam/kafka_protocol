@@ -89,6 +89,42 @@
                        , session_epoch => kpro:int32()
                        , rack_id => iodata()
                        }.
+%% Options for a `fetch' request.
+%%
+%% It is a map with following keys (all of them are optional):
+%% <ul>
+%%  <li>`max_wait_time': The maximum time (in millis) to block wait until there are
+%%       enough messages that have in sum at least `min_bytes' bytes.
+%%       The waiting will end as soon as either `min_bytes' is satisfied or
+%%       `max_wait_time' is exceeded, whichever comes first. Defaults to 1 second.</li>
+%%  <li>`min_bytes': The minimum size of the message set. If it there are not enough
+%%       messages, Kafka will block wait (but at most for `max_wait_time').
+%%       This implies that the response may be actually smaller in case the time
+%%       runs out. If you set it to 0, Kafka will respond immediately (possibly
+%%       with an empty message set). You can use this option together with
+%%       `max_wait_time' to configure throughput, latency, and size of message sets.
+%%       Defaults to 0.</li>
+%%  <li>`max_bytes': The maximum size of the message set. Note that this is not an
+%%       absolute maximum, if the first message in the message set is larger than
+%%       this value, the message will still be returned to ensure that progress can
+%%       be made. Defaults to 1 MB.</li>
+%%  <li>`isolation_level': This setting controls the visibility of transactional
+%%       records. Using `read_uncommitted' makes all records visible.
+%%       With `read_committed', non-transactional and committed transactional records
+%%       are visible. To be more concrete, `read_committed' returns all data from
+%%       offsets smaller than the current LSO (last stable offset), and enables the
+%%       inclusion of the list of aborted transactions in the result, which allows
+%%       consumers to discard aborted transactional records. Defaults to `read_committed'.
+%%       </li>
+%%  <li>`session_id': Fetch session ID. This can be useful when the fetch request
+%%       spans over multiple topic-partitions. However, fetch requests in `kpro' can
+%%       span only over a single topic-partition and so `kpro' by default does not use
+%%       fetch sessions (by setting appropriate `session_id' and `session_epoch' default
+%%       values). Defaults to 0.</li>
+%%  <li>`session_epoch': Fetch session epoch. Holds the same as above. Defaults to -1.</li>
+%%  <li>`rack_id': The consumer's rack ID. This allow consumers fetching from closest
+%%       replica (instead the leader). Defaults to `undefined'.</li>
+%% </ul>
 
 %% @doc Make a `metadata' request
 -spec metadata(vsn(), all | [topic()]) -> req().
