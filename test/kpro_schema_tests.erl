@@ -29,9 +29,9 @@ test_api(API) ->
 
 error_code_test() ->
     %% insure it's added (if we ever regenerate the schema module)
-    ?assertEqual(invalid_recod, kpro_schema:ec(87)),
+    ?assertEqual(invalid_record, kpro_schema:ec(87)),
     %% unknown error code should not crash
-    ?assertEqual({unknown_error_code, 99999}, kpro_schema:ec(99999)).
+    ?assertEqual(99999, kpro_schema:ec(99999)).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
