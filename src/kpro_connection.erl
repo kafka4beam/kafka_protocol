@@ -275,38 +275,39 @@ get_tcp_mod(_SslOpts = true)  -> ssl;
 get_tcp_mod(_SslOpts = [_|_]) -> ssl;
 get_tcp_mod(_)                -> gen_tcp.
 
-%% If SslOpts contains {verify, verify_peer}, we insert
-%% {server_name_indication, Host}. This is necessary as of OTP 20, to
-%% ensure that peer verification is done against the correct host name
-%% (otherwise the IP will be used, which is almost certainly
-%% incorrect).
-insert_server_name_indication(SslOpts, Host) ->
-  VerifyOpt = proplists:get_value(verify, SslOpts),
-  insert_server_name_indication(VerifyOpt, SslOpts, Host).
+%% insert {server_name_indication, Host} if not already present
+%% Some special values are allowed:
+%% * auto: use the host as SNI
+%% * none: do not use SNI
+%% * undefined: same as auto (for backward compatibility)
+insert_server_name_indication(SslOpts0, Host) ->
+  SNI = ensure_string(proplists:get_value(server_name_indication, SslOpts0)),
+  SslOpts = proplists:delete(server_name_indication, SslOpts0),
+  insert_server_name_indication(SNI, ensure_string(Host), SslOpts).
 
-insert_server_name_indication(verify_peer, SslOpts, Host) ->
-  case proplists:get_value(server_name_indication, SslOpts) of
-    undefined ->
-      %% insert {server_name_indication, Host} if not already present
-      [{server_name_indication, ensure_string(Host)} | SslOpts];
-    _ ->
-      SslOpts
-  end;
-
-insert_server_name_indication(_, SslOpts, _) ->
-  SslOpts.
+insert_server_name_indication("", Host, SslOpts) ->
+  [{server_name_indication, Host} | SslOpts];
+insert_server_name_indication("undefined", Host, SslOpts) ->
+  [{server_name_indication, Host} | SslOpts];
+insert_server_name_indication("auto", Host, SslOpts) ->
+  [{server_name_indication, Host} | SslOpts];
+insert_server_name_indication("none", _Host, SslOpts) ->
+  SslOpts;
+insert_server_name_indication(SNI, _Host, SslOpts) ->
+  [{server_name_indication, SNI} | SslOpts].
 
 %% inet:hostname() is atom() | string()
 %% however sni() is only allowed to be string()
 ensure_string(Host) when is_atom(Host) -> atom_to_list(Host);
+ensure_string(Host) when is_binary(Host) -> binary_to_list(Host);
 ensure_string(Host) -> Host.
 
 maybe_upgrade_to_ssl(Sock, _Mod = ssl, SslOpts0, Host, Timeout) ->
-  SslOpts = case SslOpts0 of
+  SslOpts1 = case SslOpts0 of
               true -> [];
-              [_|_] -> insert_server_name_indication(SslOpts0, Host)
+              [_|_] -> SslOpts0
             end,
-
+  SslOpts = insert_server_name_indication(SslOpts1, Host),
   case ssl:connect(Sock, SslOpts, Timeout) of
     {ok, NewSock} -> NewSock;
     {error, Reason} -> erlang:error({failed_to_upgrade_to_ssl, Reason})
