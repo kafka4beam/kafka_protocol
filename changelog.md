@@ -6,7 +6,7 @@
      - Prior to this change, SNI is auto-added only when SSL option
        'verify' is set to 'verify_peer'.
        This retriction is unnecessary, because SNI is a part of
-       client-hello in the handsake, it does not have anything to do
+       client-hello in the handshake, it does not have anything to do
        with server certificate (and hostname) verification.
      - The connection config is shared between bootstrap connection
        and partition leader connection.
