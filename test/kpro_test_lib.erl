@@ -218,6 +218,7 @@ ssl_options() ->
           [ {cacertfile, CaCertFile}
           , {keyfile,    osenv("KPRO_TEST_SSL_KEY_FILE")}
           , {certfile,   osenv("KPRO_TEST_SSL_CERT_FILE")}
+          , {verify, verify_none}
           ]
       end
   end.
@@ -237,6 +238,7 @@ default_ssl_options() ->
   [ {cacertfile, Fname("ca.crt")}
   , {keyfile,    Fname("client.key")}
   , {certfile,   Fname("client.crt")}
+  , {verify,     verify_none}
   ].
 
 osenv(Name) ->
