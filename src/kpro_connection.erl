@@ -304,7 +304,7 @@ ensure_string(Host) -> Host.
 
 maybe_upgrade_to_ssl(Sock, _Mod = ssl, SslOpts0, Host, Timeout) ->
   SslOpts1 = case SslOpts0 of
-              true -> [];
+              true -> [{verify, verify_none}];
               [_|_] -> SslOpts0
             end,
   SslOpts = insert_server_name_indication(SslOpts1, Host),
