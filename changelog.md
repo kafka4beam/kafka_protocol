@@ -1,6 +1,6 @@
 * 4.1.1
    - Ported changes from EMQX's fork (based on 2.3.6) back to master branch
-     - Included an pushback twards 'no_acl' callers. https://github.com/emqx/kafka_protocol/pull/1
+     - Included an pushback twards 'no_ack' callers. https://github.com/emqx/kafka_protocol/pull/1
    - Avoid crashing on decoding unknown error codes
    - Improve SNI (server_name_indication) config.
      - Prior to this change, SNI is auto-added only when SSL option
