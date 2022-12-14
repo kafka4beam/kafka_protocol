@@ -2,6 +2,20 @@
    - Ported changes from EMQX's fork (based on 2.3.6) back to master branch
      - Included an pushback twards 'no_acl' callers. https://github.com/emqx/kafka_protocol/pull/1
    - Avoid crashing on decoding unknown error codes
+   - Improve SNI (server_name_indication) config.
+     - Prior to this change, SNI is auto-added only when SSL option
+       'verify' is set to 'verify_peer'.
+       This retriction is unnecessary, because SNI is a part of
+       client-hello in the handshake, it does not have anything to do
+       with server certificate (and hostname) verification.
+     - The connection config is shared between bootstrap connection
+       and partition leader connection.
+       Using a static SNI may work for bootstrap connections but
+       may then fail for partition leaders if they happen to be
+       different hosts (which is always the case in confluent cloud).
+       To fix it, we now allow users to use two special values for SNI:
+       - auto: use the exact connecting host name (FQDN or IP)
+       - none: do not use anything at all.
 * 4.1.0
    - Added pass SASL version to kpro_auth_backend behaviour modules
    - The application ˋstartˋ method must return the `pid` of the top supervisor
