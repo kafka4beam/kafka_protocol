@@ -46,6 +46,24 @@ magic_v0_basic_test_() ->
     end,
   [MkTest(Vsn) || Vsn <- lists:seq(Min, Max)].
 
+ssl_test_() ->
+    [{"sni=none", fun() -> ssl_test_with_sni(none) end},
+     {"sni=auto", fun() -> ssl_test_with_sni(auto) end},
+     {"sni=undefined", fun() -> ssl_test_with_sni(undefined) end},
+     {"sni=static", fun() -> ssl_test_with_sni(<<"localhost">>) end}
+    ].
+
+ssl_test_with_sni(SNI) ->
+  {_, Vsn} = get_api_vsn_range(),
+  Msg = #{value => make_value(?LINE), headers => [{<<"foo">>, <<"bar">>}]},
+  Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, [Msg]),
+  with_connection(#{ssl => [{verify, verify_none}, {server_name_indication, SNI}],
+                    sasl => kpro_test_lib:sasl_config(plain)},
+                  fun(Pid) ->
+                          {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
+                          ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
+                  end).
+
 %% Timestamp within batch may not have to be monotonic.
 non_monotoic_ts_in_batch_test() ->
   {_, Vsn} = get_api_vsn_range(),
