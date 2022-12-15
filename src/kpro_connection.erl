@@ -598,10 +598,7 @@ hint_msg(_, _, _) ->
 get_sasl_opt(Config) ->
   case maps:get(sasl, Config, ?undef) of
     {Mechanism, User, Pass0} when ?IS_PLAIN_OR_SCRAM(Mechanism) ->
-      Pass = case is_function(Pass0) of
-               true  -> Pass0();
-               false -> Pass0
-             end,
+      Pass = unwrap_pass(Pass0),
       {Mechanism, User, Pass};
     {Mechanism, File} when ?IS_PLAIN_OR_SCRAM(Mechanism) ->
       {User, Pass} = read_sasl_file(File),
@@ -609,6 +606,11 @@ get_sasl_opt(Config) ->
     Other ->
       Other
   end.
+
+unwrap_pass(Fun) when is_function(Fun) ->
+  unwrap_pass(Fun());
+unwrap_pass(Pass) ->
+  Pass.
 
 %% Read a regular file, assume it has two lines:
 %% First line is the sasl-plain username
