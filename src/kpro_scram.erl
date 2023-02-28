@@ -67,7 +67,7 @@ parse(#{ sha := Sha
   <<MyNonce:?MY_NONCE_LEN/binary, _/binary>> = ServerNonce,
   Salt = base64:decode(Salt0),
   SaltedPassword = hi(Sha, Password, Salt, Iterations),
-  FinalNoProof = bin([?CHANNEL_BINDING, ",r=", Salt]),
+  FinalNoProof = bin([?CHANNEL_BINDING, ",r=", ServerNonce]),
   AuthMsg = [ClientFirstMsgBare, ",", ServerFirstMsg, ",", FinalNoProof],
   #{ sha => Sha
    , salted_password => SaltedPassword
