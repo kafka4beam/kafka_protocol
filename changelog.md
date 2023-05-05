@@ -1,3 +1,6 @@
+* 4.1.3
+  - Bump snappyer dependency from 1.2.8 to 1.2.9 (supports GCC 13)
+
 * 4.1.2
   - Allow passwords passed down to `kpro_connection` to be multiply
     nested functions, instead of considering at most a single layer.
