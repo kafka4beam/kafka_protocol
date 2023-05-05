@@ -1,5 +1,6 @@
 * 4.1.3
-  - Bump snappyer dependency from 1.2.8 to 1.2.9 (supports GCC 13)
+  - Bump snappyer dependency from 1.2.8 to 1.2.9 (supports GCC 13).
+  - Fix scram auth client final message.
 
 * 4.1.2
   - Allow passwords passed down to `kpro_connection` to be multiply
