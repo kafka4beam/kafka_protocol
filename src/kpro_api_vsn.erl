@@ -21,6 +21,18 @@
 
 -type range() :: {kpro:vsn(), kpro:vsn()}.
 
+%% @doc Return supported version range of the given API.
+%%
+%% Majority of the APIs are supported from version 0 up to the
+%% latest version when the bnf files are re-generated.
+%% With two exceptions.
+%%
+%% 1. Do not support version 0-1 for offset_commit:
+%%    version 0: Kafka commits offsets to zookeeper
+%%    version 1: Thre is a lack of commit retention.
+%%
+%% 2. Do not support offset_fetch version 0.
+%%    Version 0: Kafka fetches offsets from zookeeper.
 -spec range(kpro:api()) -> false | range().
 range(offset_commit) -> {2, 2};
 range(offset_fetch) -> {1, 2};
