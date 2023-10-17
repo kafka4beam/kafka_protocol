@@ -27,7 +27,7 @@
 %% latest version when the bnf files are re-generated.
 %% With two exceptions.
 %%
-%% 1. Do not support version 0-1 for offset_commit:
+%% 1. Version 0-1 for offset_commit are not supported:
 %%    version 0: Kafka commits offsets to zookeeper
 %%    version 1: Thre is a lack of commit retention.
 %%
