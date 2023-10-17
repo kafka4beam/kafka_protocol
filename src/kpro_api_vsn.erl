@@ -31,7 +31,7 @@
 %%    version 0: Kafka commits offsets to zookeeper
 %%    version 1: Thre is a lack of commit retention.
 %%
-%% 2. Do not support offset_fetch version 0.
+%% 2. offset_fetch version 0 is not supported:
 %%    Version 0: Kafka fetches offsets from zookeeper.
 -spec range(kpro:api()) -> false | range().
 range(offset_commit) -> {2, 2};
