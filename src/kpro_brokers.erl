@@ -12,7 +12,6 @@
 %%%   See the License for the specific language governing permissions and
 %%%   limitations under the License.
 %%%
-
 -module(kpro_brokers).
 
 -export([ connect_any/2
@@ -27,6 +26,7 @@
         ]).
 
 -include("kpro_private.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -type endpoint() :: kpro:endpoint().
 -type topic() :: kpro:topic().
@@ -288,7 +288,17 @@ api_vsn_range_intersection(Vsns) ->
 
 %% Intersect received api version range with supported range.
 api_vsn_range_intersection(API, Received) ->
-  kpro_api_vsn:intersect(kpro_api_vsn:range(API), Received).
+  Expected = kpro_api_vsn:range(API),
+  try
+    kpro_api_vsn:intersect(Expected, Received)
+  catch
+    error : {no_intersection, _, _} ->
+      Reason = #{reason => incompatible_version_ranges,
+                 expected => Expected,
+                 received => Received,
+                 api => API},
+      erlang:error(Reason)
+  end.
 
 connect_any([], _Config, Errors) ->
   {error, lists:reverse(Errors)};
@@ -306,6 +316,18 @@ random_order(L) ->
   RI = lists:sort(lists:zip(RandL, L)),
   [I || {_R, I} <- RI].
 
+-ifdef(TEST).
+
+api_vsn_range_intersection_test() ->
+    API = offset_commit,
+    Received = {0, 0},
+    ?assertError(#{api := API,
+                   reason := incompatible_version_ranges,
+                   expected := _,
+                   received := Received},
+                 api_vsn_range_intersection(API, Received)).
+
+-endif.
 %%%_* Emacs ====================================================================
 %%% Local Variables:
 %%% allout-layout: t
