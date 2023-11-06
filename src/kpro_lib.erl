@@ -123,7 +123,7 @@ parse_endpoints(Protocol, Str) ->
           {Protocol, Endpoint} -> [Endpoint | Acc];
           _ -> Acc
         end
-    end, [], string:tokens(Str, ",\n")).
+    end, [], string:tokens(Str, ",\n ")).
 
 %% @doc Encode primitives.
 -spec encode(primitive_type(), kpro:primitive()) -> iodata().

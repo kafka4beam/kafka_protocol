@@ -50,6 +50,23 @@ with_timeout_test_() ->
     }
   ].
 
+parse_endpoints_test_() ->
+  [ {"empty", ?_assertEqual([], parse(""))}
+  , {"single", ?_assertEqual([{"127.0.0.1", 1234}], parse("127.0.0.1:1234"))}
+  , {"comma", ?_assertEqual([{"h1", 1234}, {"h2", 1235}], parse("h1:1234, h2:1235"))}
+  , {"space", ?_assertEqual([{"host1", 1234}, {"host2", 1235}], parse("host1:1234 host2:1235"))}
+  , {"plain", ?_assertEqual([{"127.0.0.1", 1234}], parse(plaintext, "plaintext://127.0.0.1:1234"))}
+  , {"ssl", ?_assertEqual([{"127.0.0.1", 1234}], parse(ssl, "SSL://127.0.0.1:1234"))}
+  , {"sasl_ssl", ?_assertEqual([{"host", 1234}], parse(sasl_ssl, "SASL_ssl://host:1234\n"))}
+  , {"sasl_plaintext", ?_assertEqual([{"h", 1234}], parse(sasl_plaintext, "sasl_plaintext://h:1234, "))}
+  ].
+
+parse(Endpoints) ->
+  kpro_lib:parse_endpoints(undefined, Endpoints).
+
+parse(Proto, Endpoints) ->
+  kpro_lib:parse_endpoints(Proto, Endpoints).
+
 %%%_* Emacs ====================================================================
 %%% Local Variables:
 %%% allout-layout: t
