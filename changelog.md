@@ -1,3 +1,7 @@
+* 4.1.4
+  - Ignore space in comma-separated hosts string.
+  - Add more detailed information when server returned API version range is not supported.
+
 * 4.1.3
   - Bump snappyer dependency from 1.2.8 to 1.2.9 (supports GCC 13).
   - Fix scram auth client final message.
