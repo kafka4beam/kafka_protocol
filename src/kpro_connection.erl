@@ -42,6 +42,7 @@
              ]).
 
 -include("kpro_private.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -define(DEFAULT_CONNECT_TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_REQUEST_TIMEOUT, timer:minutes(4)).
@@ -617,10 +618,18 @@ unwrap_pass(Pass) ->
 %% Second line is the password
 -spec read_sasl_file(file:name_all()) -> {binary(), binary()}.
 read_sasl_file(File) ->
-  {ok, Bin} = file:read_file(File),
-  Lines = binary:split(Bin, <<"\n">>, [global]),
-  [User, Pass] = lists:filter(fun(Line) -> Line =/= <<>> end, Lines),
-  {User, Pass}.
+  case file:read_file(File) of
+    {ok, Bin} ->
+      Lines = binary:split(Bin, <<"\n">>, [global]),
+      case lists:filter(fun(Line) -> Line =/= <<>> end, Lines) of
+        [User, Pass] ->
+          {User, Pass};
+        _ ->
+          erlang:error(#{reason => bad_format, file => File})
+      end;
+    {error, Reason} ->
+      erlang:error(#{reason => Reason, file => File})
+  end.
 
 %% Allow binary() host name.
 host(Host) when is_binary(Host) -> binary_to_list(Host);
@@ -641,6 +650,16 @@ deadline(Timeout) ->
 
 timeout(Deadline) ->
   erlang:max(0, Deadline - erlang:monotonic_time(millisecond)).
+
+-ifdef(TEST).
+read_sasl_file_test_() ->
+  Read = fun(Path) -> read_sasl_file(Path) end,
+  BadFile = "README.md",
+  [
+     ?_assertError(#{reason := enoent}, Read("nosuchfile")),
+     ?_assertError(#{reason := bad_format}, Read(BadFile))
+  ].
+-endif.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
