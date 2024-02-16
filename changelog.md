@@ -1,3 +1,6 @@
+* 4.1.5
+  - Avoid raising `badmatch` exception when parsing SASL file which may lead to password leaking in crash logs.
+
 * 4.1.4
   - Ignore space in comma-separated hosts string.
   - Add more detailed information when server returned API version range is not supported.
