@@ -27,6 +27,7 @@
         , send/2
         , start/3
         , stop/1
+        , sasl_reauthenticate_after/2
         , debug/2
         ]).
 
@@ -91,6 +92,7 @@
 
 -record(state, { client_id   :: client_id()
                , parent      :: pid()
+               , config      :: config()
                , remote      :: kpro:endpoint()
                , sock        :: gen_tcp:socket() | ssl:sslsocket()
                , mod         :: ?undef | gen_tcp | ssl
@@ -161,6 +163,30 @@ stop(Pid) when is_pid(Pid) ->
 stop(_) ->
   ok.
 
+%% @doc Reauthenticates SASL by repeating the authentication flow after given time.
+%% The authentication flow is repeated only once and not periodically.
+%% This would be called by an authentication adapter to reauthenticate before
+%% session_lifetime_ms provided in the v1 SASL authentication response is
+%% reached.
+%% Example use case:
+%%   -module(my_custom_sasl_authentication).
+%%
+%%   auth(Host, Sock, Vsn, Mod, ClientId, Timeout, Opts) ->
+%%     {ok, SaslResponse} = do_authenticate(...),
+%%     case session_lifetime_ms(SaslResponse) of
+%%       SessionLifetime when Lifetime > 0 ->
+%%         kpro_connection:sasl_reauthenticate_after(self(), with_slop(SessionLifetime));
+%%       _ ->
+%%         ok
+%%     end,
+%%     ok.
+-spec sasl_reauthenticate_after(connection(), timeout()) -> ok.
+sasl_reauthenticate_after(Pid, Time) when is_pid(Pid) ->
+  erlang:send_after(Time, Pid, sasl_reauthenticate),
+  ok;
+sasl_reauthenticate_after(_, _) ->
+  ok.
+
 -spec get_api_vsns(pid()) ->
         {ok, ?undef | kpro:vsn_ranges()} | {error, any()}.
 get_api_vsns(Pid) ->
@@ -227,6 +253,7 @@ connect(Parent, Host, Port, Config) ->
       State = #state{ client_id = get_client_id(Config)
                     , parent    = Parent
                     , remote    = {Host, Port}
+                    , config    = Config
                     , sock      = Sock
                     },
       init_connection(State, Config, Deadline);
@@ -469,10 +496,28 @@ handle_msg({From, stop}, #state{mod = Mod, sock = Sock}, _Debug) ->
   Mod:close(Sock),
   maybe_reply(From, ok),
   ok;
+handle_msg(sasl_reauthenticate, State, Debug) ->
+  do_sasl_reauthenticate(State),
+  ?MODULE:loop(State, Debug);
 handle_msg(Msg, #state{} = State, Debug) ->
   error_logger:warning_msg("[~p] ~p got unrecognized message: ~p",
                           [?MODULE, self(), Msg]),
   ?MODULE:loop(State, Debug).
+
+do_sasl_reauthenticate(#state{client_id = ClientId, mod = Mod, sock = Sock, remote = {Host, _Port}, api_vsns = Versions, config = Config}) ->
+  %% Imitates logic in init -> connect, but using existing api_vsns and socket
+  Timeout = get_connect_timeout(Config),
+  Deadline = deadline(Timeout),
+  SaslOpts = get_sasl_opt(Config),
+  HandshakeVsn = case Versions of
+                   #{sasl_handshake := {_, V}} -> V;
+                   _ -> 0
+                 end,
+  ok = setopts(Sock, Mod, [{active, false}]), 
+  ok = kpro_sasl:auth(Host, Sock, Mod, ClientId,
+                      timeout(Deadline), SaslOpts, HandshakeVsn),
+  ok = setopts(Sock, Mod, [{active, once}]), 
+  ok.
 
 cast(Pid, Msg) ->
   try
@@ -500,6 +545,8 @@ print_msg(Device, {_From, {send, Request}}, State) ->
   do_print_msg(Device, "send: ~p", [Request], State);
 print_msg(Device, {_From, {get_api_vsns, Request}}, State) ->
   do_print_msg(Device, "get_api_vsns", [Request], State);
+print_msg(Device, sasl_reauthenticate, State) ->
+  do_print_msg(Device, "sasl_reauthenticate", [], State);
 print_msg(Device, {tcp, _Sock, Bin}, State) ->
   do_print_msg(Device, "tcp: ~p", [Bin], State);
 print_msg(Device, {ssl, _Sock, Bin}, State) ->

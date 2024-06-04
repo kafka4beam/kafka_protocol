@@ -73,6 +73,21 @@ extra_sock_opts_test() ->
   ?assertEqual(true, proplists:get_value(delay_send, InetSockOpts)),
   ok = kpro_connection:stop(Pid).
 
+sasl_reauthenticate_after_test() ->
+  Config0 = kpro_test_lib:connection_config(ssl),
+  case kpro_test_lib:get_kafka_version() of
+    ?KAFKA_0_9 ->
+      ok;
+    ?KAFKA_0_10 ->
+      {ok, Pid} = connect(Config0#{sasl => kpro_test_lib:sasl_config(file)}),
+      ok = kpro_connection:sasl_reauthenticate_after(Pid, 1000),
+      ok = kpro_connection:stop(Pid);
+    _ ->
+      {ok, Pid} = connect(Config0#{sasl => kpro_test_lib:sasl_config(file)}),
+      ok = kpro_connection:sasl_reauthenticate_after(Pid, 1000),
+      ok = kpro_connection:stop(Pid)
+  end.
+
 connect(Config) ->
   Protocol = kpro_test_lib:guess_protocol(Config),
   [{Host, Port} | _] = kpro_test_lib:get_endpoints(Protocol),
