@@ -500,8 +500,12 @@ format_status(Opt, Status) ->
 
 print_msg(Device, {_From, {send, Request}}, State) ->
   do_print_msg(Device, "send: ~p", [Request], State);
+print_msg(Device, {_From, {get_api_vsns, Request}}, State) ->
+  do_print_msg(Device, "get_api_vsns", [Request], State);
 print_msg(Device, {tcp, _Sock, Bin}, State) ->
   do_print_msg(Device, "tcp: ~p", [Bin], State);
+print_msg(Device, {ssl, _Sock, Bin}, State) ->
+  do_print_msg(Device, "ssl: ~p", [Bin], State);
 print_msg(Device, {tcp_closed, _Sock}, State) ->
   do_print_msg(Device, "tcp_closed", [], State);
 print_msg(Device, {tcp_error, _Sock, Reason}, State) ->
