@@ -52,7 +52,7 @@ jobs:
     # Compile
     - name: Compile
       run: |
-        rebar3 do compile, dialyzer, edoc, xref
+        rebar3 do compile, dialyzer, ex_doc, xref
 
     # Tests
     - name: Run tests
