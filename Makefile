@@ -52,6 +52,10 @@ edoc: profile=edown
 edoc:
 	@$(rebar_cmd) edoc
 
+.PHONY: ex_doc
+ex_doc:
+	@$(rebar_cmd) ex_doc
+
 .PHONY: dialyze
 dialyze: compile
 	@$(rebar_cmd) dialyzer

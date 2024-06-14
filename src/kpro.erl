@@ -360,7 +360,7 @@ connect(Endpoint, ConnConfig) ->
 connect_any(Endpoints, ConnConfig) ->
   kpro_brokers:connect_any(Endpoints, ConnConfig).
 
-%% @doc Sotp connection process.
+%% @doc Stop connection process.
 -spec close_connection(connection()) -> ok.
 close_connection(Connection) ->
   kpro_connection:stop(Connection).
