@@ -5,7 +5,7 @@ docker ps > /dev/null || {
     exit 1
 }
 
-VERSION=${KAFKA_VERSION:-1.1}
+VERSION=${KAFKA_VERSION:-2.4}
 if [ -z $VERSION ]; then VERSION=$1; fi
 
 case $VERSION in
