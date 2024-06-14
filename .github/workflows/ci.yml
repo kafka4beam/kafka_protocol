@@ -13,9 +13,8 @@ jobs:
       fail-fast: false
       matrix:
         otp:
-          - '24.1'
-          - '23.3.4.7'
-          - '22.3.4.21'
+          - '26'
+          - '25'
         kafka:
           - '2.4'
           - '1.1'
@@ -47,7 +46,7 @@ jobs:
       with:
         version-type: strict
         otp-version: ${{matrix.otp}}
-        rebar3-version: '3.17.0'
+        rebar3-version: '3.20.0'
 
     # Compile
     - name: Compile
