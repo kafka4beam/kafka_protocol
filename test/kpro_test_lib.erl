@@ -257,6 +257,7 @@ default_ssl_options() ->
   , {keyfile,    Fname("client.key")}
   , {certfile,   Fname("client.crt")}
   , {verify,     verify_none}
+  , {versions,   ['tlsv1.2']}
   ].
 
 osenv(Name) ->

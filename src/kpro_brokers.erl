@@ -26,7 +26,9 @@
         ]).
 
 -include("kpro_private.hrl").
+-ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-endif.
 
 -type endpoint() :: kpro:endpoint().
 -type topic() :: kpro:topic().

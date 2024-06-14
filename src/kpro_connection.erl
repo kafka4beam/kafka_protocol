@@ -42,7 +42,9 @@
              ]).
 
 -include("kpro_private.hrl").
+-ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-endif.
 
 -define(DEFAULT_CONNECT_TIMEOUT, timer:seconds(5)).
 -define(DEFAULT_REQUEST_TIMEOUT, timer:minutes(4)).
