@@ -12,6 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        rebar3:
+          - '3.20.0'
         otp:
           - '26'
           - '25'
@@ -29,16 +31,16 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/.cache/rebar3/hex/hexpm/packages
-        key: ${{ runner.os }}-hex-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
+        key: ${{ runner.os }}-hex2-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
         restore-keys: |
-          ${{ runner.os }}-hex-
+          ${{ runner.os }}-hex2-
     - name: Cache Dialyzer PLTs
       uses: actions/cache@v2
       with:
         path: ~/.cache/rebar3/rebar3_*_plt
-        key: ${{ runner.os }}-dialyzer-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
+        key: ${{ runner.os }}--dialyzer2-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
         restore-keys: |
-          ${{ runner.os }}-dialyzer-
+          ${{ runner.os }}-dialyzer2-
 
     # Install Erlang
     - name: Install Erlang/OTP
@@ -46,7 +48,7 @@ jobs:
       with:
         version-type: strict
         otp-version: ${{matrix.otp}}
-        rebar3-version: '3.20.0'
+        rebar3-version: ${{matrix.rebar3}}
 
     # Compile
     - name: Compile
