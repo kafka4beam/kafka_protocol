@@ -1,3 +1,6 @@
+* 4.1.6
+  - Fix docs. PR #120
+
 * 4.1.5
   - Avoid raising `badmatch` exception when parsing SASL file which may lead to password leaking in crash logs.
 
