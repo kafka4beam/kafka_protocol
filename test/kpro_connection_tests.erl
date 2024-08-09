@@ -17,6 +17,8 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("kpro_private.hrl").
 
+-export([ auth/7 ]).
+
 plaintext_test() ->
   Config = kpro_test_lib:connection_config(plaintext),
   {ok, Pid} = connect(Config),
@@ -54,6 +56,33 @@ sasl_file_test() ->
     _ ->
       Config = Config0#{sasl => kpro_test_lib:sasl_config(file)},
       {ok, Pid} = connect(Config),
+      ok = kpro_connection:stop(Pid)
+  end.
+
+% SASL callback implementation for subsequent tests
+auth(_Host, _Sock, _Vsn, _Mod, _ClientName, _Timeout, #{test_pid := TestPid} = SaslOpts) ->
+  case SaslOpts of
+    #{response_session_lifetime_ms := ResponseSessionLifeTimeMs} ->
+      TestPid ! sasl_authenticated,
+      {ok, #{session_lifetime_ms => ResponseSessionLifeTimeMs}};
+    _ ->
+      ok
+  end.
+
+sasl_callback_test() ->
+  Config0 = kpro_test_lib:connection_config(sasl_ssl),
+  case kpro_test_lib:get_kafka_version() of
+    ?KAFKA_0_9 ->
+      ok;
+    _ ->
+      Config = Config0#{sasl => {callback, ?MODULE, #{response_session_lifetime_ms => 51, test_pid => self()}}},
+      {ok, Pid} = connect(Config),
+
+      % initial authentication
+      receive sasl_authenticated -> ok end,
+      % repeated authentication as session expires
+      receive sasl_authenticated -> ok end,
+
       ok = kpro_connection:stop(Pid)
   end.
 
