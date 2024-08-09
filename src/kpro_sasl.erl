@@ -39,6 +39,8 @@ auth(Host, Sock, Mod, ClientId, Timeout,
                               ClientId, Timeout, Opts) of
     ok ->
       ok;
+    {ok, ServerResponse} ->
+      {ok, ServerResponse};
     {error, Reason} ->
       ?ERROR(Reason)
   end;

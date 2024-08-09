@@ -18,15 +18,17 @@
 
 -export([auth/8]).
 
+-type server_auth_response() :: term().
+
 -callback auth(Host :: string(), Sock :: gen_tcp:socket() | ssl:sslsocket(),
                Mod :: gen_tcp | ssl, ClientName :: binary(),
                Timeout :: pos_integer(), SaslOpts :: term()) ->
-                 ok | {error, Reason :: term()}.
+                 ok | {ok, server_auth_response()} | {error, Reason :: term()}.
 
 -callback auth(Host :: string(), Sock :: gen_tcp:socket() | ssl:sslsocket(),
                HandShakeVsn :: non_neg_integer(), Mod :: gen_tcp | ssl, ClientName :: binary(),
                Timeout :: pos_integer(), SaslOpts :: term()) ->
-                 ok | {error, Reason :: term()}.
+                 ok | {ok, server_auth_response()} | {error, Reason :: term()}.
 
 -optional_callbacks([auth/6]).
 
@@ -34,7 +36,7 @@
            Sock :: gen_tcp:socket() | ssl:sslsocket(),
            Mod :: gen_tcp | ssl, ClientName :: binary(),
            Timeout :: pos_integer(), SaslOpts :: term()) ->
-            ok | {error, Reason :: term()}.
+            ok | {ok, server_auth_response()} | {error, Reason :: term()}.
 auth(CallbackModule, Host, Sock, Mod, ClientName, Timeout, SaslOpts) ->
   CallbackModule:auth(Host, Sock, Mod, ClientName, Timeout, SaslOpts).
 
@@ -43,7 +45,7 @@ auth(CallbackModule, Host, Sock, Mod, ClientName, Timeout, SaslOpts) ->
            HandShakeVsn :: non_neg_integer(),
            Mod :: gen_tcp | ssl, ClientName :: binary(),
            Timeout :: pos_integer(), SaslOpts :: term()) ->
-            ok | {error, Reason :: term()}.
+            ok | {ok, server_auth_response()} | {error, Reason :: term()}.
 auth(CallbackModule, Host, Sock, Vsn, Mod, ClientName, Timeout, SaslOpts) ->
     case is_exported(CallbackModule, auth, 7) of
         true ->

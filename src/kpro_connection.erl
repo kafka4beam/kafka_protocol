@@ -93,6 +93,7 @@
 
 -record(state, { client_id   :: client_id()
                , parent      :: pid()
+               , config      :: config()
                , remote      :: kpro:endpoint()
                , sock        :: gen_tcp:socket() | ssl:sslsocket()
                , mod         :: ?undef | gen_tcp | ssl
@@ -229,6 +230,7 @@ connect(Parent, Host, Port, Config) ->
       State = #state{ client_id = get_client_id(Config)
                     , parent    = Parent
                     , remote    = {Host, Port}
+                    , config    = Config
                     , sock      = Sock
                     },
       init_connection(State, Config, Deadline);
@@ -260,14 +262,8 @@ init_connection(#state{ client_id = ClientId
       #{query_api_versions := false} -> ?undef;
       _ -> query_api_versions(NewSock, Mod, ClientId, Deadline)
     end,
-  HandshakeVsn = case Versions of
-                   #{sasl_handshake := {_, V}} -> V;
-                   _ -> 0
-                 end,
-  SaslOpts = get_sasl_opt(Config),
-  ok = kpro_sasl:auth(Host, NewSock, Mod, ClientId,
-                      timeout(Deadline), SaslOpts, HandshakeVsn),
-  State#state{mod = Mod, sock = NewSock, api_vsns = Versions}.
+  State1 = State#state{mod = Mod, sock = NewSock, api_vsns = Versions},
+  sasl_authenticate(State1).
 
 query_api_versions(Sock, Mod, ClientId, Deadline) ->
   Req = kpro_req_lib:make(api_versions, 0, []),
@@ -475,6 +471,25 @@ handle_msg(Msg, #state{} = State, Debug) ->
   error_logger:warning_msg("[~p] ~p got unrecognized message: ~p",
                           [?MODULE, self(), Msg]),
   ?MODULE:loop(State, Debug).
+
+sasl_authenticate(#state{client_id = ClientId, mod = Mod, sock = Sock, remote = {Host, _Port}, api_vsns = Versions, config = Config} = State) ->
+  Timeout = get_connect_timeout(Config),
+  Deadline = deadline(Timeout),
+  SaslOpts = get_sasl_opt(Config),
+  HandshakeVsn = case Versions of
+                   #{sasl_handshake := {_, V}} -> V;
+                   _ -> 0
+                 end,
+  ok = setopts(Sock, Mod, [{active, false}]),
+  case kpro_sasl:auth(Host, Sock, Mod, ClientId,
+                      timeout(Deadline), SaslOpts, HandshakeVsn) of
+    ok ->
+      ok;
+    {ok, _ServerResponse} ->
+      ok
+  end,
+  ok = setopts(Sock, Mod, [{active, once}]),
+  State.
 
 cast(Pid, Msg) ->
   try
