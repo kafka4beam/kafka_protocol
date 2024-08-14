@@ -2,10 +2,10 @@
   - Automatically re-authenticate before session lifetime expires if SASL
     authentication module returns `{ok, ServerResponse}` and ServerResponse
     contains a non-zero `session_timeout_ms`.
-    https://github.com/kafka4beam/kafka_protocol/pull/122
+    [PR#122](https://github.com/kafka4beam/kafka_protocol/pull/122)
 
 * 4.1.6
-  - Fix docs. PR #120
+  - Fix docs. [PR#120](https://github.com/kafka4beam/kafka_protocol/pull/120)
 
 * 4.1.5
   - Avoid raising `badmatch` exception when parsing SASL file which may lead to password leaking in crash logs.
