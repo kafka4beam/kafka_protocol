@@ -93,12 +93,14 @@
 
 -record(state, { client_id   :: client_id()
                , parent      :: pid()
+               , config      :: config()
                , remote      :: kpro:endpoint()
                , sock        :: gen_tcp:socket() | ssl:sslsocket()
                , mod         :: ?undef | gen_tcp | ssl
                , req_timeout :: ?undef | timeout()
                , api_vsns    :: ?undef | kpro:vsn_ranges()
                , requests    :: ?undef | requests()
+               , backlog     :: false | queue:queue()
                }).
 
 -type state() :: #state{}.
@@ -226,10 +228,12 @@ connect(Parent, Host, Port, Config) ->
   SockOpts = [{active, false}, binary] ++ get_extra_sock_opts(Config),
   case gen_tcp:connect(Host, Port, SockOpts, Timeout) of
     {ok, Sock} ->
-      State = #state{ client_id = get_client_id(Config)
-                    , parent    = Parent
-                    , remote    = {Host, Port}
-                    , sock      = Sock
+      State = #state{ client_id   = get_client_id(Config)
+                    , parent      = Parent
+                    , remote      = {Host, Port}
+                    , config      = Config
+                    , sock        = Sock
+                    , backlog     = false
                     },
       init_connection(State, Config, Deadline);
     {error, Reason} ->
@@ -260,14 +264,8 @@ init_connection(#state{ client_id = ClientId
       #{query_api_versions := false} -> ?undef;
       _ -> query_api_versions(NewSock, Mod, ClientId, Deadline)
     end,
-  HandshakeVsn = case Versions of
-                   #{sasl_handshake := {_, V}} -> V;
-                   _ -> 0
-                 end,
-  SaslOpts = get_sasl_opt(Config),
-  ok = kpro_sasl:auth(Host, NewSock, Mod, ClientId,
-                      timeout(Deadline), SaslOpts, HandshakeVsn),
-  State#state{mod = Mod, sock = NewSock, api_vsns = Versions}.
+  State1 = State#state{mod = Mod, sock = NewSock, api_vsns = Versions},
+  sasl_authenticate(State1).
 
 query_api_versions(Sock, Mod, ClientId, Deadline) ->
   Req = kpro_req_lib:make(api_versions, 0, []),
@@ -408,7 +406,8 @@ handle_msg({_, Sock, Bin}, #state{ sock     = Sock
   Rsp = kpro_rsp_lib:decode(API, Vsn, Body, Ref),
   ok = cast(Caller, {msg, self(), Rsp}),
   NewRequests = kpro_sent_reqs:del(Requests, CorrId),
-  ?MODULE:loop(State#state{requests = NewRequests}, Debug);
+  State1 = maybe_flush_backlog(State#state{requests = NewRequests}),
+  ?MODULE:loop(State1, Debug);
 handle_msg(assert_max_req_age, #state{ requests = Requests
                                      , req_timeout = ReqTimeout
                                      } = State, Debug) ->
@@ -426,12 +425,41 @@ handle_msg({tcp_error, Sock, Reason}, #state{sock = Sock}, _) ->
   exit({tcp_error, Reason});
 handle_msg({ssl_error, Sock, Reason}, #state{sock = Sock}, _) ->
   exit({ssl_error, Reason});
-handle_msg({From, {send, Request}},
-           #state{ client_id = ClientId
-                 , mod       = Mod
-                 , sock      = Sock
-                 , requests  = Requests
-                 } = State, Debug) ->
+handle_msg({_From, {send, _}} = Msg, #state{backlog = false} = State, Debug) ->
+  State1 = send_request(Msg, State),
+  ?MODULE:loop(State1, Debug);
+handle_msg({_From, {send, _}} = Msg, #state{backlog = Q} = State, Debug) ->
+  %% Avoid sending new requests until in-flight requests have been resolved
+  State1 = State#state{backlog = queue:in(Msg, Q)},
+  ?MODULE:loop(State1, Debug);
+handle_msg({From, get_api_vsns}, State, Debug) ->
+  maybe_reply(From, {ok, State#state.api_vsns}),
+  ?MODULE:loop(State, Debug);
+handle_msg({From, get_endpoint}, State, Debug) ->
+  maybe_reply(From, {ok, State#state.remote}),
+  ?MODULE:loop(State, Debug);
+handle_msg({From, get_tcp_sock}, State, Debug) ->
+  maybe_reply(From, {ok, State#state.sock}),
+  ?MODULE:loop(State, Debug);
+handle_msg({From, stop}, #state{mod = Mod, sock = Sock}, _Debug) ->
+  Mod:close(Sock),
+  maybe_reply(From, ok),
+  ok;
+handle_msg(sasl_authenticate, State, Debug) ->
+  State1 = State#state{backlog = queue:from_list([sasl_authenticate])},
+  State2 = maybe_flush_backlog(State1),
+  ?MODULE:loop(State2, Debug);
+handle_msg(Msg, #state{} = State, Debug) ->
+  error_logger:warning_msg("[~p] ~p got unrecognized message: ~p",
+                          [?MODULE, self(), Msg]),
+  ?MODULE:loop(State, Debug).
+
+send_request({From, {send, Request}},
+             #state{ client_id = ClientId
+                     , mod       = Mod
+                     , sock      = Sock
+                     , requests  = Requests
+                   } = State) ->
   {Caller, _Ref} = From,
   #kpro_req{api = API, vsn = Vsn} = Request,
   {CorrId, NewRequests} =
@@ -457,24 +485,53 @@ handle_msg({From, {send, Request}},
                ],
       exit({send_error, Reason})
   end,
-  ?MODULE:loop(State#state{requests = NewRequests}, Debug);
-handle_msg({From, get_api_vsns}, State, Debug) ->
-  maybe_reply(From, {ok, State#state.api_vsns}),
-  ?MODULE:loop(State, Debug);
-handle_msg({From, get_endpoint}, State, Debug) ->
-  maybe_reply(From, {ok, State#state.remote}),
-  ?MODULE:loop(State, Debug);
-handle_msg({From, get_tcp_sock}, State, Debug) ->
-  maybe_reply(From, {ok, State#state.sock}),
-  ?MODULE:loop(State, Debug);
-handle_msg({From, stop}, #state{mod = Mod, sock = Sock}, _Debug) ->
-  Mod:close(Sock),
-  maybe_reply(From, ok),
-  ok;
-handle_msg(Msg, #state{} = State, Debug) ->
-  error_logger:warning_msg("[~p] ~p got unrecognized message: ~p",
-                          [?MODULE, self(), Msg]),
-  ?MODULE:loop(State, Debug).
+  State#state{requests = NewRequests}.
+
+maybe_flush_backlog(#state{backlog = false} = State) ->
+  State;
+maybe_flush_backlog(#state{requests = Requests, backlog = Backlog} = State) ->
+  case kpro_sent_reqs:is_empty(Requests) of  
+    true ->
+      NewState = case queue:out(Backlog) of
+        {{value, sasl_authenticate}, RemainingBacklog} ->
+          sasl_authenticate(State#state{backlog = RemainingBacklog});
+        {{value, {_From, {send, _}} = Msg}, RemainingBacklog} ->
+          send_request(Msg, State#state{backlog = RemainingBacklog});
+        {empty, _} ->
+          State#state{backlog = false}
+      end,
+      maybe_flush_backlog(NewState);
+    false ->
+      State
+  end.
+
+sasl_authenticate(#state{client_id = ClientId, mod = Mod, sock = Sock, remote = {Host, _Port}, api_vsns = Versions, config = Config} = State) ->
+  Timeout = get_connect_timeout(Config),
+  Deadline = deadline(Timeout),
+  SaslOpts = get_sasl_opt(Config),
+  HandshakeVsn = case Versions of
+                   #{sasl_handshake := {_, V}} -> V;
+                   _ -> 0
+                 end,
+  ok = setopts(Sock, Mod, [{active, false}]),
+  case kpro_sasl:auth(Host, Sock, Mod, ClientId,
+                      timeout(Deadline), SaslOpts, HandshakeVsn) of
+    ok ->
+      ok;
+    {ok, ServerResponse} ->
+      case find(session_lifetime_ms, ServerResponse) of
+        Lifetime when is_integer(Lifetime) andalso Lifetime > 0 ->
+          %% Broker can report back a maximal session lifetime: https://kafka.apache.org/protocol#The_Messages_SaslAuthenticate.
+          %% Respect the session lifetime by draining in-flight requests and re-authenticating in half the time.
+          ReauthenticationDeadline = Lifetime div 2,
+          _ = erlang:send_after(ReauthenticationDeadline, self(), sasl_authenticate),
+          ok;
+        _ ->
+          ok
+      end
+  end,
+  ok = setopts(Sock, Mod, [{active, once}]),
+  State.
 
 cast(Pid, Msg) ->
   try
@@ -500,8 +557,14 @@ format_status(Opt, Status) ->
 
 print_msg(Device, {_From, {send, Request}}, State) ->
   do_print_msg(Device, "send: ~p", [Request], State);
+print_msg(Device, {_From, {get_api_vsns, Request}}, State) ->
+  do_print_msg(Device, "get_api_vsns", [Request], State);
+print_msg(Device, sasl_authenticate, State) ->
+  do_print_msg(Device, "sasl_authenticate", [], State);
 print_msg(Device, {tcp, _Sock, Bin}, State) ->
   do_print_msg(Device, "tcp: ~p", [Bin], State);
+print_msg(Device, {ssl, _Sock, Bin}, State) ->
+  do_print_msg(Device, "ssl: ~p", [Bin], State);
 print_msg(Device, {tcp_closed, _Sock}, State) ->
   do_print_msg(Device, "tcp_closed", [], State);
 print_msg(Device, {tcp_error, _Sock, Reason}, State) ->
