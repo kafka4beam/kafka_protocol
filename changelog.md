@@ -1,3 +1,6 @@
+* 4.1.8
+  - Avoid generating crash-report when failed to write socket [PR#124](https://github.com/kafka4beam/kafka_protocol/pull/124)
+
 * 4.1.7
   - Automatically re-authenticate before session lifetime expires if SASL
     authentication module returns `{ok, ServerResponse}` and ServerResponse

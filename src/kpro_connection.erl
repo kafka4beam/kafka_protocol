@@ -483,7 +483,7 @@ send_request({From, {send, Request}},
                , {caller, Caller}
                , {reason, Reason0}
                ],
-      exit({send_error, Reason})
+      exit({shutdown, Reason})
   end,
   State#state{requests = NewRequests}.
 
