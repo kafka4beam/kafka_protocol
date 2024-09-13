@@ -1,3 +1,6 @@
+* 4.1.9
+  - Upgrade crc32cer to 0.1.11 for build issue fix on OTP 27.
+
 * 4.1.8
   - Avoid generating crash-report when failed to write socket [PR#124](https://github.com/kafka4beam/kafka_protocol/pull/124)
 
