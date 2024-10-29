@@ -1,3 +1,10 @@
+* 4.1.10
+  - Resolve timeout value for discover and connect
+    - partition leader
+    - consumer group coordinator
+    - cluster controller
+    Choose the greater value of connect timeout and request timeout.
+
 * 4.1.9
   - Upgrade crc32cer to 0.1.11 for build issue fix on OTP 27.
 

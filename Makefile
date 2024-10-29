@@ -56,8 +56,9 @@ edoc:
 ex_doc:
 	@$(rebar_cmd) ex_doc
 
-.PHONY: dialyze
-dialyze: compile
+.PHONY: dialyze dialyzer
+dialyze: dialyzer
+dialyzer: compile
 	@$(rebar_cmd) dialyzer
 
 .PHONY: hex-publish

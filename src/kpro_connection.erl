@@ -28,6 +28,7 @@
         , start/3
         , stop/1
         , debug/2
+        , get_connect_timeout/1
         ]).
 
 %% system calls support for worker process
