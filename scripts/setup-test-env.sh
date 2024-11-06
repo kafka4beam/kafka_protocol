@@ -26,8 +26,8 @@ export KAFKA_VERSION=$VERSION
 
 TD="$(cd "$(dirname "$0")" && pwd)"
 
-docker-compose -f $TD/docker-compose.yml down || true
-docker-compose -f $TD/docker-compose.yml up -d
+docker compose -f $TD/docker-compose.yml down || true
+docker compose -f $TD/docker-compose.yml up -d
 
 # give kafka some time
 sleep 5
@@ -70,4 +70,3 @@ docker exec kafka-1 /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server l
 if [[ "$KAFKA_VERSION" != 0.9* ]] && [[ "$KAFKA_VERSION" != 0.10* ]]; then
   docker exec kafka-1 /opt/kafka/bin/kafka-configs.sh --zookeeper localhost:2181 --alter --add-config 'SCRAM-SHA-256=[iterations=8192,password=ecila],SCRAM-SHA-512=[password=ecila]' --entity-type users --entity-name alice
 fi
-

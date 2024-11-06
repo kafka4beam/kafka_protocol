@@ -79,7 +79,7 @@ with_connection(Endpoints, Config, Fun) ->
                                topic(), partition(), #{timeout => timeout()}) ->
         {ok, connection()} | {error, any()}.
 connect_partition_leader(Bootstrap, Config, Topic, Partition, Opts) ->
-  Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
+  Timeout = resolve_timeout(Config, Opts),
   DiscoverFun =
     fun(C) -> discover_partition_leader(C, Topic, Partition, Timeout) end,
   discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
@@ -96,7 +96,7 @@ connect_partition_leader(Bootstrap, Config, Topic, Partition, Opts) ->
 connect_coordinator(Bootstrap, Config, #{ type := Type
                                         , id := Id
                                         } = Args) ->
-  Timeout = maps:get(timeout, Args, ?DEFAULT_TIMEOUT),
+  Timeout = resolve_timeout(Config, Args),
   DiscoverFun = fun(Conn) -> discover_coordinator(Conn, Type, Id, Timeout) end,
   discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
 
@@ -105,7 +105,7 @@ connect_coordinator(Bootstrap, Config, #{ type := Type
                          #{timeout => timeout()}) ->
         {ok, connection()} | {error, any()}.
 connect_controller(Bootstrap, Config, Opts) ->
-  Timeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
+  Timeout = resolve_timeout(Config, Opts),
   DiscoverFun = fun(Conn) -> discover_controller(Conn, Timeout) end,
   discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
 
@@ -317,6 +317,13 @@ random_order(L) ->
   RandL = [rand:uniform(1000) || _ <- L],
   RI = lists:sort(lists:zip(RandL, L)),
   [I || {_R, I} <- RI].
+
+resolve_timeout(ConnConfig, Opts) when is_list(ConnConfig) ->
+    resolve_timeout(maps:from_list(ConnConfig), Opts);
+resolve_timeout(ConnConfig, Opts) ->
+  ConnectTimeout = kpro_connection:get_connect_timeout(ConnConfig),
+  RequestTimeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
+  max(ConnectTimeout, RequestTimeout).
 
 -ifdef(TEST).
 
