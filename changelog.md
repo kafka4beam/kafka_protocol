@@ -1,3 +1,6 @@
+* 4.2.0
+  - Add support for `zstd` compression codec
+
 * 4.1.10
   - Resolve timeout value for discover and connect
     - partition leader
