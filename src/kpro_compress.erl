@@ -105,10 +105,8 @@ get_module(?zstd) ->
 get_module(Name, Default) ->
     persistent_term:get({?MODULE, Name}, Default).
 
-maybe_convert_iodata_to_binary(ezstd, IoData) when not is_binary(IoData) ->
-  iolist_to_binary(IoData);
-maybe_convert_iodata_to_binary(_Module, IoData) ->
-  IoData.
+maybe_convert_iodata_to_binary(ezstd, IoData) -> iolist_to_binary(IoData);
+maybe_convert_iodata_to_binary(_Module, IoData) -> IoData.
 
 iodata({ok, IoData}) -> IoData;
 iodata({error, Reason}) -> error(Reason);
