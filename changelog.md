@@ -1,5 +1,8 @@
+* 4.2.1
+  - Allow `iodata()` for `zstd` compression (previously only `binary()`).
+
 * 4.2.0
-  - Add support for `zstd` compression codec
+  - Add support for `zstd` compression codec.
 
 * 4.1.10
   - Resolve timeout value for discover and connect
