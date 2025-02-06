@@ -88,7 +88,8 @@ java_snappy_unpack_chunks(Chunks, Acc) ->
 
 do_compress(Name, IoData) ->
     Module = get_module(Name),
-    iodata(Module:compress(IoData)).
+    Data = maybe_convert_iodata_to_binary(Module, IoData),
+    iodata(Module:compress(Data)).
 
 do_decompress(Name, Bin) ->
     Module = get_module(Name),
@@ -103,6 +104,9 @@ get_module(?zstd) ->
 
 get_module(Name, Default) ->
     persistent_term:get({?MODULE, Name}, Default).
+
+maybe_convert_iodata_to_binary(ezstd, IoData) -> iolist_to_binary(IoData);
+maybe_convert_iodata_to_binary(_Module, IoData) -> IoData.
 
 iodata({ok, IoData}) -> IoData;
 iodata({error, Reason}) -> error(Reason);
