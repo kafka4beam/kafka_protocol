@@ -1,3 +1,6 @@
+* 2.3.6.6
+   - Avoid crash logs when connection has to shutdown
+
 * 2.3.6
    - Upgrade snappyer and crc32cer to fix build in windows
 
