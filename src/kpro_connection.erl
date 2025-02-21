@@ -400,9 +400,9 @@ handle_msg({tcp_closed, Sock}, #state{sock = Sock}, _) ->
 handle_msg({ssl_closed, Sock}, #state{sock = Sock}, _) ->
   exit({shutdown, ssl_closed});
 handle_msg({tcp_error, Sock, Reason}, #state{sock = Sock}, _) ->
-  exit({tcp_error, Reason});
+  exit({shutdown, Reason});
 handle_msg({ssl_error, Sock, Reason}, #state{sock = Sock}, _) ->
-  exit({ssl_error, Reason});
+  exit({shutdown, Reason});
 handle_msg({From, {send, Request}},
            #state{ client_id = ClientId
                  , mod       = Mod
@@ -426,13 +426,8 @@ handle_msg({From, {send, Request}},
   case Res of
     ok ->
       maybe_reply(From, ok);
-    {error, Reason0} ->
-      Reason = [ {api, API}
-               , {vsn, Vsn}
-               , {caller, Caller}
-               , {reason, Reason0}
-               ],
-      exit({send_error, Reason})
+    {error, Reason} ->
+      exit({shutdown, Reason})
   end,
   ?MODULE:loop(State#state{requests = NewRequests}, Debug);
 handle_msg({From, get_api_vsns}, State, Debug) ->
@@ -517,7 +512,7 @@ get_request_timeout(Config) ->
 assert_max_req_age(Requests, Timeout) ->
   case kpro_sent_reqs:scan_for_max_age(Requests) of
     Age when Age > Timeout ->
-      erlang:exit(request_timeout);
+      erlang:exit({shutdown, request_timeout});
     _ ->
       ok
   end.
