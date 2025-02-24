@@ -1,3 +1,6 @@
+* 4.2.2 (merge 2.3.6.6)
+   - Avoid crash logs when connection has to shutdown.
+
 * 4.2.1
   - Allow `iodata()` for `zstd` compression (previously only `binary()`).
 
