@@ -423,9 +423,9 @@ handle_msg({tcp_closed, Sock}, #state{sock = Sock}, _) ->
 handle_msg({ssl_closed, Sock}, #state{sock = Sock}, _) ->
   exit({shutdown, ssl_closed});
 handle_msg({tcp_error, Sock, Reason}, #state{sock = Sock}, _) ->
-  exit({tcp_error, Reason});
+  exit({shutdown, Reason});
 handle_msg({ssl_error, Sock, Reason}, #state{sock = Sock}, _) ->
-  exit({ssl_error, Reason});
+  exit({shutdown, Reason});
 handle_msg({_From, {send, _}} = Msg, #state{backlog = false} = State, Debug) ->
   State1 = send_request(Msg, State),
   ?MODULE:loop(State1, Debug);
@@ -491,7 +491,7 @@ send_request({From, {send, Request}},
 maybe_flush_backlog(#state{backlog = false} = State) ->
   State;
 maybe_flush_backlog(#state{requests = Requests, backlog = Backlog} = State) ->
-  case kpro_sent_reqs:is_empty(Requests) of  
+  case kpro_sent_reqs:is_empty(Requests) of
     true ->
       NewState = case queue:out(Backlog) of
         {{value, sasl_authenticate}, RemainingBacklog} ->
@@ -604,7 +604,7 @@ get_request_timeout(Config) ->
 assert_max_req_age(Requests, Timeout) ->
   case kpro_sent_reqs:scan_for_max_age(Requests) of
     Age when Age > Timeout ->
-      erlang:exit(request_timeout);
+      erlang:exit({shutdown, request_timeout});
     _ ->
       ok
   end.
