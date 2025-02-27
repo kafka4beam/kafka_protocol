@@ -1,3 +1,6 @@
+* 4.2.3
+   - Upgrade to crc32cer-0.1.12 for better performance.
+
 * 4.2.2 (merge 2.3.6.6)
    - Avoid crash logs when connection has to shutdown.
 
