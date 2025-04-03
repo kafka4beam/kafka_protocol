@@ -83,17 +83,17 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
   {Count, MaxTimestamp} = scan_max_ts(1, FirstTimestamp, tl(Batch)),
   LastOffsetDelta = Count - 1, % always count - 1 for producer
   Body0 =
-    [ EncodedAttributes           % {Attributes0,     T1} = dec(int16, T0),
-    , enc(int32, LastOffsetDelta) % {LastOffsetDelta, T2} = dec(int32, T1),
-    , enc(int64, FirstTimestamp)  % {FirstTimestamp,  T3} = dec(int64, T2),
-    , enc(int64, MaxTimestamp)    % {MaxTimestamp,    T4} = dec(int64, T3),
-    , enc(int64, ProducerId)      % {ProducerId,      T5} = dec(int64, T4),
-    , enc(int16, ProducerEpoch)   % {ProducerEpoch,   T6} = dec(int16, T5),
-    , enc(int32, FirstSequence)   % {FirstSequence,   T7} = dec(int32, T6),
-    , enc(int32, Count)           % {Count,           T8} = dec(int32, T7),
-    , EncodedBatch
-    ],
-  CRC = crc32cer:nif(Body0),
+    bin([ EncodedAttributes           % {Attributes0,     T1} = dec(int16, T0),
+        , enc(int32, LastOffsetDelta) % {LastOffsetDelta, T2} = dec(int32, T1),
+        , enc(int64, FirstTimestamp)  % {FirstTimestamp,  T3} = dec(int64, T2),
+        , enc(int64, MaxTimestamp)    % {MaxTimestamp,    T4} = dec(int64, T3),
+        , enc(int64, ProducerId)      % {ProducerId,      T5} = dec(int64, T4),
+        , enc(int16, ProducerEpoch)   % {ProducerEpoch,   T6} = dec(int16, T5),
+        , enc(int32, FirstSequence)   % {FirstSequence,   T7} = dec(int32, T6),
+        , enc(int32, Count)           % {Count,           T8} = dec(int32, T7),
+        , EncodedBatch
+        ]),
+  CRC = crc32cer:nif_d(Body0),
   Body =
     [ enc(int32, PartitionLeaderEpoch)
     , enc(int8,  Magic)
@@ -105,6 +105,8 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
   , enc(int32, Size)
   | Body
   ].
+
+bin(X) -> iolist_to_binary(X).
 
 %% @doc Decode received message-set into a batch list.
 %% Ensured by `kpro:decode_batches/1', the input binary should contain
@@ -184,7 +186,7 @@ do_decode(Offset, <<_PartitionLeaderEpoch:32,
                     _Magic:8,
                     CRC:32/unsigned-integer,
                     T0/binary>>) ->
-  CRC = crc32cer:nif(T0), %% assert
+  CRC = crc32cer:nif_d(T0), %% assert
   {Attributes0,     T1} = dec(int16, T0),
   {LastOffsetDelta, T2} = dec(int32, T1),
   {FirstTimestamp,  T3} = dec(int64, T2),
