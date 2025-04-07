@@ -17,3 +17,4 @@ rebar.lock
 *.iml
 .idea/*
 .DS_Store
+codecov.json

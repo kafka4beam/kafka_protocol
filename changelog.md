@@ -1,5 +1,11 @@
+* 4.2.4
+   - Upgrade to crc32cer-1.0.1 for better performance (on arm, 4.2.3 improved on x86).
+     Now crc32c is calculated on dirty scheduler.
+   - Another prerformance improvment (not verified though) is to create batch binary when encoding message,
+     so crc32c nif code can directly inspect binary data (instead of iolist), also smaller term to send as Erlang message.
+
 * 4.2.3
-   - Upgrade to crc32cer-0.1.12 for better performance.
+   - Upgrade to crc32cer-0.1.12 for better performance (on x86).
 
 * 4.2.2 (merge 2.3.6.6)
    - Avoid crash logs when connection has to shutdown.
