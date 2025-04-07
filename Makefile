@@ -71,4 +71,5 @@ test-env:
 
 .PHONY: cover
 cover:
-	@rebar3 cover -v
+	@rebar3 as test cover -v
+	@rebar3 codecov analyze
