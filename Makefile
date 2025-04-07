@@ -71,4 +71,4 @@ test-env:
 
 .PHONY: cover
 cover:
-	@rebar3 as test cover -v
+	@rebar3 cover -v
