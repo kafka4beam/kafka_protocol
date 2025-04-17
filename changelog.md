@@ -1,3 +1,7 @@
+* 4.2.5
+   - Upgrade to crc32cer-1.0.2 for cmake 4.x.
+     There was a typo in app.src in crc32cer-1.0.1.
+
 * 4.2.4
    - Upgrade to crc32cer-1.0.1 for better performance (on arm, 4.2.3 improved on x86).
      Now crc32c is calculated on dirty scheduler.
