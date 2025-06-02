@@ -1,4 +1,4 @@
-export KAFKA_VERSION ?= 2.4
+export KAFKA_VERSION ?= 3.9
 all: compile
 
 rebar ?= $(shell which rebar3)

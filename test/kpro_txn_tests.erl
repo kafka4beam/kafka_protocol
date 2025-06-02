@@ -50,7 +50,7 @@ test_txn_produce(ProduceVsn, FetchVsn) ->
   % find_coordinator (txn)
   {ok, Conn} = connect_coordinator(TxnId),
   % init_producer_id
-  {ok, TxnCtx} = kpro:txn_init_ctx(Conn, TxnId),
+  {ok, TxnCtx} = txn_init_ctx(Conn, TxnId),
   % add_partitions_to_txn
   ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]),
   % produce
@@ -67,6 +67,18 @@ test_txn_produce(ProduceVsn, FetchVsn) ->
   ok = fetch_and_verify(FetchReqFun, BaseOffset, Messages, read_committed),
   ok = kpro:close_connection(Conn),
   ok.
+
+txn_init_ctx(Conn, TxnId) ->
+    txn_init_ctx(Conn, TxnId, 0).
+
+txn_init_ctx(Conn, TxnId, Attempts) ->
+  case kpro:txn_init_ctx(Conn, TxnId) of
+      {error, coordinator_load_in_progress} when Attempts < 10 ->
+          timer:sleep(100),
+          txn_init_ctx(Conn, TxnId, Attempts + 1);
+      {ok, TxnCtx} ->
+          {ok, TxnCtx}
+  end.
 
 %% basic test of begin -> read (fetch) write -> commit;
 %% commit implies 1) commit fetched offset, 2) commit produced messages

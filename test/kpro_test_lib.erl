@@ -223,24 +223,6 @@ error_if_any(Errors) ->
     Errs -> erlang:error(Errs)
   end.
 
-ssl_options() ->
-  case osenv("KPRO_TEST_SSL_TRUE") of
-    "TRUE" -> true;
-    "true" -> true;
-    "1" -> true;
-    _ ->
-      case osenv("KPRO_TEST_SSL_CA_CERT_FILE") of
-        undefined ->
-          default_ssl_options();
-        CaCertFile ->
-          [ {cacertfile, CaCertFile}
-          , {keyfile,    osenv("KPRO_TEST_SSL_KEY_FILE")}
-          , {certfile,   osenv("KPRO_TEST_SSL_CERT_FILE")}
-          , {verify, verify_none}
-          ]
-      end
-  end.
-
 do_connection_config(plaintext) ->
   #{};
 do_connection_config(ssl) ->
@@ -250,12 +232,11 @@ do_connection_config(sasl_ssl) ->
    , sasl => sasl_config(plain)
    }.
 
-default_ssl_options() ->
-  PrivDir = code:priv_dir(?APPLICATION),
-  Fname = fun(Name) -> filename:join([PrivDir, ssl, Name]) end,
-  [ {cacertfile, Fname("ca.crt")}
-  , {keyfile,    Fname("client.key")}
-  , {certfile,   Fname("client.crt")}
+ssl_options() ->
+  CertDir = filename:join([code:lib_dir(?APPLICATION), "test", "certs"]),
+  Fname = fun(Name) -> filename:join([CertDir, Name]) end,
+  [ {keyfile,    Fname("client-key.pem")}
+  , {certfile,   Fname("client-crt.pem")}
   , {verify,     verify_none}
   , {versions,   ['tlsv1.2']}
   ].

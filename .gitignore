@@ -18,3 +18,4 @@ rebar.lock
 .idea/*
 .DS_Store
 codecov.json
+test/certs/
