@@ -116,7 +116,7 @@ connect_controller(Bootstrap, Config, Opts) ->
         {ok, kpro:vsn_ranges()} | {error, any()}.
 get_api_versions(Connection) ->
   case kpro_connection:get_api_vsns(Connection) of
-    {ok, Vsns}      -> {ok, api_vsn_range_intersection(Vsns)};
+    {ok, Vsns}      -> {ok, kpro_api_vsn:intersect(Vsns)};
     {error, Reason} -> {error, Reason}
   end.
 
@@ -269,39 +269,6 @@ discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout) ->
     ],
   kpro_lib:ok_pipe(FL, Timeout).
 
-api_vsn_range_intersection(undefined) ->
-  %% kpro_connection is configured not to query api versions (kafka-0.9)
-  %% always use minimum supported version in this case
-  lists:foldl(
-    fun(API, Acc) ->
-        case kpro_api_vsn:kafka_09_range(API) of
-          false -> Acc;
-          {Min, _Max} -> Acc#{API => {Min, Min}}
-        end
-    end, #{}, kpro_schema:all_apis());
-api_vsn_range_intersection(Vsns) ->
-  maps:fold(
-    fun(API, {Min, Max}, Acc) ->
-        case api_vsn_range_intersection(API, {Min, Max}) of
-          false -> Acc;
-          Intersection -> Acc#{API => Intersection}
-        end
-    end, #{}, Vsns).
-
-%% Intersect received api version range with supported range.
-api_vsn_range_intersection(API, Received) ->
-  Expected = kpro_api_vsn:range(API),
-  try
-    kpro_api_vsn:intersect(Expected, Received)
-  catch
-    error : {no_intersection, _, _} ->
-      Reason = #{reason => incompatible_version_ranges,
-                 expected => Expected,
-                 received => Received,
-                 api => API},
-      erlang:error(Reason)
-  end.
-
 connect_any([], _Config, Errors) ->
   {error, lists:reverse(Errors)};
 connect_any([{Host, Port} | Rest], Config, Errors) ->
@@ -332,9 +299,9 @@ api_vsn_range_intersection_test() ->
     Received = {0, 0},
     ?assertError(#{api := API,
                    reason := incompatible_version_ranges,
-                   expected := _,
+                   supported := _,
                    received := Received},
-                 api_vsn_range_intersection(API, Received)).
+                 kpro_api_vsn:intersect(API, Received)).
 
 -endif.
 %%%_* Emacs ====================================================================

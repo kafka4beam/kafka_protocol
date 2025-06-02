@@ -282,7 +282,7 @@ query_api_versions(Sock, Mod, ClientId, Deadline) ->
           case is_atom(API) of
             true ->
               %% known API for client
-              Acc#{API => adjust_vsn(API, MinVsn, MaxVsn)};
+              Acc#{API => {MinVsn, MaxVsn}};
             false ->
               %% a broker-only (ClusterAction) API
               Acc
@@ -292,26 +292,6 @@ query_api_versions(Sock, Mod, ClientId, Deadline) ->
     false ->
       erlang:error({failed_to_query_api_versions, ErrorCode})
   end.
-
-%% Special adjustment for API rage.
-%% - produce: Minimal version is in fact 3, but Kafka may respond 0.
-%% - fetch: Minimal version is in fact 4, but Kafka may respond 0.
-adjust_vsn(produce, Min, Max) ->
-    case Max >= 8 of
-        true ->
-            {max(Min, 3), Max};
-        false ->
-            {Min, Max}
-    end;
-adjust_vsn(fetch, Min, Max) ->
-    case Max >= 11 of
-        true ->
-            {max(Min, 4), Max};
-        false ->
-            {Min, Max}
-    end;
-adjust_vsn(_API, Min, Max) ->
-    {Min, Max}.
 
 get_tcp_mod(_SslOpts = true)  -> ssl;
 get_tcp_mod(_SslOpts = [_|_]) -> ssl;
