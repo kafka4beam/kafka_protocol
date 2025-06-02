@@ -196,7 +196,9 @@ parse_rsp(#kpro_rsp{msg = Msg}) ->
   Msg.
 
 list_offset(Connection, Topic, Partition, Time, Timeout) ->
-  Req = kpro_req_lib:list_offsets(0, Topic, Partition, Time),
+  {ok, Vsns} = kpro:get_api_versions(Connection),
+  {_Min, Vsn} = maps:get(list_offsets, Vsns),
+  Req = kpro_req_lib:list_offsets(Vsn, Topic, Partition, Time),
   {ok, Rsp} = kpro:request_sync(Connection, Req, Timeout),
   #{offset := Offset} = parse_rsp(Rsp),
   Offset.

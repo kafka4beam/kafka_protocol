@@ -6,7 +6,7 @@ docker ps > /dev/null || {
     exit 1
 }
 
-VERSION=${KAFKA_VERSION:-3.9}
+VERSION=${KAFKA_VERSION:-4.0.0}
 if [ -z $VERSION ]; then VERSION=$1; fi
 
 case $VERSION in
@@ -39,7 +39,13 @@ export KAFKA_VERSION=$VERSION
 
 KAFKA_MAJOR=$(echo "$KAFKA_VERSION" | cut -d. -f1)
 if [ "$KAFKA_MAJOR" -lt 3 ]; then
-    BOOTSTRAP_OPTS="--zookeeper ${ZOOKEEPER_CONNECT}"
+    NEED_ZOOKEEPER=true
+else
+    NEED_ZOOKEEPER=false
+fi
+
+if [[ "$NEED_ZOOKEEPER" = true ]]; then
+    BOOTSTRAP_OPTS="--zookeeper localhost:2181"
 else
     BOOTSTRAP_OPTS="--bootstrap-server localhost:9092"
 fi
@@ -47,7 +53,13 @@ fi
 TD="$(cd "$(dirname "$0")" && pwd)"
 
 docker compose -f $TD/docker-compose.yml down || true
-docker compose -f $TD/docker-compose.yml up -d
+docker compose -f $TD/docker-compose-4.yml down || true
+
+if [[ "$NEED_ZOOKEEPER" = true ]]; then
+    docker compose -f $TD/docker-compose.yml up -d
+else
+    docker compose -f $TD/docker-compose-4.yml up -d
+fi
 
 # give kafka some time
 sleep 5
@@ -88,7 +100,19 @@ docker exec kafka-1 /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server l
 
 # for kafka 0.11 or later, add sasl-scram test credentials
 if [[ "$KAFKA_VERSION" != 0.9* ]] && [[ "$KAFKA_VERSION" != 0.10* ]]; then
-  docker exec kafka-1 /opt/kafka/bin/kafka-configs.sh --zookeeper localhost:2181 --alter --add-config 'SCRAM-SHA-256=[iterations=8192,password=ecila],SCRAM-SHA-512=[password=ecila]' --entity-type users --entity-name alice
+  docker exec kafka-1 /opt/kafka/bin/kafka-configs.sh \
+    --bootstrap-server localhost:9092 \
+    --alter \
+    --add-config 'SCRAM-SHA-256=[iterations=8192,password=ecila]' \
+    --entity-type users \
+    --entity-name alice
+
+  docker exec kafka-1 /opt/kafka/bin/kafka-configs.sh \
+    --bootstrap-server localhost:9092 \
+    --alter \
+    --add-config 'SCRAM-SHA-512=[password=ecila]' \
+    --entity-type users \
+    --entity-name alice
 fi
 
 mkdir -p test/certs

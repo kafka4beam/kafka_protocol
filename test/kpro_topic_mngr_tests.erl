@@ -47,7 +47,7 @@ test_create_topic_partition(CreateTopicsVsn, CreatePartitionsVsn) ->
      , assignments => []
      , configs => []
      },
-  AssignNewPartitionsTo = [[ _BrokerId = 0 ]],
+  AssignNewPartitionsTo = [[ _BrokerId = 1 ]],
   CreatePartitionArgs =
     #{ topic => Topic
      , new_partitions => #{ count => 2
@@ -134,6 +134,7 @@ test_alter_configs(Vsn) ->
                 end,
         {ok, Rsp} = kpro:request_sync(Conn, Req(After), infinity),
         ok = kpro_test_lib:parse_rsp(Rsp),
+        timer:sleep(1000),
         ?assertEqual(After, GetPolicy(Conn))
     end).
 

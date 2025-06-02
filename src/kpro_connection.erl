@@ -294,9 +294,17 @@ query_api_versions(Sock, Mod, ClientId, Deadline) ->
   end.
 
 %% Special adjustment for API rage.
+%% - produce: Minimal version is in fact 3, but Kafka may respond 0.
 %% - fetch: Minimal version is in fact 4, but Kafka may respond 0.
+adjust_vsn(produce, Min, Max) ->
+    case Max >= 8 of
+        true ->
+            {max(Min, 3), Max};
+        false ->
+            {Min, Max}
+    end;
 adjust_vsn(fetch, Min, Max) ->
-    case Max > 11 of
+    case Max >= 11 of
         true ->
             {max(Min, 4), Max};
         false ->
