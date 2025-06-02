@@ -20,7 +20,7 @@ case $VERSION in
     VERSION="1.1"
     ;;
   2.*)
-    VERSION="2.4"
+    VERSION="2.8"
     ;;
   3.*)
     VERSION="3.9"
@@ -101,14 +101,14 @@ docker exec kafka-1 /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server l
 # for kafka 0.11 or later, add sasl-scram test credentials
 if [[ "$KAFKA_VERSION" != 0.9* ]] && [[ "$KAFKA_VERSION" != 0.10* ]]; then
   docker exec kafka-1 /opt/kafka/bin/kafka-configs.sh \
-    --bootstrap-server localhost:9092 \
+    $BOOTSTRAP_OPTS \
     --alter \
     --add-config 'SCRAM-SHA-256=[iterations=8192,password=ecila]' \
     --entity-type users \
     --entity-name alice
 
   docker exec kafka-1 /opt/kafka/bin/kafka-configs.sh \
-    --bootstrap-server localhost:9092 \
+    $BOOTSTRAP_OPTS \
     --alter \
     --add-config 'SCRAM-SHA-512=[password=ecila]' \
     --entity-type users \
