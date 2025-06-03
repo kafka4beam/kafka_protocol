@@ -18,9 +18,11 @@ jobs:
           - '27'
           - '26'
         kafka:
-          - '2.4'
+          - '4.0'
+          - '3.9'
+          - '2.8'
           - '1.1'
-          - '0.11'
+          - '0.9'
     runs-on: ubuntu-22.04
     steps:
 
@@ -60,7 +62,7 @@ jobs:
       run: |
           export KAFKA_VERSION=${{ matrix.kafka }}
           make test-env
-          make eunit || (cd scripts && docker compose logs)
+          make eunit || (cd scripts && docker compose logs && exit 1)
           make cover
 
     - name: Upload coverage reports to Codecov

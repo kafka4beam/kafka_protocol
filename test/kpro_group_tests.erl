@@ -236,7 +236,7 @@ kafka_vsns() ->
     "0.10" -> [v0_9, v0_10];
     "0.11" -> [v0_9, v0_10, v0_11];
     "1.1"  -> [v0_9, v0_10, v0_11, v1_0];
-    _      -> [v0_9, v0_10, v0_11, v1_0, v2_0, v2_1, v2_2, v2_3, v2_4]
+    _      -> [v1_0, v2_0, v2_1, v2_2, v2_3, v2_8]
   end.
 
 max_vsn(v0_9) -> max_vsn(v0_10);
@@ -283,7 +283,7 @@ max_vsn(v2_3) ->
    , describe_groups => 3
    , list_groups => 2
    };
-max_vsn(v2_4) ->
+max_vsn(v2_8) ->
   #{ join_group => 6
    , heartbeat => 4
    , leave_group => 4

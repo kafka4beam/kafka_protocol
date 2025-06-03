@@ -15,11 +15,12 @@
 
 %% Supported versions of THIS lib
 -module(kpro_api_vsn).
--export([range/1, kafka_09_range/1, intersect/2]).
+-export([range/1, kafka_09_range/1, intersect/1, intersect/2]).
 
 -export_type([range/0]).
 
 -type range() :: {kpro:vsn(), kpro:vsn()}.
+-define(undef, undefined).
 
 %% @doc Return supported version range of the given API.
 %%
@@ -54,17 +55,73 @@ kafka_09_range(describe_groups) -> {0, 0};
 kafka_09_range(list_groups) -> {0, 0};
 kafka_09_range(_) -> false.
 
-%% @doc Returns the intersection of two version ranges.
+%% @private Returns the intersection of two version ranges.
 %% An error is raised if there is no intersection.
--spec intersect(false | range(), false | range()) -> false | range().
-intersect(false, _) -> false;
-intersect(_, false) -> false;
-intersect({Min1, Max1} = R1, {Min2, Max2} = R2) ->
-  Min = max(Min1, Min2),
-  Max = min(Max1, Max2),
+-spec intersect(atom(), false | range(), false | range()) -> false | range().
+intersect(_API, Unknown = false, _) -> Unknown;
+intersect(API, {Min0, Max0} = Supported, {Min1, Max1} = Received) ->
+  {Min2, Max2} = fix_range(API, Min1, Max1),
+  Min = max(Min0, Min2),
+  Max = min(Max0, Max2),
   case Min > Max of
-    true -> erlang:error({no_intersection, R1, R2});
+    true -> erlang:error({no_intersection, Supported, Received});
     false -> {Min, Max}
+  end.
+
+%% Special adjustment for received API range.
+%% - produce: Minimal version is in fact 3, but Kafka may respond 0.
+%% - fetch: Minimal version is in fact 4, but Kafka may respond 0.
+fix_range(produce, Min, Max) ->
+    case Max >= 8 of
+        true ->
+            {max(Min, 3), Max};
+        false ->
+            {Min, Max}
+    end;
+fix_range(fetch, Min, Max) ->
+    case Max >= 11 of
+        true ->
+            {max(Min, 4), Max};
+        false ->
+            {Min, Max}
+    end;
+fix_range(_API, Min, Max) ->
+    {Min, Max}.
+
+%% @doc Return the intersection of supported version ranges and received version ranges.
+-spec intersect(?undef | list()) -> #{kpro:api() => range()}.
+intersect(?undef) ->
+  %% kpro_connection is configured not to query api versions (kafka-0.9)
+  %% always use minimum supported version in this case
+  lists:foldl(
+    fun(API, Acc) ->
+      case kpro_api_vsn:kafka_09_range(API) of
+        false -> Acc;
+        {Min, _Max} -> Acc#{API => {Min, Min}}
+      end
+    end, #{}, kpro_schema:all_apis());
+intersect(ReceivedVsns) ->
+  maps:fold(
+    fun(API, {Min, Max}, Acc) ->
+      case intersect(API, {Min, Max}) of
+        false -> Acc;
+        Intersection -> Acc#{API => Intersection}
+      end
+    end, #{}, ReceivedVsns).
+
+%% @doc Intersect received api version range with supported range.
+-spec intersect(kpro:api(), range()) -> false | range().
+intersect(API, Received) ->
+  Supported = kpro_api_vsn:range(API),
+  try
+    intersect(API, Supported, Received)
+  catch
+    error : {no_intersection, _, _} ->
+      Reason = #{reason => incompatible_version_ranges,
+                 supported => Supported,
+                 received => Received,
+                 api => API},
+      erlang:error(Reason)
   end.
 
 %%%_* Emacs ====================================================================

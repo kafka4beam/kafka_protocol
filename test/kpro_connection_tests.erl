@@ -90,6 +90,7 @@ no_api_version_query_test() ->
   Config = #{query_api_versions => false},
   {ok, Pid} = connect(Config),
   ?assertEqual({ok, undefined}, kpro_connection:get_api_vsns(Pid)),
+  ?assertMatch({ok, #{}}, kpro:get_api_versions(Pid)),
   ok = kpro_connection:stop(Pid).
 
 extra_sock_opts_test() ->
@@ -102,7 +103,8 @@ extra_sock_opts_test() ->
   ?assertEqual(true, proplists:get_value(delay_send, InetSockOpts)),
   ok = kpro_connection:stop(Pid).
 
-connect(Config) ->
+connect(Config0) ->
+  Config = kpro_test_lib:connection_config(Config0),
   Protocol = kpro_test_lib:guess_protocol(Config),
   [{Host, Port} | _] = kpro_test_lib:get_endpoints(Protocol),
   kpro_connection:start(Host, Port, Config).
