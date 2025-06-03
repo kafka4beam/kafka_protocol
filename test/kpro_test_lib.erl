@@ -27,6 +27,7 @@
         ]).
 
 -export([ connection_config/1
+        , ssl_options/0
         ]).
 
 -export([ with_connection/1
@@ -54,19 +55,19 @@ get_kafka_version() ->
   end.
 
 is_kafka_09() ->
-  case osenv("KPRO_TEST_KAFKA_09") of
-    "TRUE" -> true;
-    "true" -> true;
-    "1" -> true;
+  case osenv("KAFKA_VERSION") of
+    "0.9" ++ _ -> true;
     _ -> false
   end.
 
-connection_config(Protocol) ->
-  C = do_connection_config(Protocol),
+connection_config(Config) when is_map(Config) ->
   case is_kafka_09() of
-    true -> C#{query_api_versions => false};
-    false -> C
-  end.
+    true -> Config#{query_api_versions => false};
+    false -> Config
+  end;
+connection_config(Protocol) when is_atom(Protocol) ->
+  C = do_connection_config(Protocol),
+  connection_config(C).
 
 get_endpoints(Protocol) ->
   case osenv("KPRO_TEST_KAFKA_ENDPOINTS") of
@@ -89,11 +90,19 @@ get_topic_lat() ->
 sasl_config() ->
   sasl_config(rand_sasl()).
 
-sasl_config(plain_file) ->
+sasl_config(Alg) ->
+  case is_kafka_09() of
+    true ->
+      undefined;
+    false ->
+      do_sasl_config(Alg)
+  end.
+
+do_sasl_config(plain_file) ->
   {plain, get_sasl_file()};
-sasl_config(file) ->
+do_sasl_config(file) ->
   {rand_sasl(), get_sasl_file()};
-sasl_config(Mechanism) ->
+do_sasl_config(Mechanism) ->
   {User, Pass} = read_user_pass(),
   {Mechanism, User, Pass}.
 
@@ -251,7 +260,7 @@ osenv(Name) ->
   end.
 
 %% Guess protocol name from connection config.
-guess_protocol(#{sasl := _} = Config) ->
+guess_protocol(#{sasl := Sasl} = Config) when Sasl =/= undefined ->
   case maps:get(ssl, Config, false) of
     false -> erlang:error(<<"sasl_plaintext not supported in tests">>);
     _ -> sasl_ssl

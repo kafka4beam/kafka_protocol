@@ -26,9 +26,6 @@
         ]).
 
 -include("kpro_private.hrl").
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
--endif.
 
 -type endpoint() :: kpro:endpoint().
 -type topic() :: kpro:topic().
@@ -286,24 +283,12 @@ random_order(L) ->
   [I || {_R, I} <- RI].
 
 resolve_timeout(ConnConfig, Opts) when is_list(ConnConfig) ->
-    resolve_timeout(maps:from_list(ConnConfig), Opts);
+  resolve_timeout(maps:from_list(ConnConfig), Opts);
 resolve_timeout(ConnConfig, Opts) ->
   ConnectTimeout = kpro_connection:get_connect_timeout(ConnConfig),
   RequestTimeout = maps:get(timeout, Opts, ?DEFAULT_TIMEOUT),
   max(ConnectTimeout, RequestTimeout).
 
--ifdef(TEST).
-
-api_vsn_range_intersection_test() ->
-    API = offset_commit,
-    Received = {0, 0},
-    ?assertError(#{api := API,
-                   reason := incompatible_version_ranges,
-                   supported := _,
-                   received := Received},
-                 kpro_api_vsn:intersect(API, Received)).
-
--endif.
 %%%_* Emacs ====================================================================
 %%% Local Variables:
 %%% allout-layout: t

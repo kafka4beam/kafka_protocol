@@ -47,17 +47,17 @@ magic_v0_basic_test_() ->
   [MkTest(Vsn) || Vsn <- lists:seq(Min, Max)].
 
 ssl_test_() ->
-    [{"sni=none", fun() -> ssl_test_with_sni(none) end},
-     {"sni=auto", fun() -> ssl_test_with_sni(auto) end},
-     {"sni=undefined", fun() -> ssl_test_with_sni(undefined) end},
-     {"sni=static", fun() -> ssl_test_with_sni(<<"localhost">>) end}
-    ].
+  [{"sni=none", fun() -> ssl_test_with_sni(none) end},
+   {"sni=auto", fun() -> ssl_test_with_sni(auto) end},
+   {"sni=undefined", fun() -> ssl_test_with_sni(undefined) end},
+   {"sni=static", fun() -> ssl_test_with_sni(<<"localhost">>) end}
+  ].
 
 ssl_test_with_sni(SNI) ->
   {_, Vsn} = get_api_vsn_range(),
   Msg = #{value => make_value(?LINE), headers => [{<<"foo">>, <<"bar">>}]},
   Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, [Msg]),
-  with_connection(#{ssl => [{verify, verify_none}, {server_name_indication, SNI}],
+  with_connection(#{ssl => [{server_name_indication, SNI} | kpro_test_lib:ssl_options()],
                     sasl => kpro_test_lib:sasl_config(plain)},
                   fun(Pid) ->
                           {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
@@ -154,7 +154,8 @@ with_connection(Fun) ->
     end,
   kpro_test_lib:with_connection(ConnFun, Fun).
 
-with_connection(Config, Fun) ->
+with_connection(Config0, Fun) ->
+  Config = kpro_test_lib:connection_config(Config0),
   ConnFun =
     fun(Endpoints, Cfg) ->
         kpro:connect_partition_leader(Endpoints, Cfg, topic(), ?PARTI)

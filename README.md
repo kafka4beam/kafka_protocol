@@ -51,7 +51,6 @@ To test against a specific kafka version (e.g. `0.9`), set environment variable 
 
 To test with an existing kafka cluster set below environment variables:
 
-- `KPRO_TEST_KAFKA_09`" Set to 'TRUE' or 'true' or '1' to test against a kafka 0.9 cluster.
 - `KPRO_TEST_KAFKA_ENDPOINTS`: Comma separated endpoints, e.g. `plaintext://localhost:9092,ssl://localhost:9093,sasl_ssl://localhost:9094,sasl_plaintext://localhost:9095`
 - `KPRO_TEST_KAFKA_TOPIC_NAME`: Topic name for message produce/fetch test.
 - `KPRO_TEST_KAFKA_TOPIC_LAT_NAME`: Topic name for message produce/fetch test with `message.timestamp.type=LogAppendTime` set.

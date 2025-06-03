@@ -20,6 +20,7 @@
 -export_type([range/0]).
 
 -type range() :: {kpro:vsn(), kpro:vsn()}.
+-define(undef, undefined).
 
 %% @doc Return supported version range of the given API.
 %%
@@ -89,8 +90,8 @@ fix_range(_API, Min, Max) ->
     {Min, Max}.
 
 %% @doc Return the intersection of supported version ranges and received version ranges.
--spec intersect(undefined | list()) -> #{kpro:api() => range()}.
-intersect(undefined) ->
+-spec intersect(?undef | list()) -> #{kpro:api() => range()}.
+intersect(?undef) ->
   %% kpro_connection is configured not to query api versions (kafka-0.9)
   %% always use minimum supported version in this case
   lists:foldl(

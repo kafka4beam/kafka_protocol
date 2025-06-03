@@ -10,6 +10,9 @@ VERSION=${KAFKA_VERSION:-4.0.0}
 if [ -z $VERSION ]; then VERSION=$1; fi
 
 case $VERSION in
+  0.9*)
+    VERSION="0.9"
+    ;;
   0.10*)
     VERSION="0.10"
     ;;
