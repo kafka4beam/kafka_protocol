@@ -62,7 +62,7 @@ jobs:
       run: |
           export KAFKA_VERSION=${{ matrix.kafka }}
           make test-env
-          make eunit || (cd scripts && docker compose logs)
+          make eunit || (cd scripts && docker compose logs && exit 1)
           make cover
 
     - name: Upload coverage reports to Codecov
