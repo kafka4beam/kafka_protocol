@@ -1,3 +1,6 @@
+* 4.2.6
+   - Fix API version ranges. Test against Kafka 4.0.0
+
 * 4.2.5
    - Upgrade to crc32cer-1.0.2 for cmake 4.x.
      There was a typo in app.src in crc32cer-1.0.1.
