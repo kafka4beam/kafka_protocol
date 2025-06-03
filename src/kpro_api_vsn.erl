@@ -58,8 +58,7 @@ kafka_09_range(_) -> false.
 %% @private Returns the intersection of two version ranges.
 %% An error is raised if there is no intersection.
 -spec intersect(atom(), false | range(), false | range()) -> false | range().
-intersect(_API, false, _) -> false;
-intersect(_API, _, false) -> false;
+intersect(_API, Unknown = false, _) -> Unknown;
 intersect(API, {Min0, Max0} = Supported, {Min1, Max1} = Received) ->
   {Min2, Max2} = fix_range(API, Min1, Max1),
   Min = max(Min0, Min2),
@@ -101,14 +100,14 @@ intersect(?undef) ->
         {Min, _Max} -> Acc#{API => {Min, Min}}
       end
     end, #{}, kpro_schema:all_apis());
-intersect(Vsns) ->
+intersect(ReceivedVsns) ->
   maps:fold(
     fun(API, {Min, Max}, Acc) ->
       case intersect(API, {Min, Max}) of
         false -> Acc;
         Intersection -> Acc#{API => Intersection}
       end
-    end, #{}, Vsns).
+    end, #{}, ReceivedVsns).
 
 %% @doc Intersect received api version range with supported range.
 -spec intersect(kpro:api(), range()) -> false | range().
