@@ -154,7 +154,7 @@ test_txn_produce_2(ProduceVsn, FetchVsn) ->
 
   TxnFun =
     fun(Seqno) ->
-        ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]),
+        with_retry(fun() -> ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]) end, 10, 100),
         {NextSeqno, Batches} = produce_messages(ProduceVsn, TxnCtx, Seqno),
         [{BaseOffset, _} | _] = Batches,
         Messages = lists:append([Msgs || {_, Msgs} <- Batches]),
@@ -167,6 +167,16 @@ test_txn_produce_2(ProduceVsn, FetchVsn) ->
   ok = kpro:close_connection(Conn),
   ok.
 
+with_retry(F, 1, _Sleep) ->
+    F();
+with_retry(F, N, Sleep) ->
+    try
+        F()
+    catch
+        _ : _ ->
+            timer:sleep(Sleep),
+            with_retry(F, N - 1, Sleep)
+    end.
 
 %%%_* Helpers ==================================================================
 
