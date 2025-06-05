@@ -6,8 +6,8 @@ docker ps > /dev/null || {
     exit 1
 }
 
-VERSION=${KAFKA_VERSION:-4.0.0}
-if [ -z $VERSION ]; then VERSION=$1; fi
+KAFKA_IMAGE_VERSION="${KAFKA_IMAGE_VERSION:-1.1.2}"
+VERSION="${KAFKA_VERSION:-${1:-4.0.0}}"
 
 case $VERSION in
   0.9*)
@@ -37,8 +37,9 @@ case $VERSION in
     ;;
 esac
 
-echo "Using KAFKA_VERSION=$VERSION"
 export KAFKA_VERSION=$VERSION
+export KAFKA_IMAGE_TAG="zmstone/kafka:${KAFKA_IMAGE_VERSION}-${KAFKA_VERSION}"
+echo "Using $KAFKA_IMAGE_TAG"
 
 KAFKA_MAJOR=$(echo "$KAFKA_VERSION" | cut -d. -f1)
 if [ "$KAFKA_MAJOR" -lt 3 ]; then
@@ -56,12 +57,12 @@ fi
 TD="$(cd "$(dirname "$0")" && pwd)"
 
 docker compose -f $TD/docker-compose.yml down || true
-docker compose -f $TD/docker-compose-4.yml down || true
+docker compose -f $TD/docker-compose-kraft.yml down || true
 
 if [[ "$NEED_ZOOKEEPER" = true ]]; then
     docker compose -f $TD/docker-compose.yml up -d
 else
-    docker compose -f $TD/docker-compose-4.yml up -d
+    docker compose -f $TD/docker-compose-kraft.yml up -d
 fi
 
 # give kafka some time
