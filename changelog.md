@@ -1,3 +1,8 @@
+* 4.2.7
+
+  - Upgrade crc32cer from 1.0.2 to 1.0.3 for better build speed.
+    The new version avoids clone some unnecessary submodules.
+
 * 4.2.6
    - Fix API version ranges. Test against Kafka 4.0.0
 
