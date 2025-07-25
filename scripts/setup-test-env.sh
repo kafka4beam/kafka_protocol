@@ -6,7 +6,7 @@ docker ps > /dev/null || {
     exit 1
 }
 
-KAFKA_IMAGE_VERSION="${KAFKA_IMAGE_VERSION:-1.1.2}"
+KAFKA_IMAGE_VERSION="${KAFKA_IMAGE_VERSION:-1.1.3}"
 VERSION="${KAFKA_VERSION:-${1:-4.0.0}}"
 
 case $VERSION in

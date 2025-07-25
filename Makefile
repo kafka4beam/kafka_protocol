@@ -1,4 +1,4 @@
-export KAFKA_IMAGE_VERSION ?= 1.1.2
+export KAFKA_IMAGE_VERSION ?= 1.1.3
 export KAFKA_VERSION ?= 4.0.0
 all: compile
 
