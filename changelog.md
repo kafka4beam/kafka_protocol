@@ -1,5 +1,7 @@
-* 4.2.7
+* 4.2.8
+  - Upgrade crc32cer from 1.0.4 to 1.0.4 for link error.
 
+* 4.2.7
   - Upgrade crc32cer from 1.0.2 to 1.0.3 for better build speed.
     The new version avoids clone some unnecessary submodules.
 
