@@ -7,7 +7,7 @@ docker ps > /dev/null || {
 }
 
 KAFKA_IMAGE_VERSION="${KAFKA_IMAGE_VERSION:-1.1.3}"
-VERSION="${KAFKA_VERSION:-${1:-4.0.0}}"
+VERSION="${KAFKA_VERSION:-${1:-4.1.0}}"
 
 case $VERSION in
   0.9*)
@@ -29,7 +29,7 @@ case $VERSION in
     VERSION="3.9"
     ;;
   4.*)
-    VERSION="4.0"
+    VERSION="4.1"
     ;;
   *)
     echo "Unknown version $VERSION"

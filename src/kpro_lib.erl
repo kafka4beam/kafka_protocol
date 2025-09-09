@@ -152,6 +152,10 @@ encode(compact_bytes, B) when is_binary(B) orelse is_list(B) ->
   [encode(unsigned_varint, iolist_size(B) + 1), B];
 encode(records, B) ->
   encode(bytes, B);
+encode(compact_records, B) ->
+  encode(compact_bytes, B);
+encode(uuid, ?null) -> <<0:128>>;
+encode(uuid, B) when is_binary(B), byte_size(B) =:= 16 -> B;
 encode(compact_string, ?kpro_null) ->
   error(not_nullable);
 encode(compact_nullable_string, ?kpro_null) ->
@@ -214,6 +218,11 @@ decode(compact_nullable_string, Bin) ->
   end;
 decode(records, Bin) ->
   decode(bytes, Bin);
+decode(compact_records, Bin) ->
+  decode(compact_bytes, Bin);
+decode(uuid, Bin) ->
+    <<Value:16/binary, Rest/binary>> = Bin,
+    {Value, Rest};
 decode(tagged_fields, Bin0) ->
   {Count, Bin1} = decode(unsigned_varint, Bin0),
   decode_tagged_fields(Count, Bin1, #{}).

@@ -36,7 +36,11 @@ txn_produce_test_() ->
              } || V <- Vsns]}.
 
 test_txn_produce(ProduceVsn, FetchVsn) ->
-  Topic = topic(),
+  TxnId = make_transactional_id(),
+  % find_coordinator (txn)
+  {ok, Conn} = connect_coordinator(TxnId),
+  TopicName = topic(),
+  Topic = kpro_test_lib:maybe_resolve_topic_id(Conn, TopicName, FetchVsn),
   Partition = partition(),
   FetchReqFun =
     fun(Offset, IsolationLevel) ->
@@ -46,13 +50,10 @@ test_txn_produce(ProduceVsn, FetchVsn) ->
                             , max_bytes => 10000
                             , isolation_level => IsolationLevel})
     end,
-  TxnId = make_transactional_id(),
-  % find_coordinator (txn)
-  {ok, Conn} = connect_coordinator(TxnId),
   % init_producer_id
   {ok, TxnCtx} = txn_init_ctx(Conn, TxnId),
   % add_partitions_to_txn
-  ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]),
+  ok = kpro:txn_send_partitions(TxnCtx, [{TopicName, Partition}]),
   % produce
   {_Seqno, Batches} = produce_messages(ProduceVsn, TxnCtx),
   [{BaseOffset, _} | _] = Batches,
@@ -89,8 +90,14 @@ txn_fetch_produce_test_() ->
    } || V <- Vsns].
 
 test_txn_fetch_produce_test(ProduceVsn, FetchVsn) ->
-  Topic = topic(),
+  TopicName = topic(),
   Partition = partition(),
+  GroupId = make_group_id(),
+  {ok, GroupConn} = connect_group_coordinator(GroupId),
+  TxnId = make_transactional_id(),
+  % find_coordinator (txn)
+  {ok, Conn} = connect_coordinator(TxnId),
+  Topic = kpro_test_lib:maybe_resolve_topic_id(Conn, TopicName, FetchVsn),
   FetchReqFun =
     fun(Offset, read_committed) -> % this test case tests read_committed only
         kpro_req_lib:fetch(FetchVsn, Topic, Partition, Offset,
@@ -99,15 +106,10 @@ test_txn_fetch_produce_test(ProduceVsn, FetchVsn) ->
                             , max_bytes => 10000
                             , isolation_level => read_committed})
     end,
-  GroupId = make_group_id(),
-  {ok, GroupConn} = connect_group_coordinator(GroupId),
-  TxnId = make_transactional_id(),
-  % find_coordinator (txn)
-  {ok, Conn} = connect_coordinator(TxnId),
   % init_producer_id
   {ok, TxnCtx} = kpro:txn_init_ctx(Conn, TxnId),
   % add_partitions_to_txn
-  ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]),
+  ok = kpro:txn_send_partitions(TxnCtx, [{TopicName, Partition}]),
   % produce
   {_Seqno, Batches} = produce_messages(ProduceVsn, TxnCtx),
   [{BaseOffset, _} | _] = Batches,
@@ -116,9 +118,9 @@ test_txn_fetch_produce_test(ProduceVsn, FetchVsn) ->
   ok = kpro:txn_send_cg(TxnCtx, GroupId),
   % txn_offset_commit
   ok = kpro:txn_offset_commit(GroupConn, GroupId, TxnCtx,
-                              #{{Topic, Partition} => 42}),
+                              #{{TopicName, Partition} => 42}),
   ok = kpro:txn_offset_commit(GroupConn, GroupId, TxnCtx,
-                              #{{Topic, Partition} => {43, <<"foo">>}}),
+                              #{{TopicName, Partition} => {43, <<"foo">>}}),
   % end_txn (commit)
   ok = kpro:txn_commit(TxnCtx),
   % fetch (with isolation_level = read_committed)
@@ -135,8 +137,12 @@ txn_produce_2_tx_test_() ->
    } || V <- Vsns].
 
 test_txn_produce_2(ProduceVsn, FetchVsn) ->
-  Topic = topic(),
+  TopicName = topic(),
   Partition = partition(),
+  TxnId = make_transactional_id(),
+  % find_coordinator (txn)
+  {ok, Conn} = connect_coordinator(TxnId),
+  Topic = kpro_test_lib:maybe_resolve_topic_id(Conn, TopicName, FetchVsn),
   FetchReqFun =
     fun(Offset, IsolationLevel) ->
         kpro_req_lib:fetch(FetchVsn, Topic, Partition, Offset,
@@ -146,15 +152,12 @@ test_txn_produce_2(ProduceVsn, FetchVsn) ->
                             , isolation_level => IsolationLevel
                             })
     end,
-  TxnId = make_transactional_id(),
-  % find_coordinator (txn)
-  {ok, Conn} = connect_coordinator(TxnId),
   % init_producer_id
   {ok, TxnCtx} = kpro:txn_init_ctx(Conn, TxnId),
 
   TxnFun =
     fun(Seqno) ->
-        with_retry(fun() -> ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]) end, 10, 100),
+        with_retry(fun() -> ok = kpro:txn_send_partitions(TxnCtx, [{TopicName, Partition}]) end, 10, 100),
         {NextSeqno, Batches} = produce_messages(ProduceVsn, TxnCtx, Seqno),
         [{BaseOffset, _} | _] = Batches,
         Messages = lists:append([Msgs || {_, Msgs} <- Batches]),
@@ -222,21 +225,22 @@ produce_messages(ProduceVsn, TxnCtx) ->
   produce_messages(ProduceVsn, TxnCtx, _Seqno = 0).
 
 produce_messages(ProduceVsn, TxnCtx, Seqno0) ->
-  Topic = topic(),
-  Partition = partition(),
-  ReqFun =
-    fun(Seqno, Batch) ->
-        Opts = #{txn_ctx => TxnCtx, first_sequence => Seqno},
-        kpro_req_lib:produce(ProduceVsn, Topic, Partition, Batch, Opts)
-    end,
-  Batch0 = make_random_batch(),
-  Req0 = ReqFun(Seqno0, Batch0),
-  Seqno1 = Seqno0 + length(Batch0),
-  Batch1 = make_random_batch(),
-  Seqno  = Seqno1 + length(Batch1),
-  Req1 = ReqFun(Seqno1, Batch1),
   with_connection_to_partition_leader(
     fun(Connection) ->
+        TopicName = topic(),
+        Partition = partition(),
+        Topic = kpro_test_lib:maybe_resolve_topic_id(Connection, TopicName, ProduceVsn),
+        ReqFun =
+          fun(Seqno, Batch) ->
+              Opts = #{txn_ctx => TxnCtx, first_sequence => Seqno},
+              kpro_req_lib:produce(ProduceVsn, Topic, Partition, Batch, Opts)
+          end,
+        Batch0 = make_random_batch(),
+        Req0 = ReqFun(Seqno0, Batch0),
+        Seqno1 = Seqno0 + length(Batch0),
+        Batch1 = make_random_batch(),
+        Seqno  = Seqno1 + length(Batch1),
+        Req1 = ReqFun(Seqno1, Batch1),
         {ok, Rsp0} = kpro:request_sync(Connection, Req0, ?TIMEOUT),
         #{ error_code := no_error
          , base_offset := Offset0

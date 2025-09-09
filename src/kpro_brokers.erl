@@ -19,7 +19,9 @@
         , connect_coordinator/3
         , connect_partition_leader/5
         , discover_coordinator/4
+        , discover_coordinators/4
         , discover_partition_leader/4
+        , discover_partition_leader/5
         , get_api_versions/1
         , get_api_vsn_range/2
         , with_connection/3
@@ -29,6 +31,7 @@
 
 -type endpoint() :: kpro:endpoint().
 -type topic() :: kpro:topic().
+-type topic_id() :: kpro:topic_id().
 -type partition() :: kpro:partition().
 -type config() :: kpro_connection:config().
 -type connection() :: kpro:connection().
@@ -73,12 +76,14 @@ with_connection(Endpoints, Config, Fun) ->
 %% Then send metadata request to discover partition leader broker
 %% Finally connect to the leader broker.
 -spec connect_partition_leader(connection() | [endpoint()], config(),
-                               topic(), partition(), #{timeout => timeout()}) ->
+                               topic(), partition(),
+                               #{timeout => timeout(), compatibility_mode => boolean()}) ->
         {ok, connection()} | {error, any()}.
 connect_partition_leader(Bootstrap, Config, Topic, Partition, Opts) ->
   Timeout = resolve_timeout(Config, Opts),
+  CompatibilityMode = maps:get(compatibility_mode, Opts, true),
   DiscoverFun =
-    fun(C) -> discover_partition_leader(C, Topic, Partition, Timeout) end,
+    fun(C) -> discover_partition_leader(C, Topic, Partition, Timeout, CompatibilityMode) end,
   discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
 
 %% @doc Connect group or transaction coordinator.
@@ -136,25 +141,49 @@ get_api_vsn_range(Connection, API) ->
 %% Can not get dialyzer working for this call:
 %% kpro_req_lib:metadata(Vsn, [Topic])
 -dialyzer([{nowarn_function, [discover_partition_leader/4]}]).
--spec discover_partition_leader(connection(), topic(),partition(),
+-spec discover_partition_leader(connection(), topic(), partition(),
                                 timeout()) -> {ok, endpoint()} | {error, any()}.
 discover_partition_leader(Connection, Topic, Partition, Timeout) ->
+  discover_partition_leader(Connection, Topic, Partition, Timeout, true).
+
+%% @doc Discover partition leader endpoint.
+%% @end
+%% Can not get dialyzer working for this call:
+%% kpro_req_lib:metadata(Vsn, [Topic])
+-dialyzer([{nowarn_function, [discover_partition_leader/5]}]).
+-spec discover_partition_leader(connection(), topic(), partition(),
+                                timeout(), boolean()) ->
+        {ok, endpoint()} | {ok, endpoint(), topic_id()} | {error, any()}.
+discover_partition_leader(Connection, Topic, Partition, Timeout, true) ->
+  case do_discover_partition_leader(Connection, Topic, Partition, Timeout) of
+    {ok, {Host, Port}, _TopicId} ->
+      {ok, {Host, Port}};
+    {error, Reason} ->
+      {error, Reason}
+  end;
+discover_partition_leader(Connection, Topic, Partition, Timeout, false) ->
+  do_discover_partition_leader(Connection, Topic, Partition, Timeout).
+
+-dialyzer([{nowarn_function, [do_discover_partition_leader/4]}]).
+-spec do_discover_partition_leader(connection(), topic(), partition(),
+                                   timeout()) -> {ok, endpoint(), topic_id()} | {error, any()}.
+do_discover_partition_leader(Connection, Topic, Partition, Timeout) ->
   FL =
     [ fun() -> get_api_vsn_range(Connection, metadata) end
     , fun({_, Vsn}) ->
           Req = kpro_req_lib:metadata(Vsn, [Topic]),
           kpro_connection:request_sync(Connection, Req, Timeout)
       end
-    , fun(#kpro_rsp{msg = Meta}) ->
+    , fun(#kpro_rsp{msg = Meta, vsn = Vsn}) ->
           Brokers = kpro:find(brokers, Meta),
           [TopicMeta] = kpro:find(topics, Meta),
           ErrorCode = kpro:find(error_code, TopicMeta),
           case ErrorCode =:= ?no_error of
-            true  -> {ok, {Brokers, TopicMeta}};
+            true  -> {ok, {Brokers, TopicMeta, Vsn}};
             false -> {error, ErrorCode}
           end
       end
-    , fun({Brokers, TopicMeta}) ->
+    , fun({Brokers, TopicMeta, Vsn}) ->
           Partitions = kpro:find(partitions, TopicMeta),
           Pred = fun(P_Meta) -> kpro:find(partition_index, P_Meta) =:= Partition end,
           case lists:filter(Pred, Partitions) of
@@ -162,18 +191,23 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
               %% Partition number is out of range
               {error, unknown_topic_or_partition};
             [PartitionMeta] ->
-              {ok, {Brokers, PartitionMeta}}
+              TopicId =
+                case Vsn of
+                  V when V < 10 -> <<>>;
+                  _ -> kpro:find(topic_id, TopicMeta)
+                end,
+              {ok, {Brokers, PartitionMeta, TopicId}}
           end
       end
-    , fun({Brokers, PartitionMeta}) ->
+    , fun({Brokers, PartitionMeta, TopicId}) ->
           ErrorCode = kpro:find(error_code, PartitionMeta),
           case ErrorCode =:= ?no_error orelse
                ErrorCode =:= ?replica_not_available of
-            true  -> {ok, {Brokers, PartitionMeta}};
+            true  -> {ok, {Brokers, PartitionMeta, TopicId}};
             false -> {error, ErrorCode}
           end
       end
-    , fun({Brokers, PartitionMeta}) ->
+    , fun({Brokers, PartitionMeta, TopicId}) ->
           LeaderBrokerId = kpro:find(leader_id, PartitionMeta),
           Pred = fun(BrokerMeta) ->
                      kpro:find(node_id, BrokerMeta) =:= LeaderBrokerId
@@ -181,7 +215,7 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
           [Broker] = lists:filter(Pred, Brokers),
           Host = kpro:find(host, Broker),
           Port = kpro:find(port, Broker),
-          {ok, {Host, Port}}
+          {ok, {Host, Port}, TopicId}
       end
     ],
   kpro_lib:ok_pipe(FL, Timeout).
@@ -197,31 +231,95 @@ discover_coordinator(Connection, Type, Id, Timeout) ->
           {ok, kpro:make_request(find_coordinator, 0, [{key, Id}])};
          ({_, 0}) when Type =:= txn ->
           {error, {bad_vsn, [{api, find_coordinator}, {type, txn}]}};
-         ({_, V}) ->
-          Fields = [ {key, Id}, {key_type, Type}],
-          {ok, kpro:make_request(find_coordinator, V, Fields)}
+         ({_, V}) when V < 4 ->
+          Fields = [{key, Id}, {key_type, Type}],
+          {ok, kpro:make_request(find_coordinator, V, Fields)};
+         ({_, _V}) ->
+          Fields = [{key, Id}, {key_type, Type}],
+          %% starting from FindCoordinator V4, kafka returns a list of coordinators
+          %% see discover_coordinators/4 instead
+          {ok, kpro:make_request(find_coordinator, 3, Fields)}
       end
     , fun(Req) -> kpro_connection:request_sync(Connection, Req, Timeout) end
-    , fun(#kpro_rsp{msg = Rsp}) ->
-          ErrorCode = kpro:find(error_code, Rsp),
-          ErrMsg = kpro:find(error_message, Rsp, ?kpro_null),
-          case ErrorCode =:= ?no_error of
-            true ->
-              Host = kpro:find(host, Rsp),
-              Port = kpro:find(port, Rsp),
-              {ok, {Host, Port}};
-            false when ErrMsg =:= ?kpro_null ->
-              %% v0
-              {error, ErrorCode};
-            false ->
-              %% v1
-              {error, [{error_code, ErrorCode}, {error_msg, ErrMsg}]}
-          end
+    , fun(#kpro_rsp{msg = Rsp, vsn = V}) ->
+          parse_coordinator_response(Rsp, V)
       end
     ],
   kpro_lib:ok_pipe(FL, Timeout).
 
+%% @doc Discover group or transactional coordinator.
+-spec discover_coordinators(connection(), coordinator_type(),
+                           [group_id()] | [transactional_id()], timeout()) ->
+        {ok, [endpoint()]} | {error, any()}.
+discover_coordinators(Connection, Type, Ids, Timeout) ->
+  case get_api_vsn_range(Connection, find_coordinator) of
+    {error, Reason} ->
+      {error, Reason};
+    {ok, {_, V}} when V < 4 ->
+      {error, {bad_vsn, [{api, find_coordinator}, {type, Type}, {ids, Ids}]}};
+    {ok, {_, _V}} ->
+      discover_coordinators_v4(Connection, Type, Ids, Timeout)
+  end.
+
 %%%_* Internal functions =======================================================
+
+discover_coordinators_v4(Connection, Type, Keys, Timeout) ->
+  FL =
+    [ fun({_, V}) ->
+          Fields = [{coordinator_keys, Keys}, {key_type, Type}],
+          {ok, kpro:make_request(find_coordinator, V, Fields)}
+      end
+    , fun(Req) -> kpro_connection:request_sync(Connection, Req, Timeout) end
+    , fun(#kpro_rsp{msg = Rsp, vsn = V}) ->
+          Coordinators = kpro:find(coordinators, Rsp),
+          F = fun(C, Acc) ->
+                  case parse_coordinator_response_v4(C, V) of
+                    {ok, #{host := Host, port := Port, key := Key}} ->
+                      [{Key, {Host, Port}} | Acc];
+                    {error, #{error_code := ErrCode, error_msg := ErrMsg, key := Key}} ->
+                      [{Key, {error, [{error_code, ErrCode}, {error_msg, ErrMsg}]}} | Acc]
+                  end
+              end,
+          Responses = lists:foldl(F, [], Coordinators),
+          {ok, lists:reverse(Responses)}
+      end
+    ],
+  kpro_lib:ok_pipe(FL, Timeout).
+
+parse_coordinator_response(Rsp, V) ->
+  ErrorCode = kpro:find(error_code, Rsp),
+  case ErrorCode =:= ?no_error of
+    true ->
+      Host = kpro:find(host, Rsp),
+      Port = kpro:find(port, Rsp),
+      {ok, {Host, Port}};
+    false ->
+      case V =:= 0 of
+        true ->
+          {error, ErrorCode};
+        false ->
+          ErrMsg = kpro:find(error_message, Rsp),
+          {error, [{error_code, ErrorCode}, {error_msg, ErrMsg}]}
+      end
+  end.
+
+parse_coordinator_response_v4(Rsp, _V) ->
+  ErrorCode = kpro:find(error_code, Rsp),
+  case ErrorCode =:= ?no_error of
+    true ->
+      {ok, #{
+             host => kpro:find(host, Rsp),
+             port => kpro:find(port, Rsp),
+             node_id => kpro:find(node_id, Rsp),
+             key => kpro:find(key, Rsp)
+            }};
+    false ->
+      {error, #{
+                error_code => ErrorCode,
+                error_msg => kpro:find(error_message, Rsp),
+                key => kpro:find(key, Rsp)
+               }}
+  end.
 
 discover_controller(Conn, Timeout) ->
   FL =

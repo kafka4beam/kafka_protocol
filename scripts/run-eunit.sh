@@ -7,6 +7,7 @@ fi
 
 CWD="$(dirname $0)"
 
+rebar3 as test compile
 erl -pa $CWD/../_build/test/lib/*/ebin \
     -pa $CWD/../_build/test/lib/*/test \
     -eval "application:ensure_all_started(ssl), eunit:test($1, [verbose]), halt(0)"

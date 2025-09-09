@@ -253,7 +253,9 @@ generate_ec_clauses() ->
       fun({Name, Code, _Retriable, _Desc}) ->
           ["ec(", integer_to_list(Code), ") -> ", string:to_lower(Name)]
       end, Errors),
-  [infix(DecodeClauses, ";\n"), ".\n"].
+  AllClauses = DecodeClauses ++ [["ec(ErrorCode) -> ErrorCode"]],
+  [infix(AllClauses, ";\n"), ".\n"].
+
 
 generate_ec_hrl_file() ->
   {ok, Errors} = file:consult("error-codes.eterm"),

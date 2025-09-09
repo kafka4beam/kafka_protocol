@@ -30,6 +30,7 @@
 
 %% Broker properties
 -export([ discover_coordinator/4
+        , discover_coordinators/4
         , discover_partition_leader/4
         , get_api_versions/1
         , get_api_vsn_range/2
@@ -130,6 +131,7 @@
              , transactional_id/0
              , txn_ctx/0
              , topic/0
+             , topic_id/0
              , value/0
              , vsn/0
              , vsn_range/0
@@ -155,6 +157,8 @@
 -type portnum() :: non_neg_integer().
 -type endpoint() :: {hostname(), portnum()}.
 -type corr_id() :: int32().
+-type uuid() :: <<_:128>>.
+-type topic_id() :: uuid().
 -type topic() :: binary().
 -type partition() :: int32().
 -type offset() :: int64().
@@ -431,7 +435,17 @@ connect_coordinator(Bootstrap, ConnConfig, Args) ->
 discover_coordinator(Connection, Type, Id, Timeout) ->
   kpro_brokers:discover_coordinator(Connection, Type, Id, Timeout).
 
-%% @doc Qury API versions using the given `kpro_connection' pid.
+%% @doc Discover group or transactional coordinators.
+%% An implicit step performed in `connect_coordinator'.
+%% This is useful when the caller wants to re-use already established
+%% towards the discovered endpoint.
+-spec discover_coordinators(connection(), coordinator_type(),
+                            [group_id()] | [transactional_id()], timeout()) ->
+        {ok, [endpoint() | {error, any()}]}.
+discover_coordinators(Connection, Type, Ids, Timeout) ->
+    kpro_brokers:discover_coordinators(Connection, Type, Ids, Timeout).
+
+%% @doc Query API versions using the given `kpro_connection' pid.
 -spec get_api_versions(connection()) ->
         {ok, vsn_ranges()} | {error, any()}.
 get_api_versions(Connection) ->

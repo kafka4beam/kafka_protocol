@@ -26,7 +26,7 @@ run_test_() ->
     {timeout, timer:seconds(30),
      fun() ->
       run_test(Batch, V)
-     end}} || V <- lists:seq(2, 3)].
+     end}} || V <- lists:seq(3, 13)].
 
 run_test(Batch, Vsn) ->
   lists:foreach(fun(_) ->
