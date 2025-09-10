@@ -91,6 +91,13 @@ do_compress(Name, IoData) ->
     Data = maybe_convert_iodata_to_binary(Module, IoData),
     iodata(Module:compress(Data)).
 
+%% EZSTD doesn't handle unknown content size in decompress/1.
+do_decompress(?zstd, <<_:32, 0, _/binary>> = Bin) ->
+    Module = get_module(?zstd, ezstd),
+    Ctx = Module:create_decompression_context(4096),
+    IoData = iodata(Module:decompress_streaming(Ctx, Bin)),
+    iolist_to_binary(IoData);
+
 do_decompress(Name, Bin) ->
     Module = get_module(Name),
     iodata(Module:decompress(Bin)).
