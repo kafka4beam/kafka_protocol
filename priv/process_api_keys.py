@@ -1,4 +1,3 @@
-
 import re
 
 def to_snake_case(name):
