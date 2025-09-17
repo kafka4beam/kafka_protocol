@@ -2,7 +2,7 @@ name: kafka_protocol
 on:
   push:
     branches:
-      - '*'
+      - master
   pull_request:
     branches:
       - master
@@ -18,6 +18,7 @@ jobs:
           - '27.3'
           - '26.2'
         kafka:
+          - '4.1'
           - '4.0'
           - '3.9'
           - '2.8'
