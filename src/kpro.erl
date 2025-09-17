@@ -214,7 +214,9 @@
                         | nullable_string
                         | bytes
                         | records
-                        | unsigned_varint.
+                        | unsigned_varint
+                        | compact_bytes
+                        | compact_records.
 -type decode_fun() :: fun((binary()) -> {field_value(), binary()}).
 -type struct_schema() :: [{field_name(), schema()}].
 -type schema() :: primitive_type()
