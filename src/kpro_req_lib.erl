@@ -65,6 +65,7 @@
 
 -type vsn() :: kpro:vsn().
 -type topic() :: kpro:topic().
+-type topic_id() :: kpro:topic_id().
 -type req() :: kpro:req().
 -type msg_ts() :: kpro:msg_ts().
 -type isolation_level() :: kpro:isolation_level().
@@ -127,14 +128,19 @@
 %% </ul>
 
 %% @doc Make a `metadata' request
--spec metadata(vsn(), all | [topic()]) -> req().
+-spec metadata(vsn(), all | [topic() | #{id => topic_id()}]) -> req().
 metadata(Vsn, Topics) ->
   metadata(Vsn, Topics, _IsAutoCreateAllowed = false).
 
 %% @doc Make a `metadata' request
--spec metadata(vsn(), all | [topic()], boolean()) -> req().
+-spec metadata(vsn(), all | [topic() | #{id => topic_id()}], boolean()) -> req().
 metadata(Vsn, [], IsAutoCreateAllowed) ->
   metadata(Vsn, all, IsAutoCreateAllowed);
+metadata(Vsn, Topics, IsAutoCreateAllowed) when Vsn >= 4, Vsn =< 7 ->
+  make(metadata, Vsn,
+       #{topics => metadata_topics_list(Vsn, Topics),
+         allow_auto_topic_creation => IsAutoCreateAllowed
+        });
 metadata(Vsn, Topics, IsAutoCreateAllowed) ->
   make(metadata, Vsn,
        #{topics => metadata_topics_list(Vsn, Topics),
@@ -148,6 +154,14 @@ metadata(Vsn, Topics, IsAutoCreateAllowed) ->
 %% all later versions expect 'null' for 'all'
 metadata_topics_list(0, all) -> [];
 metadata_topics_list(_, all) -> ?kpro_null;
+metadata_topics_list(Vsn, Names) when Vsn >= 10 ->
+  MapF =
+    fun(#{id := TopicID}) ->
+            #{name => ?kpro_null, topic_id => TopicID, tagged_fields => #{}};
+       (Name) when is_binary(Name) ->
+            #{name => Name, topic_id => ?kpro_null, tagged_fields => #{}}
+    end,
+  lists:map(MapF, Names);
 metadata_topics_list(_, Names) ->
   [#{name => Name, tagged_fields => #{}} || Name <- Names].
 
@@ -174,79 +188,174 @@ list_offsets(Vsn, Topic, Partition, Time, IsolationLevel) ->
                    isolation_level(),
                    kpro:leader_epoch()) -> req().
 list_offsets(Vsn, Topic, Partition, Time0, IsolationLevel, LeaderEpoch) ->
-  Time = offset_time(Time0),
-  PartitionFields =
-    case Vsn of
-      0 ->
-        [{partition, Partition},
-         {timestamp, Time},
-         {max_num_offsets, 1}];
-      _ ->
-        %% max_num_offsets is removed since version 1
-        [{partition, Partition},
-         {timestamp, Time},
-         {current_leader_epoch, LeaderEpoch}
-        ]
-    end,
-  Fields =
-    [{replica_id, ?KPRO_REPLICA_ID},
-     {isolation_level, IsolationLevel},
-     {topics, [ [{topic, Topic},
-                 {partitions, [ PartitionFields ]}]
-              ]}
-    ],
-  make(list_offsets, Vsn, Fields).
+    Time = offset_time(Time0),
+    PartitionFields =
+        case Vsn of
+            0 ->
+                [
+                    {partition, Partition},
+                    {timestamp, Time},
+                    {max_num_offsets, 1}
+                ];
+            _ ->
+                %% max_num_offsets is removed since version 1
+                [
+                    {partition_index, Partition},
+                    {timestamp, Time},
+                    {current_leader_epoch, LeaderEpoch}
+                ]
+        end,
+    Fields =
+        case Vsn of
+            V when V < 10 ->
+                [
+                    {replica_id, ?KPRO_REPLICA_ID},
+                    {isolation_level, IsolationLevel},
+                    {topics, [
+                        [
+                            {name, Topic},
+                            {partitions, [PartitionFields]}
+                        ]
+                    ]}
+                ];
+            _ ->
+                [
+                    {replica_id, ?KPRO_REPLICA_ID},
+                    {isolation_level, IsolationLevel},
+                    {topics, [
+                        [
+                            {name, Topic},
+                            {partitions, [PartitionFields]}
+                        ]
+                    ]},
+                    {timeout_ms, 1000}
+                ]
+        end,
+    make(list_offsets, Vsn, Fields).
 
 %% @doc Help function to construct a `fetch' request
 %% against one single topic-partition. In transactional mode, set
 %% `IsolationLevel = kpro_read_uncommitted' to fetch uncommitted messages.
 -spec fetch(vsn(), topic(), partition(), offset(), fetch_opts()) -> req().
 fetch(Vsn, Topic, Partition, Offset, Opts) ->
-  MaxWaitTime = maps:get(max_wait_time, Opts, timer:seconds(1)),
-  MinBytes = maps:get(min_bytes, Opts, 0),
-  MaxBytes = maps:get(max_bytes, Opts, 1 bsl 20), %% 1M
-  IsolationLevel = maps:get(isolation_level, Opts, ?kpro_read_committed),
-  %% See: https://cwiki.apache.org/confluence/display/KAFKA/KIP-227%3A+Introduce+Incremental+FetchRequests+to+Increase+Partition+Scalability
-  %% Consumer session is useful when fetch request spans across multiple
-  %% topic-partitions, so that:
-  %% 1. The consumer may fetch from only a subset of the topic-partitions
-  %%    in case e.g. avoid immediately fetch again from partitions which
-  %%    have messages recently received.
-  %% 2. The broker do not have to send a topic/partition response at all
-  %%    if there is not any new messages appended or no metadata change
-  %%    sice the last fetch response.
-  %%    i.e. Send only changed data.
-  %% The default values are to disable fetch session.
-  SessionID = maps:get(session_id, Opts, 0),
-  Epoch = maps:get(session_epoch, Opts, -1),
-  %% Leader epoch is returned from topic-partition metadata.
-  %% kafka partition leader make use of this number to fence consumers with
-  %% stale metadata.
-  LeaderEpoch = maps:get(leader_epoch, Opts, -1),
-  %% Rack ID is to allow consumers fetching from closet replica (instead the leader)
-  RackID = maps:get(rack_id, Opts, ?kpro_null),
-  Fields =
-    [{replica_id, ?KPRO_REPLICA_ID},
-     {max_wait_time, MaxWaitTime},
-     {max_bytes, MaxBytes},
-     {min_bytes, MinBytes},
-     {isolation_level, IsolationLevel},
-     {session_id, SessionID},
-     {session_epoch, Epoch},
-     {topics,[[{topic, Topic},
-               {partitions,
-                [[{partition, Partition},
-                  {fetch_offset, Offset},
-                  {partition_max_bytes, MaxBytes},
-                  {log_start_offset, -1}, %% irelevant to clients
-                  {current_leader_epoch, LeaderEpoch}
-                 ]]}]]},
-     % we always fetch from one single topic-partition
-     % never need to forget any
-     {forgotten_topics_data, []},
-     {rack_id, RackID}
-    ],
-  make(fetch, Vsn, Fields).
+    MaxWaitTime = maps:get(max_wait_time, Opts, timer:seconds(1)),
+    MinBytes = maps:get(min_bytes, Opts, 0),
+    %% 1M
+    MaxBytes = maps:get(max_bytes, Opts, 1 bsl 20),
+    IsolationLevel = maps:get(isolation_level, Opts, ?kpro_read_committed),
+    %% See: https://cwiki.apache.org/confluence/display/KAFKA/KIP-227%3A+Introduce+Incremental+FetchRequests+to+Increase+Partition+Scalability
+    %% Consumer session is useful when fetch request spans across multiple
+    %% topic-partitions, so that:
+    %% 1. The consumer may fetch from only a subset of the topic-partitions
+    %%    in case e.g. avoid immediately fetch again from partitions which
+    %%    have messages recently received.
+    %% 2. The broker do not have to send a topic/partition response at all
+    %%    if there is not any new messages appended or no metadata change
+    %%    sice the last fetch response.
+    %%    i.e. Send only changed data.
+    %% The default values are to disable fetch session.
+    SessionID = maps:get(session_id, Opts, 0),
+    Epoch = maps:get(session_epoch, Opts, -1),
+    %% Leader epoch is returned from topic-partition metadata.
+    %% kafka partition leader make use of this number to fence consumers with
+    %% stale metadata.
+    LeaderEpoch = maps:get(leader_epoch, Opts, -1),
+    Fields =
+        case Vsn of
+            V when V < 12 ->
+                [
+                    {replica_id, ?KPRO_REPLICA_ID},
+                    {max_wait_ms, MaxWaitTime},
+                    {max_bytes, MaxBytes},
+                    {min_bytes, MinBytes},
+                    {isolation_level, IsolationLevel},
+                    {session_id, SessionID},
+                    {session_epoch, Epoch},
+                    {topics, [
+                        [
+                            {topic, Topic},
+                            {partitions, [
+                                [
+                                    {partition, Partition},
+                                    {fetch_offset, Offset},
+                                    {partition_max_bytes, MaxBytes},
+                                    %% irelevant to clients
+                                    {log_start_offset, -1},
+                                    {current_leader_epoch, LeaderEpoch}
+                                ]
+                            ]}
+                        ]
+                    ]},
+                    % we always fetch from one single topic-partition
+                    % never need to forget any
+                    {forgotten_topics_data, []},
+                    %% Rack ID is to allow consumers fetching from closet replica (instead the leader)
+                    {rack_id, maps:get(rack_id, Opts, ?kpro_null)}
+                ];
+            V when V =:= 12 ->
+                [
+                    {replica_id, ?KPRO_REPLICA_ID},
+                    {max_wait_ms, MaxWaitTime},
+                    {max_bytes, MaxBytes},
+                    {min_bytes, MinBytes},
+                    {isolation_level, IsolationLevel},
+                    {session_id, SessionID},
+                    {session_epoch, Epoch},
+                    {topics, [
+                        [
+                            {topic, Topic},
+                            {partitions, [
+                                [
+                                    {partition, Partition},
+                                    {fetch_offset, Offset},
+                                    {partition_max_bytes, MaxBytes},
+                                    %% irelevant to clients
+                                    {log_start_offset, -1},
+                                    {last_fetched_epoch, -1},
+                                    {current_leader_epoch, LeaderEpoch}
+                                ]
+                            ]}
+                        ]
+                    ]},
+                    % we always fetch from one single topic-partition
+                    % never need to forget any
+                    {forgotten_topics_data, []},
+                    %% Rack ID is to allow consumers fetching from closet replica (instead the leader)
+                    {rack_id, maps:get(rack_id, Opts, <<>>)}
+                ];
+            _ ->
+                [
+                    {replica_id, ?KPRO_REPLICA_ID},
+                    {max_wait_ms, MaxWaitTime},
+                    {max_bytes, MaxBytes},
+                    {min_bytes, MinBytes},
+                    {isolation_level, IsolationLevel},
+                    {session_id, SessionID},
+                    {session_epoch, Epoch},
+                    {topics, [
+                        [
+                            {topic_id, Topic},
+                            {partitions, [
+                                [
+                                    {partition, Partition},
+                                    {fetch_offset, Offset},
+                                    {partition_max_bytes, MaxBytes},
+                                    %% irelevant to clients
+                                    {log_start_offset, -1},
+                                    {last_fetched_epoch, -1},
+                                    {current_leader_epoch, LeaderEpoch}
+                                ]
+                            ]}
+                        ]
+                    ]},
+                    % we always fetch from one single topic-partition
+                    % never need to forget any
+                    {forgotten_topics_data, []},
+                    %% Rack ID is to allow consumers fetching from closet replica (instead the leader)
+                    {rack_id, maps:get(rack_id, Opts, <<>>)}
+                ]
+        end,
+    make(fetch, Vsn, Fields).
 
 %% @doc Help function to construct a produce request.
 produce(Vsn, Topic, Partition, Batch) ->
@@ -289,22 +398,45 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
         true = FirstSequence >= 0, %% assert
         kpro_batch:encode_tx(Batch, Compression, FirstSequence, TxnCtx)
     end,
-  Msg =
-    [ [encode(string, transactional_id(TxnCtx)) || Vsn > 2]
-    , encode(int16, RequiredAcks)
-    , encode(int32, AckTimeout)
-    , encode(int32, 1) %% topic array header
-    , encode(string, Topic)
-    , encode(int32, 1) %% partition array header
-    , encode(int32, Partition)
-    , encode(bytes, EncodedBatch)
-    ],
-  #kpro_req{ api = produce
-           , vsn = Vsn
-           , msg = Msg
-           , ref = make_ref()
-           , no_ack = RequiredAcks =:= 0
-           }.
+  case Vsn of
+    V when V < 9 ->
+      Msg =
+        [ [encode(string, transactional_id(TxnCtx)) || V > 2]
+        , encode(int16, RequiredAcks)
+        , encode(int32, AckTimeout)
+        , encode(int32, 1) %% topic array header
+        , encode(string, Topic)
+        , encode(int32, 1) %% partition array header
+        , encode(int32, Partition)
+        , encode(bytes, EncodedBatch)
+        ],
+      #kpro_req{ api = produce
+               , vsn = Vsn
+               , msg = Msg
+               , ref = make_ref()
+               , no_ack = RequiredAcks =:= 0
+               };
+    V -> %% V >= 9
+      PartitionData = #{index => Partition,
+                        records => EncodedBatch,
+                        tagged_fields => #{}},
+      TopicData0 = #{partition_data => [PartitionData],
+                     tagged_fields => #{}},
+      TopicData =
+        case V of
+          V when V < 13 ->
+            TopicData0#{name => Topic};
+          _ ->
+            TopicData0#{topic_id => Topic}
+        end,
+      Fields = #{transactional_id => transactional_id(TxnCtx),
+                 acks => RequiredAcks,
+                 timeout_ms => AckTimeout,
+                 topic_data => [TopicData],
+                 tagged_fields => #{}},
+      Req = make(produce, Vsn, Fields),
+      Req#kpro_req{no_ack = RequiredAcks =:= 0}
+  end.
 
 %% @doc Make `end_txn' request.
 -spec end_txn(txn_ctx(), commit | abort) -> req().
@@ -313,7 +445,7 @@ end_txn(TxnCtx, CommitOrAbort) ->
              commit -> true;
              abort -> false
            end,
-  Body = TxnCtx#{transaction_result => Result},
+  Body = TxnCtx#{committed => Result},
   make(end_txn, _Vsn = 0, Body).
 
 %% @doc Make `add_partitions_to_txn' request.
@@ -326,7 +458,7 @@ add_partitions_to_txn(TxnCtx, TopicPartitionList) ->
             Topic, fun(PL) -> [Partition | PL] end,
             [Partition], Acc)
       end, #{}, TopicPartitionList),
-  Body = TxnCtx#{topics => tp_map_to_array(topic, Grouped)},
+  Body = TxnCtx#{topics => tp_map_to_array(name, Grouped)},
   make(add_partitions_to_txn, _Vsn = 0, Body).
 
 %% @doc Make a `txn_offset_commit' request.
@@ -383,17 +515,45 @@ create_topics(Vsn, Topics, Opts) ->
 create_partitions(Vsn, Topics, Opts) ->
   Timeout = maps:get(timeout, Opts, 0),
   ValidateOnly = maps:get(validate_only, Opts, false),
-  Body = #{ topic_partitions => Topics
-          , timeout => Timeout
+  Body = #{ topics => Topics
+          , timeout_ms => Timeout
           , validate_only => ValidateOnly
           },
   make(create_partitions, Vsn, Body).
 
 %% @doc Make `delete_topics' request.
--spec delete_topics(vsn(), [topic()], #{timeout => kpro:int32()}) -> req().
-delete_topics(Vsn, Topics, Opts) ->
+-spec delete_topics(vsn(),
+                    [topic() | #{topic_id => topic_id() | ?kpro_null, name => topic() | ?kpro_null}],
+                    #{timeout => kpro:int32()}) -> req().
+delete_topics(Vsn, Topics, Opts) when Vsn < 6 ->
   Timeout = maps:get(timeout, Opts, 0),
   Body = #{ topic_names => Topics
+          , timeout_ms => Timeout
+          },
+  make(delete_topics, Vsn, Body);
+delete_topics(Vsn, Topics, Opts) ->
+  Timeout = maps:get(timeout, Opts, 0),
+  %% For Vsn >= 6, we normalize the topic list. If a topic map has a
+  %% valid topic_id, we use it and nullify the name. Otherwise, we
+  %% use the name and ensure topic_id is null. This allows callers
+  %% to supply maps with both fields set without worrying about the
+  %% API requirement.
+  ProcessedTopics =
+    lists:map(
+      fun(TopicMap) ->
+        case maps:get(topic_id, TopicMap, ?kpro_null) of
+          ?kpro_null ->
+            % No valid topic_id, so use the name.
+            % Ensure topic_id is explicitly set to null for the request.
+            TopicMap#{topic_id => ?kpro_null};
+          _TopicId ->
+            % A valid topic_id exists, so prioritize it.
+            % Nullify the name for the request, as required by the API.
+            TopicMap#{name => ?kpro_null}
+        end
+      end,
+      Topics),
+  Body = #{ topics => ProcessedTopics
           , timeout_ms => Timeout
           },
   make(delete_topics, Vsn, Body).
@@ -403,10 +563,18 @@ delete_topics(Vsn, Topics, Opts) ->
 %% greater than 0.
 -spec describe_configs(vsn(), [Resources :: kpro:struct()],
                        #{include_synonyms => boolean()}) -> req().
-describe_configs(Vsn, Resources, Opts) ->
+describe_configs(Vsn, Resources, Opts) when Vsn < 3 ->
   IncludeSynonyms = maps:get(include_synonyms, Opts, false),
   Body = #{ resources => Resources
           , include_synonyms => IncludeSynonyms
+          },
+  make(describe_configs, Vsn, Body);
+describe_configs(Vsn, Resources, Opts) ->
+  IncludeSynonyms = maps:get(include_synonyms, Opts, false),
+  IncludeDocumentation = maps:get(include_documentation, Opts, false),
+  Body = #{ resources => Resources
+          , include_synonyms => IncludeSynonyms
+          , include_documentation => IncludeDocumentation
           },
   make(describe_configs, Vsn, Body).
 

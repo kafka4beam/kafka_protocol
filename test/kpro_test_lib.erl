@@ -14,6 +14,8 @@
 %%%
 -module(kpro_test_lib).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -export([ get_endpoints/1
         , guess_protocol/1
         ]).
@@ -41,12 +43,16 @@
         , parse_rsp/1
         ]).
 
--export([list_offset/5]).
+-export([ list_offset/5
+        , maybe_resolve_topic_id/3
+        ]).
 
 -include("kpro_private.hrl").
 
 -type conn() :: kpro_connection:connection().
 -type config() :: kpro_connection:config().
+
+-define(TIMEOUT, 5000).
 
 get_kafka_version() ->
   case is_kafka_09() of
@@ -144,7 +150,16 @@ with_connection(Endpoints, Config, ConnectFun, WithConnFun) ->
 parse_rsp(#kpro_rsp{ api = list_offsets
                    , msg = Msg
                    }) ->
-  case get_partition_rsp(Msg) of
+  [Topics] = kpro:find(topics, Msg),
+  PartitionRsp = 
+    try kpro:find(partitions, Topics) of
+      [Partitions] -> Partitions
+    catch
+      error:{no_such_field, partitions} ->
+        [Partitions] = kpro:find(partition_responses, Topics),
+        Partitions
+    end,
+  case PartitionRsp of
     #{offsets := [Offset]} = M -> M#{offset => Offset};
     #{offset := _} = M -> M
   end;
@@ -165,8 +180,8 @@ parse_rsp(#kpro_rsp{ api = fetch
         {undefined, [], ?no_error};
       _ ->
         PartitionRsp = get_partition_rsp(Msg),
-        Header0 = kpro:find(partition_header, PartitionRsp),
-        Records = kpro:find(record_set, PartitionRsp),
+        Header0 = PartitionRsp,
+        Records = kpro:find(records, PartitionRsp),
         ECx = kpro:find(error_code, Header0),
         {Header0, decode_batches(Vsn, Records), ECx}
     end,
@@ -190,17 +205,17 @@ parse_rsp(#kpro_rsp{ api = delete_topics
 parse_rsp(#kpro_rsp{ api = create_partitions
                    , msg = Msg
                    }) ->
-  error_if_any(kpro:find(topic_errors, Msg));
+  error_if_any(kpro:find(results, Msg));
 parse_rsp(#kpro_rsp{ api = describe_configs
                    , msg = Msg
                    }) ->
-  Resources = kpro:find(resources, Msg),
-  ok = error_if_any(Resources),
-  Resources;
+  Results = kpro:find(results, Msg),
+  ok = error_if_any(Results),
+  Results;
 parse_rsp(#kpro_rsp{ api = alter_configs
                    , msg = Msg
                    }) ->
-  error_if_any(kpro:find(resources, Msg));
+  error_if_any(kpro:find(responses, Msg));
 parse_rsp(#kpro_rsp{msg = Msg}) ->
   Msg.
 
@@ -212,6 +227,14 @@ list_offset(Connection, Topic, Partition, Time, Timeout) ->
   #{offset := Offset} = parse_rsp(Rsp),
   Offset.
 
+maybe_resolve_topic_id(Connection, TopicName, Vsn) when Vsn >= 13 ->
+  MetadataReq = kpro_req_lib:metadata(13, [TopicName]),
+  {ok, Resp} = kpro:request_sync(Connection, MetadataReq, ?TIMEOUT),
+  #kpro_rsp{msg = #{topics := [#{topic_id := Id, error_code := ?no_error}]}} = Resp,
+  Id;
+maybe_resolve_topic_id(_Connection, TopicName, _Vsn) ->
+  TopicName.
+
 %%%_* Internal functions =======================================================
 
 decode_batches(Vsn, <<>>) when Vsn >= ?MIN_MAGIC_2_FETCH_API_VSN ->
@@ -222,8 +245,13 @@ decode_batches(_Vsn, Bin) ->
 
 get_partition_rsp(Struct) ->
   [TopicRsp] = kpro:find(responses, Struct),
-  [PartitionRsp] = kpro:find(partition_responses, TopicRsp),
-  PartitionRsp.
+  try kpro:find(partitions, TopicRsp) of
+    [PartitionRsp] -> PartitionRsp
+  catch
+    error:{no_such_field, partitions} ->
+      [PartitionRsp] = kpro:find(partition_responses, TopicRsp),
+      PartitionRsp
+  end.
 
 %% Return ok if all error codes are 'no_error'
 %% otherwise return {error, Errors} where Errors is a list of error codes

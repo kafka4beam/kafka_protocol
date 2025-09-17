@@ -123,6 +123,10 @@ translate([api_key | _], ApiKey) ->
   end;
 translate([error_code | _], ErrorCode) ->
   kpro_schema:ec(ErrorCode);
+translate([partition_error_code | _], ErrorCode) ->
+  kpro_schema:ec(ErrorCode);
+translate([acknowledge_error_code | _], ErrorCode) ->
+  kpro_schema:ec(ErrorCode);
 translate([metadata, members | _] = Stack, Bin) ->
   Schema = kpro_lib:get_prelude_schema(cg_member_metadata, 0),
   case Bin =:= <<>> of

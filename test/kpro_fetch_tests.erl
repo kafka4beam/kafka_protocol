@@ -56,7 +56,17 @@ test_incemental_fetch(Connection, Vsn) ->
   LatestOffset = kpro_test_lib:list_offset(Connection, ?TOPIC, ?PARTI,
                                            latest, 5000),
   %% session-id=0 and epoch=0 to initialize a session
-  Req0 = kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, LatestOffset,
+  Topic = case Vsn >= 13 of
+            true ->
+              {ok, #kpro_rsp{msg = #{topics := [#{topic_id := TopicId}]}}} =
+                kpro:request_sync(Connection,
+                                  kpro_req_lib:metadata(13, [?TOPIC]),
+                                  ?TIMEOUT),
+              TopicId;
+            false ->
+              ?TOPIC
+          end,
+  Req0 = kpro_req_lib:fetch(Vsn, Topic, ?PARTI, LatestOffset,
                             #{ session_id => 0
                              , session_epoch => 0
                              , max_bytes => 1
@@ -66,11 +76,11 @@ test_incemental_fetch(Connection, Vsn) ->
   #{header := Header0} = kpro_test_lib:parse_rsp(Rsp0),
   #{last_stable_offset := LatestOffset1} = Header0,
   ?assertEqual(LatestOffset, LatestOffset1),
-  Req1 = kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, LatestOffset,
+  Req1 = kpro_req_lib:fetch(Vsn, Topic, ?PARTI, LatestOffset,
                             #{ session_id => SessionId
                              , session_epoch => 1 %% 0 + 1
                              , max_bytes => 1
-                             , max_wait_time => 10 %% ms
+                             , max_wait_time_ms => 10 %% ms
                              }),
   {ok, Rsp1} = kpro:request_sync(Connection, Req1, ?TIMEOUT),
   ?assertMatch(#kpro_rsp{msg = #{ error_code := no_error
@@ -80,13 +90,14 @@ test_incemental_fetch(Connection, Vsn) ->
   %% including topic-partition metadata.
   ?assertEqual([], maps:get(responses, Rsp1#kpro_rsp.msg)).
 
-fetch_and_verify(_Connection, _Topic, _Vsn, _BeginOffset, []) -> ok;
-fetch_and_verify(Connection, Topic, Vsn, BeginOffset, Messages) ->
+fetch_and_verify(_Connection, _TopicName, _Vsn, _BeginOffset, []) -> ok;
+fetch_and_verify(Connection, TopicName, Vsn, BeginOffset, Messages) ->
+  Topic = kpro_test_lib:maybe_resolve_topic_id(Connection, TopicName, Vsn),
   Batch0 = do_fetch(Connection, Topic, Vsn, BeginOffset, rand_num(1000)),
   Batch = drop_older_offsets(BeginOffset, Batch0),
   [#kafka_message{offset = FirstOffset} | _] = Batch,
   ?assertEqual(FirstOffset, BeginOffset),
-  Rest = validate_messages(Topic, Vsn, Batch, Messages),
+  Rest = validate_messages(TopicName, Vsn, Batch, Messages),
   #kafka_message{offset = NextBeginOffset} = lists:last(Batch),
   fetch_and_verify(Connection, Topic, Vsn, NextBeginOffset + 1, Rest).
 
@@ -102,7 +113,7 @@ validate_messages(_Topic, _FetchVsn, [], Rest) -> Rest;
 validate_messages(Topic, FetchVsn,
                   [#kafka_message{ts_type = TType, ts = T, key = K, value = V} | R1],
                   [{ProduceVsn, LAT, ProducedMsg} | R2]) ->
-  RefData = #{fetch_vsn => FetchVsn, produce_vsn => ProduceVsn, log_append_time => LAT},
+  RefData = #{fetch_vsn => FetchVsn, produce_vsn => ProduceVsn, log_append_time_ms => LAT},
   FetchedMsg = #{ts_type => TType, ts => T, key => K, value => V},
   ok = validate_message_key_val(FetchedMsg, ProducedMsg),
   ok =
@@ -144,12 +155,12 @@ validate_message_ts_append(
 % Log Append Time not returned during produce, check only that the produced and
 % fetched timestamps differ.
 validate_message_ts_append(
-  #{produce_vsn := PVsn, log_append_time := undefined},
+  #{produce_vsn := PVsn, log_append_time_ms := undefined},
   _F = #{ts := TF, ts_type := append}, _P = #{ts := TP}
  ) when PVsn < 2, TF /= TP -> ok;
 % Log Append Time matches the fetched message timestamp and differs from
 % the produced message timestamp.
-validate_message_ts_append(#{log_append_time := T},
+validate_message_ts_append(#{log_append_time_ms := T},
                            _F = #{ts := T, ts_type := append},
                            _P = #{ts := TP}) when T /= TP -> ok;
 % Something unexpected.
@@ -181,6 +192,7 @@ with_vsn_topic(Vsn, Topic) ->
     random_config(),
     Topic,
     fun(Connection) ->
+        %% session-id=0 and epoch=0 to initialize a session
         {BaseOffset, Messages} = produce_randomly(Vsn, Connection, Topic),
         fetch_and_verify(Connection, Topic, Vsn, BaseOffset, Messages)
     end).
@@ -192,7 +204,7 @@ produce_randomly(_TestVsn, _Connection, _Topic, 0, Acc0) ->
   [{BaseOffset, _, _, _} | _] = Acc = lists:reverse(Acc0),
   {BaseOffset, lists:append([lists:map(fun(M) -> {Vsn, LAT, M} end, Msg)
                              || {_, Vsn, LAT, Msg} <- Acc])};
-produce_randomly(TestVsn, Connection, Topic, Count, Acc) ->
+produce_randomly(TestVsn, Connection, TopicName, Count, Acc) ->
   {ok, Versions} = kpro:get_api_versions(Connection),
   {MinVsn, MaxVsn} = maps:get(produce, Versions),
   Vsn = case MinVsn =:= MaxVsn of
@@ -201,12 +213,13 @@ produce_randomly(TestVsn, Connection, Topic, Count, Acc) ->
         end,
   Opts = rand_produce_opts(Vsn, TestVsn),
   Batch = make_random_batch(rand_num(?RAND_BATCH_SIZE)),
+  Topic = kpro_test_lib:maybe_resolve_topic_id(Connection, TopicName, Vsn),
   Req = kpro_req_lib:produce(Vsn, Topic, ?PARTI, Batch, Opts),
   {ok, Rsp0} = kpro:request_sync(Connection, Req, ?TIMEOUT),
   #{ error_code := no_error
    , base_offset := Offset
    } = Rsp = kpro_test_lib:parse_rsp(Rsp0),
-  LogAppendTime = maps:get(log_append_time, Rsp, undefined),
+  LogAppendTime = maps:get(log_append_time_ms, Rsp, undefined),
   produce_randomly(TestVsn, Connection, Topic, Count - 1, [{Offset, Vsn, LogAppendTime, Batch} | Acc]).
 
 rand_produce_opts(ProduceVsn, FetchVsn) ->
@@ -225,7 +238,7 @@ rand_num(N) -> (os:system_time() rem N) + 1.
 rand_element(L) -> lists:nth(rand_num(length(L)), L).
 
 make_req(Vsn, Topic, Offset, MaxBytes) ->
-  Opts = #{ max_wait_time => 500
+  Opts = #{ max_wait_time_ms => 500
           , max_bytes => MaxBytes
           },
   kpro_req_lib:fetch(Vsn, Topic, ?PARTI, Offset, Opts).

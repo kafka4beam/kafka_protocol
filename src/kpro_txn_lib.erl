@@ -69,7 +69,7 @@ add_partitions_to_txn(TxnCtx, TPL, Opts) ->
   Req = kpro_req_lib:add_partitions_to_txn(TxnCtx, TPL),
   FL =
     [ fun() -> kpro_connection:request_sync(Connection, Req, Timeout) end
-    , fun(#kpro_rsp{msg = Body}) -> parse_add_partitions_rsp(Body) end
+    , fun(#kpro_rsp{msg = Body, vsn = Vsn}) -> parse_add_partitions_rsp(Body, Vsn) end
     ],
   kpro_lib:ok_pipe(FL).
 
@@ -126,23 +126,35 @@ parse_txn_offset_commit_rsp(#{topics := Topics}) ->
     Errors -> {error, Errors}
   end.
 
-parse_add_partitions_rsp(#{errors := Errors0}) ->
+parse_add_partitions_rsp(#{results := Results}, Vsn) when Vsn < 4 ->
+  case parse_add_partitions_topic_rsp(Results) of
+    [] -> ok;
+    Errors -> {error, Errors}
+  end;
+parse_add_partitions_rsp(#{results_by_transaction := Results}, _Vsn) ->
   Errors =
+    lists:flatmap(
+    fun(#{transactional_id := TxId, topic_results := TopicResults}) ->
+        case parse_add_partitions_topic_rsp(TopicResults) of
+          [] -> [];
+          Errors -> [{TxId, Errors}]
+        end
+    end, Results),
+  case Errors of
+    [] -> ok;
+    Errors -> {error, Errors}
+  end.
+
+parse_add_partitions_topic_rsp(Results) ->
   lists:flatten(
     lists:map(
-      fun(#{topic := Topic, partition_errors := PartitionErrors}) ->
+      fun(#{name := Topic, results_by_partition := PartitionErrors}) ->
           lists:map(
-            fun(#{partition := Partition, error_code := ErrorCode}) ->
-                case ErrorCode =:= ?no_error of
-                  true  -> [];
-                  false -> {Topic, Partition, ErrorCode}
-                end
+            fun(#{partition_index := _Partition, partition_error_code := ?no_error}) -> [];
+               (#{partition_index := Partition, partition_error_code := ErrorCode}) ->
+                {Topic, Partition, ErrorCode}
             end, PartitionErrors)
-      end, Errors0)),
-  case Errors =:= [] of
-    true -> ok;
-    _ -> {error, Errors}
-  end.
+      end, Results)).
 
 make_txn_ctx(Connection, TxnId,
              #{ error_code := ?no_error

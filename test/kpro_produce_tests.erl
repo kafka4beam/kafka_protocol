@@ -21,10 +21,7 @@
 -define(TIMEOUT, 5000).
 
 -define(ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp),
-        ?assertMatch(#{ partition := ?PARTI
-                      , error_code := no_error
-                      , base_offset := _
-                      }, kpro_test_lib:parse_rsp(Rsp))).
+        ?assertMatch(#{error_code := no_error}, kpro_test_lib:parse_rsp(Rsp))).
 
 magic_v0_basic_test_() ->
   {Min, Max} = get_api_vsn_range(),
@@ -33,7 +30,8 @@ magic_v0_basic_test_() ->
         fun() ->
           with_connection(
             fun(Pid) ->
-              Req = make_req(Vsn),
+              Topic = kpro_test_lib:maybe_resolve_topic_id(Pid, topic(), Vsn),
+              Req = make_req(Vsn, Topic),
               {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
               ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
             end)
@@ -56,10 +54,11 @@ ssl_test_() ->
 ssl_test_with_sni(SNI) ->
   {_, Vsn} = get_api_vsn_range(),
   Msg = #{value => make_value(?LINE), headers => [{<<"foo">>, <<"bar">>}]},
-  Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, [Msg]),
   with_connection(#{ssl => [{server_name_indication, SNI} | kpro_test_lib:ssl_options()],
                     sasl => kpro_test_lib:sasl_config(plain)},
                   fun(Pid) ->
+                          Topic = kpro_test_lib:maybe_resolve_topic_id(Pid, topic(), Vsn),
+                          Req = kpro_req_lib:produce(Vsn, Topic, ?PARTI, [Msg]),
                           {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
                           ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
                   end).
@@ -87,9 +86,10 @@ non_monotoic_ts_in_batch_test() ->
                  headers => []
                 }
              ],
-      Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Msgs),
       with_connection(#{ssl => true, sasl => kpro_test_lib:sasl_config(plain)},
         fun(Pid) ->
+          Topic = kpro_test_lib:maybe_resolve_topic_id(Pid, topic(), Vsn),
+          Req = kpro_req_lib:produce(Vsn, Topic, ?PARTI, Msgs),
           {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
           ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
         end)
@@ -103,9 +103,10 @@ encode_batch_beforehand(Compression) ->
              headers => []}],
   Magic = kpro_lib:produce_api_vsn_to_magic_vsn(Vsn),
   Bin = kpro:encode_batch(Magic, Batch, Compression),
-  Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Bin),
   with_connection(
     fun(Pid) ->
+        Topic = kpro_test_lib:maybe_resolve_topic_id(Pid, topic(), Vsn),
+        Req = kpro_req_lib:produce(Vsn, Topic, ?PARTI, Bin),
         {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
         ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
     end).
@@ -122,12 +123,13 @@ encode_batch_beforehand_test_() ->
 %% async send test
 async_send_test() ->
   {_, Vsn} = get_api_vsn_range(),
-  Batch1 = [#{ts => kpro_lib:now_ts(), value => make_value(?LINE)}],
-  Batch2 = [#{ts => kpro_lib:now_ts(), value => make_value(?LINE)}],
-  Req1 = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Batch1),
-  Req2 = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Batch2),
   with_connection(
     fun(Pid) ->
+        Batch1 = [#{ts => kpro_lib:now_ts(), value => make_value(?LINE)}],
+        Batch2 = [#{ts => kpro_lib:now_ts(), value => make_value(?LINE)}],
+        Topic = kpro_test_lib:maybe_resolve_topic_id(Pid, topic(), Vsn),
+        Req1 = kpro_req_lib:produce(Vsn, Topic, ?PARTI, Batch1),
+        Req2 = kpro_req_lib:produce(Vsn, Topic, ?PARTI, Batch2),
         ok = kpro:send(Pid, Req1),
         ok = kpro:request_async(Pid, Req2),
         Assert = fun(Req, Rsp) ->
@@ -139,9 +141,9 @@ async_send_test() ->
         receive Msg -> erlang:throw({unexpected, Msg}) after 10 -> ok end
     end).
 
-make_req(Vsn) ->
+make_req(Vsn, Topic) ->
   Batch = make_batch(Vsn),
-  kpro_req_lib:produce(Vsn, topic(), ?PARTI, Batch).
+  kpro_req_lib:produce(Vsn, Topic, ?PARTI, Batch).
 
 get_api_vsn_range() ->
   {ok, Versions} = with_connection(fun(Pid) -> kpro:get_api_versions(Pid) end),

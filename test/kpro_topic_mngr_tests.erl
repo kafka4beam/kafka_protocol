@@ -47,12 +47,10 @@ test_create_topic_partition(CreateTopicsVsn, CreatePartitionsVsn) ->
      , assignments => []
      , configs => []
      },
-  AssignNewPartitionsTo = [[ _BrokerId = 1 ]],
   CreatePartitionArgs =
-    #{ topic => Topic
-     , new_partitions => #{ count => 2
-                          , assignment => AssignNewPartitionsTo
-                          }
+    #{ name => Topic
+     , count => 2
+     , assignments => [#{broker_ids => [1]}]
      },
   Timeout = timer:seconds(5),
   Opts = #{timeout => Timeout},
@@ -83,11 +81,11 @@ describe_configs_test() ->
 test_describe_configs(false) ->
   io:format(user, " skipped ", []);
 test_describe_configs(Vsn) ->
-  {ok, [Topic | _]} = get_test_topics(),
+  {ok, [#{name := Topic} | _]} = get_test_topics(),
   DescribeConfigArgs =
     #{ resource_type => ?RESOURCE_TYPE_TOPIC
      , resource_name => Topic
-     , config_names => ?null %% Get all configs
+     , configuration_keys => ?null %% Get all configs
      },
   Opts = #{include_synonyms => false},
   Req = kpro_req_lib:describe_configs(Vsn, [DescribeConfigArgs], Opts),
@@ -107,13 +105,13 @@ alter_configs_test() ->
 test_alter_configs(false) ->
   io:format(user, " skipped ", []);
 test_alter_configs(Vsn) ->
-  {ok, [Topic | _]} = get_test_topics(),
+  {ok, [#{name := Topic} | _]} = get_test_topics(),
   AlterConfigsArgs =
     fun(Policy) ->
         #{ resource_type => ?RESOURCE_TYPE_TOPIC
          , resource_name => Topic
-         , config_entries => [#{config_name => "cleanup.policy",
-                                config_value => Policy}]
+         , configs => [#{name => "cleanup.policy",
+                         value => Policy}]
          }
     end,
   Opts = #{validate_only => false},
@@ -174,9 +172,9 @@ get_test_topics() ->
 
 get_test_topics(Connection) ->
   {ok, Versions} = kpro:get_api_versions(Connection),
+  {_, Vsn} = maps:get(metadata, Versions),
   FL =
     [ fun() ->
-          {_, Vsn} = maps:get(metadata, Versions),
           Req = kpro_req_lib:metadata(Vsn, all),
           kpro_connection:request_sync(Connection, Req, 5000)
       end
@@ -190,7 +188,11 @@ get_test_topics(Connection) ->
                   Name = kpro:find(name, Topic),
                   case lists:prefix(atom_to_list(?MODULE),
                                     binary_to_list(Name)) of
-                    true -> [Name | Acc];
+                    true when Vsn < 10 ->
+                      [#{topic_id => undefined, name => Name} | Acc];
+                    true when Vsn >= 10 ->
+                      TopicId = kpro:find(topic_id, Topic),
+                      [#{topic_id => TopicId, name => Name} | Acc];
                     false -> Acc
                   end
               end, [], Topics),
@@ -217,13 +219,13 @@ get_topic_config(Vsn, Conn, Topic, ConfigName) ->
   DescribeConfigArgs =
     #{ resource_type => ?RESOURCE_TYPE_TOPIC
      , resource_name => Topic
-     , config_names => [ConfigName]
+     , configuration_keys => [ConfigName]
      },
   Req = kpro_req_lib:describe_configs(Vsn, [DescribeConfigArgs], #{}),
   {ok, Rsp} = kpro:request_sync(Conn, Req, infinity),
   [Resource] = kpro_test_lib:parse_rsp(Rsp),
-  [Entry] = kpro:find(config_entries, Resource),
-  kpro:find(config_value, Entry).
+  [Entry] = kpro:find(configs, Resource),
+  kpro:find(value, Entry).
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

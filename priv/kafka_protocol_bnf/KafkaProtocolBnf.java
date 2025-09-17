@@ -119,9 +119,9 @@ public class KafkaProtocolBnf {
             b.append("#ApiKey: ");
             b.append(key.name);
             b.append(", ");
-            b.append(new Integer(key.id).toString());
+            b.append(Integer.toString(key.id));
             b.append("\n");
-            Schema[] requests = key.requestSchemas;
+            Schema[] requests = key.messageType.requestSchemas();
             for (int i = 0; i < requests.length; i++) {
                 Schema schema = requests[i];
                 // Schema
@@ -139,7 +139,7 @@ public class KafkaProtocolBnf {
             }
 
             // Responses
-            Schema[] responses = key.responseSchemas;
+            Schema[] responses = key.messageType.responseSchemas();
             for (int i = 0; i < responses.length; i++) {
                 Schema schema = responses[i];
                 // Schema

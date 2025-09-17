@@ -1,5 +1,5 @@
 export KAFKA_IMAGE_VERSION ?= 1.1.3
-export KAFKA_VERSION ?= 4.0.0
+export KAFKA_VERSION ?= 4.1.0
 all: compile
 
 rebar ?= $(shell which rebar3)
@@ -12,7 +12,7 @@ GEN_CODE = src/kpro_schema.erl
 .PHONY: kafka-bnf
 kafka-bnf:
 	@cd priv/kafka_protocol_bnf && gradle run
-	@cat priv/kafka.bnf | grep "#.*ApiKey" | awk '{print "{"$$2" "$$3"}."}' | sed -r 's/([A-Z])/_\L\1/g' | sed 's/{_/{/' | sort -hk2 > priv/api-keys.eterm
+	@python3 priv/process_api_keys.py
 
 $(GEN_CODE): $(GEN_INPUT)
 	@priv/kpro_gen.escript

@@ -2,7 +2,7 @@ name: kafka_protocol
 on:
   push:
     branches:
-      - '*'
+      - master
   pull_request:
     branches:
       - master
@@ -18,26 +18,26 @@ jobs:
           - '27.3'
           - '26.2'
         kafka:
+          - '4.1'
           - '4.0'
           - '3.9'
           - '2.8'
           - '1.1'
-          - '0.9'
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
 
     # Setup
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
     - name: Cache Hex packages
-      uses: actions/cache@v4
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
       with:
         path: ~/.cache/rebar3/hex/hexpm/packages
         key: ${{ runner.os }}-hex2-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.lock')) }}
         restore-keys: |
           ${{ runner.os }}-hex2-
     - name: Cache Dialyzer PLTs
-      uses: actions/cache@v4
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
       with:
         path: ~/.cache/rebar3/rebar3_*_plt
         key: ${{ runner.os }}--dialyzer2-${{ hashFiles(format('{0}{1}', github.workspace, '/rebar.config')) }}
@@ -46,7 +46,7 @@ jobs:
 
     # Install Erlang
     - name: Install Erlang/OTP
-      uses: erlef/setup-beam@v1
+      uses: erlef/setup-beam@e6d7c94229049569db56a7ad5a540c051a010af9 # v1.20.4
       with:
         version-type: strict
         otp-version: ${{matrix.otp}}
@@ -66,6 +66,6 @@ jobs:
           make cover
 
     - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
