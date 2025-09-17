@@ -10,9 +10,6 @@ KAFKA_IMAGE_VERSION="${KAFKA_IMAGE_VERSION:-1.1.3}"
 VERSION="${KAFKA_VERSION:-${1:-4.1.0}}"
 
 case $VERSION in
-  0.9*)
-    VERSION="0.9"
-    ;;
   0.10*)
     VERSION="0.10"
     ;;
@@ -27,6 +24,9 @@ case $VERSION in
     ;;
   3.*)
     VERSION="3.9"
+    ;;
+  4.0)
+    VERSION="4.0"
     ;;
   4.*)
     VERSION="4.1"
