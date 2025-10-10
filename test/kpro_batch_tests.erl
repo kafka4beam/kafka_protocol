@@ -21,9 +21,9 @@
 
 encode_decode_test_() ->
   F = fun(V, Compression) ->
-          Encoded = kpro_batch:encode(V, [#{ts => kpro_lib:now_ts(),
-                                            headers => [{<<"foo">>, <<"bar">>}],
-                                            value => <<"v">>}], Compression),
+          Encoded = encode(V, [#{ts => kpro_lib:now_ts(),
+                                 headers => [{<<"foo">>, <<"bar">>}],
+                                 value => <<"v">>}], Compression),
           [{_DummyMeta, [Decoded]}] = kpro_batch:decode(bin(Encoded)),
           #kafka_message{ ts = Ts
                         , headers = Headers
@@ -67,9 +67,9 @@ provide_compression_from_app_env_test() ->
   end.
 
 test_provide_compression(Name) ->
-  Encoded = kpro_batch:encode(2, [#{ts => kpro_lib:now_ts(),
-                                    headers => [{<<"foo">>, <<"bar">>}],
-                                    value => <<"v">>}], Name),
+  Encoded = encode(2, [#{ts => kpro_lib:now_ts(),
+                         headers => [{<<"foo">>, <<"bar">>}],
+                         value => <<"v">>}], Name),
   ?assertMatch({_, _}, binary:match(bin(Encoded), <<"fake-compressed">>)),
   [{_DummyMeta, [Decoded]}] = kpro_batch:decode(bin(Encoded)),
   #kafka_message{value = Value} = Decoded,
@@ -82,6 +82,10 @@ decompress(<<"fake-compressed", Data/binary>>) -> Data.
 
 bin(X) ->
   iolist_to_binary(X).
+
+encode(MagicVsn, Batch, Compression) ->
+  {_Size, IoList} = kpro_batch:encode(MagicVsn, Batch, Compression),
+  IoList.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:

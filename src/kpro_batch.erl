@@ -1,4 +1,5 @@
 %%%   Copyright (c) 2018-2021, Klarna Bank AB (publ)
+%%%   Copyright (c) 2021-2025, Kafka4beam
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -38,7 +39,7 @@
 -define(NO_META, ?KPRO_NO_BATCH_META).
 
 %% @doc Encode a list of batch inputs into byte stream.
--spec encode(magic(), batch_input(), compress_option()) -> iodata().
+-spec encode(magic(), batch_input(), compress_option()) -> {non_neg_integer(), iodata()}.
 encode(_MagicVsn = 2, Batch, Compression) ->
   FirstSequence = -1,
   NonTxn = #{ producer_id => -1
@@ -46,7 +47,8 @@ encode(_MagicVsn = 2, Batch, Compression) ->
             },
   encode_tx(Batch, Compression, FirstSequence, NonTxn);
 encode(MagicVsn, Batch, Compression) ->
-  kpro_batch_v01:encode(MagicVsn, Batch, Compression).
+  IoData = kpro_batch_v01:encode(MagicVsn, Batch, Compression),
+  {iolist_size(IoData), IoData}.
 
 %% @doc Encode a batch of magic version 2.
 % RecordBatch =>
@@ -64,7 +66,7 @@ encode(MagicVsn, Batch, Compression) ->
 %   FirstSequence => int32
 %   Records => [Record]
 -spec encode_tx(batch_input(), compress_option(), seqno(), txn_ctx()) ->
-        iodata().
+    {non_neg_integer(), iodata()}.
 encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
           #{ producer_id := ProducerId
            , producer_epoch := ProducerEpoch
@@ -75,7 +77,7 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
       false -> kpro_lib:now_ts();
       Ts -> Ts
     end,
-  EncodedBatch = encode_batch(Compression, FirstTimestamp, Batch),
+  {EncodedBytes, EncodedBatch} = encode_batch(Compression, FirstTimestamp, Batch),
   EncodedAttributes = encode_attributes(Compression, IsTxn),
   PartitionLeaderEpoch = -1, % producer can set whatever
   FirstOffset = 0, % always 0
@@ -91,21 +93,31 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
         , enc(int16, ProducerEpoch)   % {ProducerEpoch,   T6} = dec(int16, T5),
         , enc(int32, FirstSequence)   % {FirstSequence,   T7} = dec(int32, T6),
         , enc(int32, Count)           % {Count,           T8} = dec(int32, T7),
-        , EncodedBatch
         ]),
-  CRC = crc32cer:nif_d(Body0),
-  Body =
+  Body = [Body0 | EncodedBatch],
+  CRC = crc32c(byte_size(Body0) + EncodedBytes, Body),
+  Head0 =
     [ enc(int32, PartitionLeaderEpoch)
     , enc(int8,  Magic)
     , enc(int32, CRC)
-    , Body0
     ],
-  Size = iolist_size(Body),
-  [ enc(int64, FirstOffset)
-  , enc(int32, Size)
-  | Body
-  ].
+  %% Head0 size is 9 bytes
+  Size = 9 + byte_size(Body0) + EncodedBytes,
+  Head = bin([enc(int64, FirstOffset), enc(int32, Size) | Head0]),
+  TotalSize = Size + 12,
+  Result = [Head | Body],
+  {TotalSize, Result}.
 
+%% Synthestic tests show that when data size is small, e.g. 1MB
+%% the cost of crc32c computation is negligible comparing to the batch
+%% encoding part, so we do not call dirty-scheduler.
+%% Otherwise we respect iolist and call dirty-scheduler (_d flavor API).
+crc32c(Bytes, IoData) when Bytes =< 1024 * 1024 ->
+    crc32cer:nif(IoData);
+crc32c(_, IoData) ->
+    crc32cer:nif_iolist_d(IoData).
+
+-compile({inline, [{bin, 1}]}).
 bin(X) -> iolist_to_binary(X).
 
 %% @doc Decode received message-set into a batch list.
@@ -153,18 +165,26 @@ scan_max_ts(Count, MaxTs0, [#{ts := Ts} | Rest]) ->
 scan_max_ts(Count, MaxTs, [#{} | Rest]) ->
   scan_max_ts(Count + 1, MaxTs, Rest).
 
--spec encode_batch(compress_option(), msg_ts(), [msg_input()]) -> iodata().
+-spec encode_batch(compress_option(), msg_ts(), [msg_input()]) ->
+    {non_neg_integer(), iodata()}.
+encode_batch(?no_compression, TsBase, Batch) ->
+  enc_records(TsBase, Batch);
 encode_batch(Compression, TsBase, Batch) ->
-  Encoded0 = enc_records(_Offset = 0, TsBase, Batch),
+  {_Size, Encoded0} = enc_records(TsBase, Batch),
   Encoded = kpro_compress:compress(Compression, Encoded0),
-  Encoded.
+  {iolist_size(Encoded), Encoded}.
 
--spec enc_records(offset(), msg_ts(), [msg_input()]) -> iodata().
-enc_records(_Offset, _TsBase, []) -> [];
-enc_records(Offset, TsBase, [Msg | Batch]) ->
-  [ enc_record(Offset, TsBase, Msg)
-  | enc_records(Offset + 1, TsBase, Batch)
-  ].
+-spec enc_records(msg_ts(), [msg_input()]) -> {non_neg_integer(), iodata()}.
+enc_records(TsBase, Batch) ->
+  enc_records(TsBase, Batch, _Offset = 0, _Bytes = 0, _Acc = []).
+
+-spec enc_records(msg_ts(), [msg_input()], offset(), Bytes :: non_neg_integer(), Acc :: iodata()) ->
+    {non_neg_integer(), iodata()}.
+enc_records(_TsBase, [], _Offset, Bytes, Acc) ->
+  {Bytes, lists:reverse(Acc)};
+enc_records(TsBase, [Msg | Batch], Offset, Bytes0, Acc) ->
+  {Bytes, Chunks} = enc_record(Offset, TsBase, Msg),
+  enc_records(TsBase, Batch, Offset + 1, Bytes0 + Bytes, [Chunks | Acc]).
 
 % NOTE Return {Meta, Batch :: [message()]} where Batch is a reversed
 % RecordBatch =>
@@ -267,22 +287,27 @@ dec_record(Offset, TsFun, TsType, Bin) ->
 %   ValueLen => varint
 %   Value => data
 %   Headers => [Header]
--spec enc_record(offset(), msg_ts(), msg_input()) -> iodata().
+-spec enc_record(offset(), msg_ts(), msg_input()) -> {non_neg_integer(), [binary()]}.
 enc_record(Offset, TsBase, #{value := Value} = M) ->
   Ts = maps:get(ts, M, TsBase),
   Key = maps:get(key, M, <<>>),
   %% 'headers' is a non-nullable array
   %% do not encode 'undefined' -> -1
   Headers = maps:get(headers, M, []),
-  Body = [ enc(int8, 0) % no per-message attributes in magic v2
-         , enc(varint, Ts - TsBase)
-         , enc(varint, Offset)
-         , enc(bytes, Key)
-         , enc(bytes, Value)
-         , enc_headers(Headers)
-         ],
-  Size = iolist_size(Body),
-  [enc(varint, Size), Body].
+  Body1 =
+    [ enc(int8, 0) % no per-message attributes in magic v2
+    , enc(varint, Ts - TsBase)
+    , enc(varint, Offset)
+    , enc_byte_size(Key)
+    , Key
+    , enc_byte_size(Value)
+    ],
+  EncodedHeaders = bin(enc_headers(Headers)),
+  Size = iolist_size(Body1) + byte_size(Value) + byte_size(EncodedHeaders),
+  SizeTag = enc(varint, Size),
+  TotalSize = Size + byte_size(SizeTag),
+  Result = [bin([SizeTag | Body1]), Value, EncodedHeaders],
+  {TotalSize, Result}.
 
 enc_headers(Headers) ->
   Count = length(Headers),
@@ -296,9 +321,9 @@ enc_headers(Headers) ->
 %   HeaderValueLen => varint
 %   HeaderValue => data
 enc_header({Key, Val}) ->
-  [ enc(varint, size(Key))
+  [ enc(varint, byte_size(Key))
   , Key
-  , enc(varint, size(Val))
+  , enc(varint, byte_size(Val))
   , Val
   ].
 
@@ -329,15 +354,18 @@ dec(bytes, Bin) ->
 dec(Primitive, Bin) ->
   kpro_lib:decode(Primitive, Bin).
 
-enc(bytes, undefined) ->
+-compile({inline, [{enc_byte_size, 1}]}).
+enc_byte_size(<<>>) ->
   enc(varint, -1);
-enc(bytes, <<>>) ->
-  enc(varint, -1);
-enc(bytes, Bin) ->
-  Len = size(Bin),
-  [enc(varint, Len), Bin];
-enc(Primitive, Val) ->
-  kpro_lib:encode(Primitive, Val).
+enc_byte_size(Bin) ->
+  enc(varint, byte_size(Bin)).
+
+-compile({inline, [{enc, 2}]}).
+enc(int8,  I) when is_integer(I) -> <<I:8/?INT>>;
+enc(int16, I) when is_integer(I) -> <<I:16/?INT>>;
+enc(int32, I) when is_integer(I) -> <<I:32/?INT>>;
+enc(int64, I) when is_integer(I) -> <<I:64/?INT>>;
+enc(varint, I) -> kpro_varint:encode(I).
 
 % The lowest 3 bits contain the compression codec used for the message.
 % The fourth lowest bit represents the timestamp type. 0 stands for CreateTime
@@ -359,7 +387,7 @@ parse_attributes(Attr) ->
    , is_control => (Attr band (1 bsl 5)) =/= 0
    }.
 
--spec encode_attributes(compress_option(), boolean()) -> iolist().
+-spec encode_attributes(compress_option(), boolean()) -> binary().
 encode_attributes(Compression, IsTxn0) ->
   Codec = kpro_compress:method_to_codec(Compression),
   TsType = 0, % producer always set 0
@@ -379,4 +407,3 @@ flag(true, BitMask) -> BitMask.
 %%% allout-layout: t
 %%% erlang-indent-level: 2
 %%% End:
-

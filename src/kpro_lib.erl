@@ -74,7 +74,7 @@ send_and_recv_raw(Req, Sock, Mod, Timeout) ->
 -spec send_and_recv(kpro:req(), port(), module(),
                     kpro:client_id(), timeout()) -> kpro:struct().
 send_and_recv(#kpro_req{api = API, vsn = Vsn} = Req,
-                 Sock, Mod, ClientId, Timeout) ->
+              Sock, Mod, ClientId, Timeout) ->
   CorrId = make_corr_id(),
   ReqIoData = kpro_req_lib:encode(ClientId, CorrId, Req),
   try

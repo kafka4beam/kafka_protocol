@@ -276,11 +276,11 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
   TxnCtx = maps:get(txn_ctx, Opts, false),
   FirstSequence = maps:get(first_sequence, Opts, -1),
   MagicV = kpro_lib:produce_api_vsn_to_magic_vsn(Vsn),
-  EncodedBatch =
+  {EncodedSize, EncodedBatch} =
     case is_binary(Batch) of
       true ->
         %% already encoded non-transactional batch
-        Batch;
+        {byte_size(Batch), [Batch]};
       false when TxnCtx =:= false ->
         %% non-transactional batch
         kpro_batch:encode(MagicV, Batch, Compression);
@@ -290,14 +290,15 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
         kpro_batch:encode_tx(Batch, Compression, FirstSequence, TxnCtx)
     end,
   Msg =
-    [ [encode(string, transactional_id(TxnCtx)) || Vsn > 2]
-    , encode(int16, RequiredAcks)
-    , encode(int32, AckTimeout)
-    , encode(int32, 1) %% topic array header
-    , encode(string, Topic)
-    , encode(int32, 1) %% partition array header
-    , encode(int32, Partition)
-    , encode(bytes, EncodedBatch)
+    [bin([ [encode(string, transactional_id(TxnCtx)) || Vsn > 2]
+         , encode(int16, RequiredAcks)
+         , encode(int32, AckTimeout)
+         , encode(int32, 1) %% topic array header
+         , encode(string, Topic)
+         , encode(int32, 1) %% partition array header
+         , encode(int32, Partition)
+         , encode(int32, EncodedSize)])
+    | EncodedBatch
     ],
   #kpro_req{ api = produce
            , vsn = Vsn
@@ -450,7 +451,7 @@ encode(ClientName, CorrId, Req) ->
         false -> [] %% request header version 1
       end
     ],
-  [Header | encode_struct(API, Vsn, Msg)].
+  [bin(Header) | encode_struct(API, Vsn, Msg)].
 
 %%%_* Internal functions =======================================================
 
