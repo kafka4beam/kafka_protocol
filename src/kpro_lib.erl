@@ -222,9 +222,12 @@ decode(tagged_fields, Bin0) ->
 -spec copy_bytes(-1 | count(), binary()) -> {binary(), binary()}.
 copy_bytes(Size, Bin) when Size =< 0 ->
   {<<>>, Bin};
+copy_bytes(Size, Bin) when Size > 64 ->
+  <<Bytes:Size/binary, Rest/binary>> = Bin,
+  {binary:copy(Bytes), Rest};
 copy_bytes(Size, Bin) ->
   <<Bytes:Size/binary, Rest/binary>> = Bin,
-  {binary:copy(Bytes), Rest}.
+  {Bytes, Rest}.
 
 -spec get_ts_type(byte(), byte()) -> kpro:timestamp_type().
 get_ts_type(0, _) -> undefined;
