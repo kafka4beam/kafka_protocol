@@ -30,6 +30,7 @@ gen-clean:
 .PHONY: clean
 clean: gen-clean
 	@$(rebar_cmd) clean
+	@rm -rf rebar.lock ./_build/default/lib/crc32cer
 
 .PHONY: xref
 xref:

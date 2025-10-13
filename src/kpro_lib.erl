@@ -74,7 +74,7 @@ send_and_recv_raw(Req, Sock, Mod, Timeout) ->
 -spec send_and_recv(kpro:req(), port(), module(),
                     kpro:client_id(), timeout()) -> kpro:struct().
 send_and_recv(#kpro_req{api = API, vsn = Vsn} = Req,
-                 Sock, Mod, ClientId, Timeout) ->
+              Sock, Mod, ClientId, Timeout) ->
   CorrId = make_corr_id(),
   ReqIoData = kpro_req_lib:encode(ClientId, CorrId, Req),
   try
@@ -222,9 +222,12 @@ decode(tagged_fields, Bin0) ->
 -spec copy_bytes(-1 | count(), binary()) -> {binary(), binary()}.
 copy_bytes(Size, Bin) when Size =< 0 ->
   {<<>>, Bin};
+copy_bytes(Size, Bin) when Size > 64 ->
+  <<Bytes:Size/binary, Rest/binary>> = Bin,
+  {binary:copy(Bytes), Rest};
 copy_bytes(Size, Bin) ->
   <<Bytes:Size/binary, Rest/binary>> = Bin,
-  {binary:copy(Bytes), Rest}.
+  {Bytes, Rest}.
 
 -spec get_ts_type(byte(), byte()) -> kpro:timestamp_type().
 get_ts_type(0, _) -> undefined;
