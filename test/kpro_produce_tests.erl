@@ -1,4 +1,5 @@
 %%%   Copyright (c) 2018-2021, Klarna Bank AB (publ)
+%%%   Copyright (c) 2022-2025, Kafka4beam
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -117,6 +118,37 @@ encode_batch_beforehand_test_() ->
                   false -> Methods0
               end,
     [{atom_to_list(Method), fun() -> encode_batch_beforehand(Method) end}
+     || Method <- Methods].
+
+%% Test the new {magic_v2, Bytes, IoList} format for pre-encoded batches
+encode_batch_iolist_beforehand(Compression) ->
+  {_, Vsn} = get_api_vsn_range(),
+  case Vsn >= ?MIN_MAGIC_2_PRODUCE_API_VSN of
+    true ->
+      Batch = [#{ts => kpro_lib:now_ts(),
+                 value => make_value(?LINE),
+                 headers => []}],
+      %% Use magic v2 encoding as specified
+      {Bytes, IoList} = kpro_batch:encode(2, Batch, Compression),
+      ?assertEqual(Bytes, iolist_size(IoList)),
+      Req = kpro_req_lib:produce(Vsn, topic(), ?PARTI, {magic_v2, Bytes, IoList}),
+      with_connection(
+        fun(Pid) ->
+            {ok, Rsp} = kpro:request_sync(Pid, Req, ?TIMEOUT),
+            ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp)
+        end);
+    false ->
+      %% Skip test if magic v2 is not supported
+      ok
+  end.
+
+encode_batch_iolist_beforehand_test_() ->
+    Methods0 = [?no_compression, ?gzip, ?snappy],
+    Methods = case kpro_test_lib:get_kafka_version() >= ?KAFKA_2_1 of
+                  true -> Methods0 ++ [?zstd];
+                  false -> Methods0
+              end,
+    [{atom_to_list(Method) ++ "_iolist", fun() -> encode_batch_iolist_beforehand(Method) end}
      || Method <- Methods].
 
 %% async send test
