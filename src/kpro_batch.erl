@@ -37,6 +37,7 @@
 -type headers() :: kpro:headers().
 -type batch_meta() :: kpro:batch_meta().
 -define(NO_META, ?KPRO_NO_BATCH_META).
+-define(CRC32C_NON_DIRTY_BYTES_THRESHOLD, 1024 * 1024).
 
 %% @doc Encode a list of batch inputs into byte stream.
 -spec encode(magic(), batch_input(), compress_option()) -> {non_neg_integer(), iodata()}.
@@ -112,7 +113,7 @@ encode_tx([FirstMsg | _] = Batch, Compression, FirstSequence,
 %% the cost of crc32c computation is negligible comparing to the batch
 %% encoding part, so we do not call dirty-scheduler.
 %% Otherwise we respect iolist and call dirty-scheduler (_d flavor API).
-crc32c(Bytes, IoData) when Bytes =< 1024 * 1024 ->
+crc32c(Bytes, IoData) when Bytes =< ?CRC32C_NON_DIRTY_BYTES_THRESHOLD ->
     crc32cer:nif(IoData);
 crc32c(_, IoData) ->
     crc32cer:nif_iolist_d(IoData).
