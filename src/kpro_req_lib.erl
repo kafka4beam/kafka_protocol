@@ -249,24 +249,30 @@ fetch(Vsn, Topic, Partition, Offset, Opts) ->
     ],
   make(fetch, Vsn, Fields).
 
-%% @doc Help function to construct a produce request.
+%% @doc Help function to construct a non-transactional produce request.
+%% `Batch' arg can be be a `[map()]' like `[#{key => Key, value => Value, ts => Ts}]'.
+%%  Current system time will be taken if `ts' is missing in batch input.
+%%  It may also be `binary()' or `{magic_v2, Bytes, iolist()}' if user choose to encode
+%%  a batch beforehand which could be helpful when a large batch can be encoded
+%%  in other processes.
+-spec produce(vsn(), topic(), partition(),
+              binary() | batch_input() | {magic_v2, non_neg_integer(), iolist()}) -> req().
 produce(Vsn, Topic, Partition, Batch) ->
   produce(Vsn, Topic, Partition, Batch, #{}).
 
 %% @doc Help function to construct a produce request.
 %% By default, it constructs a non-transactional produce request.
+%% `Batch' arg can be be a `[map()]' like `[#{key => Key, value => Value, ts => Ts}]'.
+%%  Current system time will be taken if `ts' is missing in batch input.
+%%  It may also be `binary()' or `{magic_v2, Bytes, iolist()}' if user choose to encode
+%%  a batch beforehand which could be helpful when a large batch can be encoded
+%%  in other processes.
 %% For transactional produce requests, below conditions should be met.
-%% 1. `Batch' arg must be be a `[map()]' to indicate magic v2,
-%%     for example: `[#{key => Key, value => Value, ts => Ts}]'.
-%%     Current system time will be taken if `ts' is missing in batch input.
-%%     It may also be `binary()' or `{magic_v2, Bytes, iolist()}' if user choose to encode
-%%     a batch beforehand which could be helpful when a large batch can be encoded
-%%     in other processes.
-%% 2. `first_sequence' must exist in `Opts'.
-%%     It should be the sequence number for the fist message in batch.
-%%     Maintained by producer, sequence numbers should start from zero and be
-%%     monotonically increasing, with one sequence number per topic-partition.
-%% 3. `txn_ctx' (which is of spec `kpro:txn_ctx()') must exist in `Opts'
+%% - `first_sequence' must exist in `Opts'.
+%%   It should be the sequence number for the fist message in batch.
+%%   Maintained by producer, sequence numbers should start from zero and be
+%%   monotonically increasing, with one sequence number per topic-partition.
+%% - `txn_ctx' (which is of spec `kpro:txn_ctx()') must exist in `Opts'
 -spec produce(vsn(), topic(), partition(),
               binary() | batch_input() | {magic_v2, non_neg_integer(), iolist()}, produce_opts()) -> req().
 produce(Vsn, Topic, Partition, Batch, Opts) ->
