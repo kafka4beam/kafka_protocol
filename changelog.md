@@ -1,5 +1,6 @@
 * 4.2.9
   - Improve message encoding performance.
+  - Allow `{magic_v2, Size, IoList}` as batch input for `produce` request.
 
 * 4.2.8
   - Upgrade crc32cer from 1.0.4 to 1.0.4 for link error.

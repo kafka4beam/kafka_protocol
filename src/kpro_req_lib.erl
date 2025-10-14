@@ -1,4 +1,5 @@
 %%%   Copyright (c) 2018-2021, Klarna Bank AB (publ)
+%%%   Copyright (c) 2022-2025, Kafka4beam
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -248,26 +249,32 @@ fetch(Vsn, Topic, Partition, Offset, Opts) ->
     ],
   make(fetch, Vsn, Fields).
 
-%% @doc Help function to construct a produce request.
+%% @doc Help function to construct a non-transactional produce request.
+%% `Batch' arg can be be a `[map()]' like `[#{key => Key, value => Value, ts => Ts}]'.
+%%  Current system time will be taken if `ts' is missing in batch input.
+%%  It may also be `binary()' or `{magic_v2, Bytes, iolist()}' if user choose to encode
+%%  a batch beforehand which could be helpful when a large batch can be encoded
+%%  in other processes.
+-spec produce(vsn(), topic(), partition(),
+              binary() | batch_input() | {magic_v2, non_neg_integer(), iolist()}) -> req().
 produce(Vsn, Topic, Partition, Batch) ->
   produce(Vsn, Topic, Partition, Batch, #{}).
 
 %% @doc Help function to construct a produce request.
 %% By default, it constructs a non-transactional produce request.
+%% `Batch' arg can be be a `[map()]' like `[#{key => Key, value => Value, ts => Ts}]'.
+%%  Current system time will be taken if `ts' is missing in batch input.
+%%  It may also be `binary()' or `{magic_v2, Bytes, iolist()}' if user choose to encode
+%%  a batch beforehand which could be helpful when a large batch can be encoded
+%%  in other processes.
 %% For transactional produce requests, below conditions should be met.
-%% 1. `Batch' arg must be be a `[map()]' to indicate magic v2,
-%%     for example: `[#{key => Key, value => Value, ts => Ts}]'.
-%%     Current system time will be taken if `ts' is missing in batch input.
-%%     It may also be `binary()' if user choose to encode a batch beforehand.
-%%     This could be helpful when a large batch can be encoded in another
-%%     process, so it may pass large binary instead of list between processes.
-%% 2. `first_sequence' must exist in `Opts'.
-%%     It should be the sequence number for the fist message in batch.
-%%     Maintained by producer, sequence numbers should start from zero and be
-%%     monotonically increasing, with one sequence number per topic-partition.
-%% 3. `txn_ctx' (which is of spec `kpro:txn_ctx()') must exist in `Opts'
+%% - `first_sequence' must exist in `Opts'.
+%%   It should be the sequence number for the fist message in batch.
+%%   Maintained by producer, sequence numbers should start from zero and be
+%%   monotonically increasing, with one sequence number per topic-partition.
+%% - `txn_ctx' (which is of spec `kpro:txn_ctx()') must exist in `Opts'
 -spec produce(vsn(), topic(), partition(),
-              binary() | batch_input(), produce_opts()) -> req().
+              binary() | batch_input() | {magic_v2, non_neg_integer(), iolist()}, produce_opts()) -> req().
 produce(Vsn, Topic, Partition, Batch, Opts) ->
   ok = assert_known_api_and_vsn(produce, Vsn),
   RequiredAcks = required_acks(maps:get(required_acks, Opts, all_isr)),
@@ -277,14 +284,17 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
   FirstSequence = maps:get(first_sequence, Opts, -1),
   MagicV = kpro_lib:produce_api_vsn_to_magic_vsn(Vsn),
   {EncodedSize, EncodedBatch} =
-    case is_binary(Batch) of
-      true ->
-        %% already encoded non-transactional batch
+    case Batch of
+      {magic_v2, Bytes, IoList} ->
+        %% already encoded non-transactional batch as iolist()
+        {Bytes, IoList};
+      _ when is_binary(Batch) ->
+        %% already encoded non-transactional batch as binary()
         {byte_size(Batch), [Batch]};
-      false when TxnCtx =:= false ->
+      _ when TxnCtx =:= false ->
         %% non-transactional batch
         kpro_batch:encode(MagicV, Batch, Compression);
-      false ->
+      _ ->
         %% transactional batch
         true = FirstSequence >= 0, %% assert
         kpro_batch:encode_tx(Batch, Compression, FirstSequence, TxnCtx)
