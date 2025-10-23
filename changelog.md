@@ -1,9 +1,7 @@
-* 4.2.10
-  - Refactor SCRAM nonce for client first message to pick from char-set `a-zA-Z0-9`.
-
 * 4.2.9
   - Improve message encoding performance.
   - Allow `{magic_v2, Size, IoList}` as batch input for `produce` request.
+  - Refactor SCRAM nonce for client first message to pick from char-set `a-zA-Z0-9`.
 
 * 4.2.8
   - Upgrade crc32cer from 1.0.4 to 1.0.4 for link error.
