@@ -1,5 +1,6 @@
 %%%
 %%%   Copyright (c) 2018-2021, Klarna Bank AB (publ)
+%%%   Copyright (c) 2022-2025, Kafka4beam
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -41,7 +42,7 @@
 %% @doc Initialize a scram context.
 -spec init(sha256 | sha512, binary(), binary()) -> scram().
 init(Sha, User, Pass) ->
-  Nonce = base64:encode(crypto:strong_rand_bytes(2 * ?MY_NONCE_LEN div 3)),
+  Nonce = nonce(?MY_NONCE_LEN),
   #{ sha => Sha
    , pass => Pass
    , nonce => Nonce
@@ -140,6 +141,18 @@ hmac(Sha, Key, Data) ->
 hmac(Sha, Key, Data) ->
   crypto:hmac(Sha, Key, Data).
 -endif.
+
+nonce(Bytes) ->
+    bin(rand_chars(Bytes)).
+
+rand_chars(0) -> [];
+rand_chars(N) -> [rand_char() | rand_chars(N - 1)].
+
+rand_char() -> base62(rand:uniform(62) - 1).
+
+base62(I) when I < 26 -> $A + I;
+base62(I) when I < 52 -> $a + I - 26;
+base62(I) -> $0 + I - 52.
 
 %%%_* Emacs ====================================================================
 %%% Local Variables:
