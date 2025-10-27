@@ -118,6 +118,7 @@
              , producer_id/0
              , protocol/0
              , req/0
+             , req_ref/0
              , required_acks/0
              , rsp/0
              , schema/0
@@ -194,6 +195,7 @@
                 | [{field_name(), field_value()}].
 -type api() :: atom().
 -type req() :: #kpro_req{}.
+-type req_ref() :: reference() | {alias, reference()}.
 -type rsp() :: #kpro_rsp{}.
 -type compress_option() :: ?no_compression
                          | ?gzip

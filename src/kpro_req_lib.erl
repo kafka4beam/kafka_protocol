@@ -28,6 +28,7 @@
 
 -export([ produce/4
         , produce/5
+        , produce/6
         ]).
 
 -export([ metadata/2
@@ -51,6 +52,7 @@
 
 -export([ encode/3
         , make/3
+        , make/4
         ]).
 
 -export_type([ fetch_opts/0
@@ -250,17 +252,20 @@ fetch(Vsn, Topic, Partition, Offset, Opts) ->
   make(fetch, Vsn, Fields).
 
 %% @doc Help function to construct a non-transactional produce request.
-%% `Batch' arg can be be a `[map()]' like `[#{key => Key, value => Value, ts => Ts}]'.
-%%  Current system time will be taken if `ts' is missing in batch input.
-%%  It may also be `binary()' or `{magic_v2, Bytes, iolist()}' if user choose to encode
-%%  a batch beforehand which could be helpful when a large batch can be encoded
-%%  in other processes.
+%% @see produce/6.
 -spec produce(vsn(), topic(), partition(),
               binary() | batch_input() | {magic_v2, non_neg_integer(), iolist()}) -> req().
 produce(Vsn, Topic, Partition, Batch) ->
   produce(Vsn, Topic, Partition, Batch, #{}).
 
 %% @doc Help function to construct a produce request.
+%% @see produce/6.
+-spec produce(vsn(), topic(), partition(),
+              binary() | batch_input() | {magic_v2, non_neg_integer(), iolist()}, produce_opts()) -> req().
+produce(Vsn, Topic, Partition, Batch, Opts) when is_map(Opts) ->
+    produce(Vsn, Topic, Partition, Batch, Opts, make_ref()).
+
+%% @doc Help function to construct a produce request with a specified request reference.
 %% By default, it constructs a non-transactional produce request.
 %% `Batch' arg can be be a `[map()]' like `[#{key => Key, value => Value, ts => Ts}]'.
 %%  Current system time will be taken if `ts' is missing in batch input.
@@ -274,8 +279,8 @@ produce(Vsn, Topic, Partition, Batch) ->
 %%   monotonically increasing, with one sequence number per topic-partition.
 %% - `txn_ctx' (which is of spec `kpro:txn_ctx()') must exist in `Opts'
 -spec produce(vsn(), topic(), partition(),
-              binary() | batch_input() | {magic_v2, non_neg_integer(), iolist()}, produce_opts()) -> req().
-produce(Vsn, Topic, Partition, Batch, Opts) ->
+              binary() | batch_input() | {magic_v2, non_neg_integer(), iolist()}, produce_opts(), kpro:req_ref()) -> req().
+produce(Vsn, Topic, Partition, Batch, Opts, Ref) ->
   ok = assert_known_api_and_vsn(produce, Vsn),
   RequiredAcks = required_acks(maps:get(required_acks, Opts, all_isr)),
   Compression = maps:get(compression, Opts, ?no_compression),
@@ -313,7 +318,7 @@ produce(Vsn, Topic, Partition, Batch, Opts) ->
   #kpro_req{ api = produce
            , vsn = Vsn
            , msg = Msg
-           , ref = make_ref()
+           , ref = Ref
            , no_ack = RequiredAcks =:= 0
            }.
 
@@ -434,11 +439,17 @@ alter_configs(Vsn, Resources, Opts) ->
 %% @doc Help function to make a request body.
 -spec make(api(), vsn(), struct()) -> req().
 make(API, Vsn, Fields) ->
+  make(API, Vsn, Fields, make_ref()).
+
+%% @doc Help function to make a request body with provided reference or process alias.
+%% The refreence can be an alias to receive response this request.
+-spec make(api(), vsn(), struct(), reference()| {alias, reference()}) -> req().
+make(API, Vsn, Fields, Ref) ->
   ok = assert_known_api_and_vsn(API, Vsn),
   #kpro_req{ api = API
            , vsn = Vsn
            , msg = encode_struct(API, Vsn, Fields)
-           , ref = make_ref()
+           , ref = Ref
            }.
 
 %% @doc Encode a request to bytes that can be sent on wire.

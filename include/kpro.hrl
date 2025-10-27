@@ -21,7 +21,7 @@
 -include("kpro_error_codes.hrl").
 
 -record(kpro_req,
-        { ref :: reference()
+        { ref :: kpro:req_ref()
         , api :: kpro:api()
         , vsn :: kpro:vsn()
         , no_ack = false :: boolean() %% set to true for fire-n-forget requests
@@ -29,7 +29,7 @@
         }).
 
 -record(kpro_rsp,
-        { ref :: false | reference()
+        { ref :: false | kpro:req_ref()
         , api :: kpro:api()
         , vsn :: kpro:vsn()
         , msg :: binary() | kpro:struct()

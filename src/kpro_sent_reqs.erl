@@ -39,7 +39,7 @@
 
 -type corr_id() :: kpro:corr_id().
 -define(REQ(Caller, Ref, API, Vsn, Ts), {Caller, Ref, API, Vsn, Ts}).
--type req() :: ?REQ(pid(), reference(), kpro:api(), kpro:vsn(), integer()).
+-type req() :: ?REQ(pid(), kpro:req_ref(), kpro:api(), kpro:vsn(), integer()).
 
 -record(requests,
         { corr_id = 0
@@ -61,7 +61,7 @@ is_empty(#requests{sent = Sent}) -> maps:size(Sent) == 0.
 
 %% @doc Add a new request to sent collection.
 %% Return the last corrlation ID and the new collection.
--spec add(requests(), pid(), reference(), kpro:api(), kpro:vsn()) ->
+-spec add(requests(), pid(), kpro:req_ref(), kpro:api(), kpro:vsn()) ->
         {corr_id(), requests()}.
 add(#requests{ corr_id = CorrId
              , sent    = Sent
@@ -82,7 +82,7 @@ del(#requests{sent = Sent} = Requests, CorrId) ->
 %% @doc Get caller of a request having the given correlation ID.
 %% Crash if the request is not found.
 -spec get_req(requests(), corr_id()) ->
-        {pid(), reference(), kpro:api(), kpro:vsn()}.
+        {pid(), kpro:req_ref(), kpro:api(), kpro:vsn()}.
 get_req(#requests{sent = Sent}, CorrId) ->
   ?REQ(Caller, Ref, API, Vsn, _Ts) = maps:get(CorrId, Sent),
   {Caller, Ref, API, Vsn}.
