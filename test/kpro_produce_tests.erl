@@ -171,6 +171,29 @@ async_send_test() ->
         receive Msg -> erlang:throw({unexpected, Msg}) after 10 -> ok end
     end).
 
+%% async send with alias test
+async_send_alias_test() ->
+  {_, Vsn} = get_api_vsn_range(),
+  Batch1 = [#{ts => kpro_lib:now_ts(), value => make_value(?LINE)}],
+  Batch2 = [#{ts => kpro_lib:now_ts(), value => make_value(?LINE)}],
+  Ref1 = {alias, erlang:alias([reply])},
+  Req1 = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Batch1, #{}, Ref1),
+  Ref2 = {alias, erlang:alias([reply])},
+  Req2 = kpro_req_lib:produce(Vsn, topic(), ?PARTI, Batch2, #{}, Ref2),
+  with_connection(
+    fun(Pid) ->
+        {_, MRef} = spawn_monitor(fun() -> kpro:send(Pid, Req1) end),
+        receive {'DOWN', MRef, _, _, _} -> ok end,
+        _ = spawn(fun() -> kpro:request_async(Pid, Req2) end),
+        Assert = fun(Req, Rsp) ->
+                     ?ASSERT_RESPONSE_NO_ERROR(Vsn, Rsp),
+                     ?assertEqual(Req#kpro_req.ref, Rsp#kpro_rsp.ref)
+                 end,
+        receive {msg, Pid, Rsp1} -> Assert(Req1, Rsp1) end,
+        receive {msg, Pid, Rsp2} -> Assert(Req2, Rsp2) end,
+        receive Msg -> erlang:throw({unexpected, Msg}) after 10 -> ok end
+    end).
+
 make_req(Vsn) ->
   Batch = make_batch(Vsn),
   kpro_req_lib:produce(Vsn, topic(), ?PARTI, Batch).

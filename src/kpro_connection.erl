@@ -405,7 +405,7 @@ handle_msg({_, Sock, Bin}, #state{ sock     = Sock
   {CorrId, Body} = kpro_lib:decode_corr_id(Bin),
   {Caller, Ref, API, Vsn} = kpro_sent_reqs:get_req(Requests, CorrId),
   Rsp = kpro_rsp_lib:decode(API, Vsn, Body, Ref),
-  ok = cast(Caller, {msg, self(), Rsp}),
+  ok = kafka_reply(Caller, {msg, self(), Rsp}),
   NewRequests = kpro_sent_reqs:del(Requests, CorrId),
   State1 = maybe_flush_backlog(State#state{requests = NewRequests}),
   ?MODULE:loop(State1, Debug);
@@ -534,13 +534,12 @@ sasl_authenticate(#state{client_id = ClientId, mod = Mod, sock = Sock, remote = 
   ok = setopts(Sock, Mod, [{active, once}]),
   State.
 
-cast(Pid, Msg) ->
-  try
-    Pid ! Msg,
-    ok
-  catch _ : _ ->
-    ok
-  end.
+kafka_reply(_CallerPid, {msg, _SelfPid, #kpro_rsp{ref = {alias, Ref}}} = Msg) ->
+  erlang:send(Ref, Msg),
+  ok;
+kafka_reply(Pid, Msg) when is_pid(Pid) ->
+  _ = erlang:send(Pid, Msg),
+  ok.
 
 system_continue(_Parent, Debug, State) ->
   ?MODULE:loop(State, Debug).

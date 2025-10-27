@@ -1,3 +1,9 @@
+* 4.3.0
+  - Allow process alias as request reference.
+    Previously `kpro_req_lib:produce/5` creates a reference for the caller,
+    now new API `kpro_req_lib:produce/6` can be used with pre-made reference.
+    If the reference is passed as `{alias, Ref}`, the Kafka response is sent to the alias, but not the `kpro:send` caller.
+
 * 4.2.9
   - Improve message encoding performance.
   - Allow `{magic_v2, Size, IoList}` as batch input for `produce` request.
