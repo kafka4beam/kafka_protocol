@@ -1,3 +1,7 @@
+* 4.3.1
+  - Fix a connection pid leak when init failed.
+    The owner process maybe get an expected 'EXIT' message after `{error, _}` was returned from `kpro_connection:start`.
+
 * 4.3.0
   - Allow process alias as request reference.
     Previously `kpro_req_lib:produce/5` creates a reference for the caller,

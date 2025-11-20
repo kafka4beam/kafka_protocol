@@ -1,4 +1,5 @@
 %%%   Copyright (c) 2014-2021, Klarna Bank AB (publ)
+%%%   Copyright (c) 2021-2025, Kafka4beam
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -209,8 +210,7 @@ init(Parent, Host, Port, Config) ->
         IsSsl = maps:get(ssl, Config, false),
         SaslOpt = get_sasl_opt(Config),
         ok = maybe_log_hint(Host, Port, Reason, IsSsl, SaslOpt),
-        proc_lib:init_ack(Parent, {error, {Reason, Stack}}),
-        erlang:exit(normal)
+        proc_lib:init_fail(Parent, {error, {Reason, Stack}}, {exit, normal})
     end,
   %% From now on, enter `{active, once}' mode
   %% NOTE: ssl doesn't support `{active, N}'
