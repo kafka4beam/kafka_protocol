@@ -326,10 +326,16 @@ with_timeout(F0, Timeout) ->
   receive
     {ResultRef, Result, Links} ->
       %% replicate links from agent
-      %% TODO handle link/1 exception if any of the links are dead already
+      %% {'EXIT', Pid, noproc} will be received by
+      %% caller process if any of the pid is dead already
       [link(Pid) || Pid <- Links],
-      unlink(Agent),
+      Mref = erlang:monitor(process, Agent),
       Agent ! done,
+      receive
+        {'DOWN', Mref, _, _, _} ->
+          ok
+      end,
+      ok = drain_exit(Agent),
       case Result of
         {normal, Return} ->
           Return;
@@ -339,10 +345,20 @@ with_timeout(F0, Timeout) ->
       end
   after
     Timeout ->
-      %% kill agent
-      unlink(Agent),
-      erlang:exit(Agent, kill),
+      kill_agent(Agent),
       {error, timeout}
+  end.
+
+kill_agent(Pid) ->
+  %% kill agent
+  unlink(Pid),
+  erlang:exit(Pid, kill),
+  ok = drain_exit(Pid).
+
+drain_exit(Pid) ->
+  %% ensure the EXIT message is consumed
+  receive {'EXIT', Pid, _} -> ok
+  after 0 -> ok
   end.
 
 %% @doc Find in a list for a struct having a given field value.

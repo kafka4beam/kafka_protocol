@@ -1,4 +1,5 @@
 %%%   Copyright (c) 2018-2021, Klarna Bank AB (publ)
+%%%   Copyright (c) 2021-2025, Kafka4beam
 %%%
 %%%   Licensed under the Apache License, Version 2.0 (the "License");
 %%%   you may not use this file except in compliance with the License.
@@ -85,6 +86,13 @@ sasl_callback_test() ->
 
       ok = kpro_connection:stop(Pid)
   end.
+
+conn_timeout_test() ->
+  Config = #{connect_timeout => 10},
+  {links, Links0} = erlang:process_info(self(), links),
+  ?assertMatch({error, {timeout, _}}, kpro_connection:start("1.1.1.1", 9092, Config)),
+  {links, Links1} = erlang:process_info(self(), links),
+  ?assertEqual(lists:sort(Links0), lists:sort(Links1)).
 
 no_api_version_query_test() ->
   Config = #{query_api_versions => false},
