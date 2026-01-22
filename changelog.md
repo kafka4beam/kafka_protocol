@@ -1,3 +1,6 @@
+* 4.3.2
+  - Pin crc32cer 1.1.2 for aarch64 link fix.
+
 * 4.3.1
   - Fix a connection pid leak when init failed.
     The owner process maybe get an expected 'EXIT' message after `{error, _}` was returned from `kpro_connection:start`.
