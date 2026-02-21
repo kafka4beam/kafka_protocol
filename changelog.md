@@ -1,3 +1,6 @@
+* 4.3.3
+  - Pin crc32cer 1.1.3 for downloading c source code from hex.pm (no build time git clone).
+
 * 4.3.2
   - Pin crc32cer 1.1.2 for aarch64 link fix.
 
