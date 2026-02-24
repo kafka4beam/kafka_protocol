@@ -447,7 +447,7 @@ handle_msg({From, stop}, #state{mod = Mod, sock = Sock}, _Debug) ->
   maybe_reply(From, ok),
   ok;
 handle_msg(sasl_authenticate, State, Debug) ->
-  State1 = State#state{backlog = queue:from_list([sasl_authenticate])},
+  State1 = prepend_to_backlog(State, sasl_authenticate),
   State2 = maybe_flush_backlog(State1),
   ?MODULE:loop(State2, Debug);
 handle_msg(Msg, #state{} = State, Debug) ->
@@ -487,6 +487,11 @@ send_request({From, {send, Request}},
       exit({shutdown, Reason})
   end,
   State#state{requests = NewRequests}.
+
+prepend_to_backlog(#state{backlog = false} = State, Item) ->
+  State#state{backlog = queue:from_list([Item])};
+prepend_to_backlog(#state{backlog = Backlog} = State, Item) ->
+  State#state{backlog = queue:in_r(Item, Backlog)}.
 
 maybe_flush_backlog(#state{backlog = false} = State) ->
   State;
