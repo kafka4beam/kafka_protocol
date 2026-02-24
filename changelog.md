@@ -1,3 +1,7 @@
+* 4.3.4
+  - Fix connection losing queued requests when scheduled SASL re-authentication is triggered while there is a non-empty backlog.
+    Bug existed since 4.1.7.
+
 * 4.3.3
   - Pin crc32cer 1.1.3 for downloading c source code from hex.pm (no build time git clone).
 
