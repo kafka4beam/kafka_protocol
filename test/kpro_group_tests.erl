@@ -31,14 +31,16 @@
 
 -define(TIMEOUT, 10000).
 -define(TOPIC, <<"t1">>).
+-define(COMMIT_TOPIC, <<"test-topic">>).
 -define(STATIC_MEMBER_ID, <<"member-1">>).
 
 %% A typical group member live-cycle:
 %% 1. find_coordinator, to figure out which broker to connect to
 %% 2. join_group, other members (if any) will have to re-join
 %% 3. sync_group, leader assign partitions, members receive assignments
-%% 4. heartbeat-cycle, to tell broker that it is still alive
-%% 5. leave_group
+%% 4. offset_commit, to store the processed offset
+%% 5. heartbeat-cycle, to tell broker that it is still alive
+%% 6. leave_group
 full_flow_test_() ->
   [{timeout, 60,
     {atom_to_list(KafkaVsn),
@@ -56,6 +58,8 @@ test_full_flow(KafkaVsn) ->
    } = join_group(Connection, GroupId, StaticMemberID, KafkaVsn),
   ok = sync_group(Connection, GroupId, MemberId, Generation,
                   StaticMemberID, KafkaVsn),
+  ok = offset_commit(Connection, GroupId, MemberId, Generation,
+                     StaticMemberID, KafkaVsn),
   % send hartbeats, there should be a generation_id in heartbeat requests,
   % generation bumps whenever there is a group re-balance, however since
   % we are testing with only one group member, we do not expect any group
@@ -211,6 +215,26 @@ heartbeat_loop(SendFun) ->
       heartbeat_loop(SendFun)
   end.
 
+offset_commit(Connection, GroupId, MemberId, Generation,
+              StaticMemberId, KafkaVsn) ->
+  Partition =
+    #{ partition_index => 0
+     , committed_offset => 42
+     , committed_leader_epoch => -1
+     , committed_metadata => undefined
+     },
+  Fields =
+    #{ group_id => GroupId
+     , generation_id => Generation
+     , member_id => MemberId
+     , group_instance_id => StaticMemberId
+     , retention_time_ms => -1
+     , topics => [#{name => ?COMMIT_TOPIC, partitions => [Partition]}]
+     },
+  Rsp = request_sync(Connection, offset_commit, Fields, KafkaVsn),
+  #{topics := [#{partitions := [#{error_code := no_error}]}]} = Rsp,
+  ok.
+
 request_sync(Connection, API, Body, KafkaVsn) ->
   Vsn = maps:get(API, max_vsn(KafkaVsn)),
   Req = kpro:make_request(API, Vsn, Body),
@@ -241,7 +265,8 @@ kafka_vsns() ->
 
 max_vsn(v0_9) -> max_vsn(v0_10);
 max_vsn(v0_10) ->
-  #{ join_group => 0
+  #{ offset_commit => 2
+   , join_group => 0
    , heartbeat => 0
    , leave_group => 0
    , sync_group => 0
@@ -251,7 +276,8 @@ max_vsn(v0_10) ->
 max_vsn(v0_11) -> max_vsn(v1_0);
 max_vsn(v1_0) -> max_vsn(v1_1);
 max_vsn(v1_1) ->
-  #{ join_group => 2
+  #{ offset_commit => 4
+   , join_group => 2
    , heartbeat => 1
    , leave_group => 1
    , sync_group => 1
@@ -260,7 +286,8 @@ max_vsn(v1_1) ->
    };
 max_vsn(v2_0) -> max_vsn(v2_1);
 max_vsn(v2_1) ->
-  #{ join_group => 3
+  #{ offset_commit => 6
+   , join_group => 3
    , heartbeat => 2
    , leave_group => 2
    , sync_group => 2
@@ -268,7 +295,8 @@ max_vsn(v2_1) ->
    , list_groups => 2
    };
 max_vsn(v2_2) ->
-  #{ join_group => 4
+  #{ offset_commit => 6
+   , join_group => 4
    , heartbeat => 2
    , leave_group => 2
    , sync_group => 2
@@ -276,7 +304,8 @@ max_vsn(v2_2) ->
    , list_groups => 2
    };
 max_vsn(v2_3) ->
-  #{ join_group => 5
+  #{ offset_commit => 7
+   , join_group => 5
    , heartbeat => 3
    , leave_group => 2
    , sync_group => 3
@@ -284,7 +313,8 @@ max_vsn(v2_3) ->
    , list_groups => 2
    };
 max_vsn(v2_8) ->
-  #{ join_group => 6
+  #{ offset_commit => 8
+   , join_group => 6
    , heartbeat => 4
    , leave_group => 4
    , sync_group => 4
