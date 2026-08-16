@@ -276,7 +276,7 @@ max_vsn(v0_10) ->
 max_vsn(v0_11) -> max_vsn(v1_0);
 max_vsn(v1_0) -> max_vsn(v1_1);
 max_vsn(v1_1) ->
-  #{ offset_commit => 4
+  #{ offset_commit => 3
    , join_group => 2
    , heartbeat => 1
    , leave_group => 1
