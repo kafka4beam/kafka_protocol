@@ -1,5 +1,12 @@
+* 4.3.5
+  - Support `offset_commit` API versions up to 8 (previously capped at 2).
+    Newer versions allow committing offsets with `group_instance_id` for static group membership.
+
 * 4.3.4
-  - Fix connection losing queued requests when scheduled SASL re-authentication is triggered while there is a non-empty backlog.
+  - Fix connection losing queued requests when scheduled SASL re-authentication is triggered.
+    If a new re-authentication is triggered while the connection is still processing requests
+    left over from the previous re-authentication, the pending requests may get lost.
+    As a result, a sync produce call may time out.
     Bug existed since 4.1.7.
 
 * 4.3.3
