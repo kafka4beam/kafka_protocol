@@ -6,7 +6,7 @@
               {env,[]},
               {mod, {kpro_app, []}},
               {modules,[]},
-              {licenses,["Apache License 2.0"]},
+              {licenses,["Apache-2.0"]},
               {links,[{"Github","https://github.com/kafka4beam/kafka_protocol"}]},
               {build_tools,["rebar3"]},
               {files,["src","include","priv/kafka.bnf","rebar.config",
