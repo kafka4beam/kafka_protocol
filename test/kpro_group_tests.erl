@@ -31,7 +31,6 @@
 
 -define(TIMEOUT, 10000).
 -define(TOPIC, <<"t1">>).
--define(COMMIT_TOPIC, <<"test-topic">>).
 -define(STATIC_MEMBER_ID, <<"member-1">>).
 
 %% A typical group member live-cycle:
@@ -229,7 +228,8 @@ offset_commit(Connection, GroupId, MemberId, Generation,
      , member_id => MemberId
      , group_instance_id => StaticMemberId
      , retention_time_ms => -1
-     , topics => [#{name => ?COMMIT_TOPIC, partitions => [Partition]}]
+     , topics => [#{name => kpro_test_lib:get_topic(),
+                    partitions => [Partition]}]
      },
   Rsp = request_sync(Connection, offset_commit, Fields, KafkaVsn),
   #{topics := [#{partitions := [#{error_code := no_error}]}]} = Rsp,
