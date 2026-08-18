@@ -1,3 +1,7 @@
+* 4.3.6
+  - Change dependency crc32cer from `"1.1.3"` to `"~> 1.1.4"`.
+    `crc32cer-1.1.4` fixed compilation with `PIC`.
+
 * 4.3.5
   - Support `offset_commit` API versions up to 8 (previously capped at 2).
     Newer versions allow committing offsets with `group_instance_id` for static group membership.
