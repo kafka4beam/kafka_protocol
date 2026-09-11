@@ -1,3 +1,11 @@
+* 4.3.7
+  - Support IPv6 broker addresses.
+    An IPv6 address host, e.g. `"fd00::5"` from bootstrap config or broker metadata, is connected over IPv6.
+    Previously the connection failed with `nxdomain`.
+    A hostname is connected over IPv4 first, then over IPv6 if IPv4 fails.
+    Add `inet` or `inet6` to `extra_sock_opts` to use one family only.
+  - `kpro:parse_endpoints/1,2` accept `[ipv6]:port`, `[ipv6]` and bare IPv6 addresses.
+
 * 4.3.6
   - Change dependency crc32cer from `"1.1.3"` to `"~> 1.1.4"`.
     `crc32cer-1.1.4` fixed compilation with `PIC`.
