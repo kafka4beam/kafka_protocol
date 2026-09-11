@@ -113,6 +113,8 @@ ok_pipe(FunList) ->
 %% `{Host::string(), Port::integer()}' pairs.
 %% Endpoints may start with protocol prefix (non case sensitive):
 %% `PLAINTEXT://', `SSL://', `SASL_PLAINTEXT://' or `SASL_SSL://'.
+%% An IPv6 address is given in brackets, e.g. `[fd00::5]:9092',
+%% or without brackets and port, e.g. `fd00::5'.
 %% The first arg is to filter desired endpoints from parse result.
 -spec parse_endpoints(kpro:protocol() | undefined, string()) ->
         [kpro:endpoint()].
@@ -392,12 +394,27 @@ parse_endpoint("sasl_plaintext://" ++ HostPort) ->
 parse_endpoint(HostPort) ->
   {undefined, parse_host_port(HostPort)}.
 
-parse_host_port(HostPort) ->
-  case string:tokens(HostPort, ":") of
-    [Host] ->
+%% Accepted forms: `host', `host:port', `[ipv6]', `[ipv6]:port' and a bare
+%% IPv6 address such as `fd00::5'. The default port is 9092.
+parse_host_port("[" ++ HostPort) ->
+  case string:split(HostPort, "]") of
+    [Host, ""] ->
       {Host, 9092};
-    [Host, Port] ->
+    [Host, ":" ++ Port] ->
       {Host, list_to_integer(Port)}
+  end;
+parse_host_port(HostPort) ->
+  case length([C || C <- HostPort, C =:= $:]) > 1 of
+    true ->
+      %% A bare IPv6 address
+      {HostPort, 9092};
+    false ->
+      case string:tokens(HostPort, ":") of
+        [Host] ->
+          {Host, 9092};
+        [Host, Port] ->
+          {Host, list_to_integer(Port)}
+      end
   end.
 
 get_schema(F, Context) ->
