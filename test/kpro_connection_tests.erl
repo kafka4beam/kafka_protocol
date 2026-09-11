@@ -111,6 +111,109 @@ extra_sock_opts_test() ->
   ?assertEqual(true, proplists:get_value(delay_send, InetSockOpts)),
   ok = kpro_connection:stop(Pid).
 
+%% The tests below need no Kafka. They connect to a local TCP listener
+%% and skip the API versions query, so no Kafka handshake happens.
+
+-define(IPV6_LOOPBACK, {0, 0, 0, 0, 0, 0, 0, 1}).
+-define(IPV4_LOOPBACK, {127, 0, 0, 1}).
+
+ipv6_only_listener_test_() ->
+  case listen(?IPV6_LOOPBACK) of
+    {ok, LSock} ->
+      ok = gen_tcp:close(LSock),
+      {setup, fun() -> listen_port(?IPV6_LOOPBACK) end, fun close/1,
+       fun({_LSock, Port}) -> ipv6_only_listener_cases(Port) end};
+    {error, Reason} ->
+      {"no IPv6 loopback (" ++ atom_to_list(Reason) ++ "), skipped", []}
+  end.
+
+ipv6_only_listener_cases(Port) ->
+  Connect = fun(Host) -> assert_connected(Host, Port, ?IPV6_LOOPBACK) end,
+  [ {"ipv6 tuple", fun() -> Connect(?IPV6_LOOPBACK) end}
+  , {"ipv6 string", fun() -> Connect("::1") end}
+  , {"ipv6 binary", fun() -> Connect(<<"::1">>) end}
+  , {"ipv6 parsed endpoint",
+     fun() ->
+         [{Host, Port}] = kpro:parse_endpoints("[::1]:" ++ integer_to_list(Port)),
+         Connect(Host)
+     end}
+  , {"ipv6 explicit inet6",
+     fun() -> assert_connected("::1", Port, ?IPV6_LOOPBACK, [inet6]) end}
+  ] ++
+  [ {"ipv6-only hostname " ++ Name, fun() -> Connect(Name) end}
+    || Name <- ipv6_loopback_names()
+  ] ++
+  [ {"explicit inet disables ipv6 fallback " ++ Name,
+     fun() -> ?assertMatch({error, _}, start(Name, Port, [inet])) end}
+    || Name <- ipv6_loopback_names()
+  ].
+
+ipv4_listener_test_() ->
+  {setup, fun() -> listen_port(?IPV4_LOOPBACK) end, fun close/1,
+   fun({_LSock, Port}) ->
+       Connect = fun(Host) -> assert_connected(Host, Port, ?IPV4_LOOPBACK) end,
+       [ {"ipv4 tuple", fun() -> Connect(?IPV4_LOOPBACK) end}
+       , {"ipv4 string", fun() -> Connect("127.0.0.1") end}
+       , {"ipv4 binary", fun() -> Connect(<<"127.0.0.1">>) end}
+       , {"localhost", fun() -> Connect("localhost") end}
+       , {"localhost atom", fun() -> Connect(localhost) end}
+       ]
+   end}.
+
+unknown_host_test() ->
+  ?assertMatch({error, {nxdomain, _}},
+               start("kpro-no-such-host.invalid", 9092, [])).
+
+assert_connected(Host, Port, PeerIP) ->
+  assert_connected(Host, Port, PeerIP, []).
+
+assert_connected(Host, Port, PeerIP, ExtraSockOpts) ->
+  {ok, Pid} = start(Host, Port, ExtraSockOpts),
+  try
+    {ok, Sock} = kpro_connection:get_tcp_sock(Pid),
+    ?assertEqual({ok, {PeerIP, Port}}, inet:peername(Sock)),
+    %% The endpoint keeps the host as given, a binary as a string
+    ?assertEqual({ok, {host_as_string(Host), Port}}, kpro_connection:get_endpoint(Pid))
+  after
+    ok = kpro_connection:stop(Pid)
+  end.
+
+host_as_string(Host) when is_binary(Host) -> binary_to_list(Host);
+host_as_string(Host) -> Host.
+
+start(Host, Port, ExtraSockOpts) ->
+  Config = #{ query_api_versions => false
+            , connect_timeout => 2000
+            , extra_sock_opts => ExtraSockOpts
+            },
+  kpro_connection:start(Host, Port, Config).
+
+listen_port(IP) ->
+  {ok, LSock} = listen(IP),
+  {ok, Port} = inet:port(LSock),
+  {LSock, Port}.
+
+close({LSock, _Port}) ->
+  gen_tcp:close(LSock).
+
+%% Connections are never accepted, so the backlog must hold all of them.
+listen(?IPV6_LOOPBACK = IP) ->
+  gen_tcp:listen(0, [inet6, {ip, IP}, {ipv6_v6only, true}, {backlog, 128}]);
+listen(IP) ->
+  gen_tcp:listen(0, [inet, {ip, IP}, {backlog, 128}]).
+
+%% Hostnames which resolve to the IPv6 loopback only, e.g. from /etc/hosts.
+%% The IPv4 lookup of these names may still return 127.0.0.1.
+ipv6_loopback_names() ->
+  [Name || Name <- ["ip6-localhost", "ip6-loopback"],
+           resolves_to(Name, inet6, ?IPV6_LOOPBACK)].
+
+resolves_to(Name, Family, IP) ->
+  case inet:getaddrs(Name, Family) of
+    {ok, IPs} -> lists:member(IP, IPs);
+    {error, _} -> false
+  end.
+
 connect(Config0) ->
   Config = kpro_test_lib:connection_config(Config0),
   Protocol = kpro_test_lib:guess_protocol(Config),

@@ -70,7 +70,11 @@
 %% <ul>
 %%  <li>`connection_timeout': timeout (in ms) for the initial connection, defaults to 5 seconds</li>
 %%  <li>`client_id': string representing the client in Kafka, defaults to "kpro-client"</li>
-%%  <li>`extra_sock_opts': extra options passed down to `gen_tpc', defaults to []</li>
+%%  <li>`extra_sock_opts': extra options passed down to `gen_tpc', defaults to [].
+%%       Without an address family option (e.g. `inet' or `inet6'),
+%%       an IP address host is connected with its own family, and a hostname
+%%       is connected over IPv4 first, then over IPv6 if IPv4 fails.
+%%       Add `inet' to use IPv4 only, or `inet6' to use IPv6 only.</li>
 %%  <li>`debug': debugging mode, defaults to false</li>
 %%  <li>`nolink': whether not to link the `kpro_connection' process to the caller, defaults to false</li>
 %%  <li>`query_api_version': whether to query Kafka for supported API versions at the beginning,
@@ -227,7 +231,7 @@ connect(Parent, Host, Port, Config) ->
   Deadline = deadline(Timeout),
   %% initial active opt should be 'false' before upgrading to ssl
   SockOpts = [{active, false}, binary] ++ get_extra_sock_opts(Config),
-  case gen_tcp:connect(Host, Port, SockOpts, Timeout) of
+  case tcp_connect(Host, Port, SockOpts, Deadline) of
     {ok, Sock} ->
       State = #state{ client_id   = get_client_id(Config)
                     , parent      = Parent
@@ -240,6 +244,59 @@ connect(Parent, Host, Port, Config) ->
     {error, Reason} ->
       erlang:error(Reason)
   end.
+
+%% Open a TCP connection and pick the address family:
+%% * If `SockOpts' has `inet', `inet6', `local', `{ip, _}' or `{ifaddr, _}',
+%%   the caller has chosen the family: pass `Host' to `gen_tcp' as is.
+%% * If `Host' is an IP address (tuple or string), connect to the address.
+%%   An IPv6 string needs this: `gen_tcp' resolves it as an IPv4 hostname.
+%% * Otherwise `Host' is a hostname. Connect the default way (IPv4) first.
+%%   If that fails before the deadline, try IPv6 with the time left.
+tcp_connect(Host, Port, SockOpts, Deadline) ->
+  case has_family_opt(SockOpts) of
+    true -> gen_tcp:connect(Host, Port, SockOpts, timeout(Deadline));
+    false -> tcp_connect_auto(parse_ip(Host), Port, SockOpts, Deadline)
+  end.
+
+tcp_connect_auto(IP, Port, SockOpts, Deadline) when is_tuple(IP) ->
+  gen_tcp:connect(IP, Port, SockOpts, timeout(Deadline));
+tcp_connect_auto(Host, Port, SockOpts, Deadline) ->
+  case gen_tcp:connect(Host, Port, SockOpts, timeout(Deadline)) of
+    {ok, Sock} ->
+      {ok, Sock};
+    {error, Reason} ->
+      case timeout(Deadline) of
+        0 ->
+          {error, Reason};
+        Timeout ->
+          case gen_tcp:connect(Host, Port, [inet6 | SockOpts], Timeout) of
+            {ok, Sock} -> {ok, Sock};
+            {error, Reason6} -> {error, ipv4_or_ipv6_error(Reason, Reason6)}
+          end
+      end
+  end.
+
+%% Report the IPv4 error, as before IPv6 fallback existed,
+%% unless the hostname has no IPv4 address.
+ipv4_or_ipv6_error(nxdomain, Reason6) -> Reason6;
+ipv4_or_ipv6_error(Reason, _Reason6) -> Reason.
+
+has_family_opt(SockOpts) ->
+  lists:any(fun(inet) -> true;
+               (inet6) -> true;
+               (local) -> true;
+               ({ip, _}) -> true;
+               ({ifaddr, _}) -> true;
+               (_) -> false
+            end, SockOpts).
+
+parse_ip(Host) when is_list(Host) ->
+  case inet:parse_strict_address(Host) of
+    {ok, IP} -> IP;
+    {error, _} -> Host
+  end;
+parse_ip(Host) ->
+  Host.
 
 %% Initialize connection.
 %% * Upgrade to SSL

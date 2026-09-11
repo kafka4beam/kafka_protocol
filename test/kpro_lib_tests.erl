@@ -59,6 +59,15 @@ parse_endpoints_test_() ->
   , {"ssl", ?_assertEqual([{"127.0.0.1", 1234}], parse(ssl, "SSL://127.0.0.1:1234"))}
   , {"sasl_ssl", ?_assertEqual([{"host", 1234}], parse(sasl_ssl, "SASL_ssl://host:1234\n"))}
   , {"sasl_plaintext", ?_assertEqual([{"h", 1234}], parse(sasl_plaintext, "sasl_plaintext://h:1234, "))}
+  , {"default port", ?_assertEqual([{"host", 9092}], parse("host"))}
+  , {"ipv6 brackets", ?_assertEqual([{"::1", 1234}], parse("[::1]:1234"))}
+  , {"ipv6 brackets default port", ?_assertEqual([{"fd00::5", 9092}], parse("[fd00::5]"))}
+  , {"ipv6 bare", ?_assertEqual([{"fd00::5", 9092}], parse("fd00::5"))}
+  , {"ipv6 bare loopback", ?_assertEqual([{"::1", 9092}], parse("::1"))}
+  , {"ipv6 bare ipv4-mapped", ?_assertEqual([{"::ffff:10.0.0.1", 9092}], parse("::ffff:10.0.0.1"))}
+  , {"ipv6 ssl", ?_assertEqual([{"fd00::5", 1234}], parse(ssl, "SSL://[FD00::5]:1234"))}
+  , {"ipv6 mixed", ?_assertEqual([{"::1", 1234}, {"fd00::5", 9092}, {"h1", 1235}],
+                                 parse("[::1]:1234,fd00::5 h1:1235"))}
   ].
 
 parse(Endpoints) ->
