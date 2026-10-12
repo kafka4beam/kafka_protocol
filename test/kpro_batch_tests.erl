@@ -128,6 +128,15 @@ make_large_batch() ->
                    <<"header_value_", (integer_to_binary(N))/binary>>}]
     } || N <- lists:seq(1, MessageCount)].
 
+%% Kafka rejects lz4 frames with linked blocks.
+lz4_independent_blocks_test() ->
+  Data = crypto:strong_rand_bytes(200 * 1024), %% more than one 64KB block
+  Compressed = bin(kpro_compress:compress(lz4, Data)),
+  %% Bit 5 of the frame descriptor's FLG byte: block independence
+  <<4, 34, 77, 24, Flg, _/binary>> = Compressed,
+  ?assertEqual(16#20, Flg band 16#20),
+  ?assertEqual(Data, bin(kpro_compress:decompress(lz4, Compressed))).
+
 provide_compression_test() ->
   kpro:provide_compression([{snappy, ?MODULE}]),
   try

@@ -1,3 +1,8 @@
+* 4.3.8
+  - Compress lz4 with independent blocks.
+    Producing an lz4 batch above 64KB failed with `unknown_server_error`,
+    because `lz4b_frame` links blocks by default and Kafka rejects such frames.
+
 * 4.3.7
   - Support IPv6 broker addresses.
     An IPv6 address host, e.g. `"fd00::5"` from bootstrap config or broker metadata, is connected over IPv6.

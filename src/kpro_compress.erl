@@ -89,7 +89,17 @@ java_snappy_unpack_chunks(Chunks, Acc) ->
 do_compress(Name, IoData) ->
     Module = get_module(Name),
     Data = maybe_convert_iodata_to_binary(Module, IoData),
-    iodata(Module:compress(Data)).
+    iodata(compress_with(Module, Data)).
+
+%% Kafka rejects lz4 frames with linked blocks, liblz4's default for input
+%% above 64KB. The tuple is lz4b's
+%% #compress_options{frameinfo = #frame_info{blockMode = 1}} (independent),
+%% spelled out and called via Module since lz4b is an optional dependency.
+compress_with(lz4b_frame = Module, Data) ->
+    FrameInfo = {frame_info, 0, _BlockIndependent = 1, 0, 0, 0, 0, 0},
+    Module:compress(Data, {compress_options, FrameInfo, 0, 0, 0, 0, 0});
+compress_with(Module, Data) ->
+    Module:compress(Data).
 
 do_decompress(Name, Bin) ->
     Module = get_module(Name),
