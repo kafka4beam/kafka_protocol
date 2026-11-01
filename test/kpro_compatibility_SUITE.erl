@@ -9,7 +9,8 @@ all() -> [jmq, authenticate_v1, plain_final_token, authenticate_v0, raw,
           missing_versions, missing_authenticate, query_disabled, raw_nonempty, raw_closed, capped_versions, incompatible_versions, long_lifetime, callback_long_lifetime,
           unauthenticated, callback, callback_legacy, legacy_auth, auth_error, closed, timeout,
           correlation_id, truncated, invalid_array, api_error,
-          scram, bad_scram_signature, reauthentication].
+          scram, bad_scram_signature, reauthentication,
+          reauthentication_pipeline, callback_reauthentication_pipeline].
 
 init_per_testcase(_, Config) ->
   process_flag(trap_exit, true),
@@ -68,6 +69,8 @@ callback_legacy(_) ->
       ok = kpro_connection:stop(Pid)
     end).
 
+auth(Host, Sock, Vsn, Mod, ClientId, Timeout, {delegate, Opts}) ->
+  kpro_sasl:auth(Host, Sock, Mod, ClientId, Timeout, Opts, Vsn, 1);
 auth(_, _, _Vsn, _, _, _, #{owner := Owner, lifetime := Lifetime}) ->
   Owner ! callback_authenticated,
   {ok, #{session_lifetime_ms => Lifetime}};
@@ -120,6 +123,65 @@ reauthentication(_) ->
       after 1500 -> ct:fail(queued_request_lost) end,
       ok = kpro_connection:stop(Pid)
     end).
+
+%% Queued and new requests must resume pipelining after each reauthentication.
+reauthentication_pipeline(_) ->
+  lists:foreach(fun(Mechanism) ->
+      Sasl = {Mechanism, <<"test-user">>, <<"test-password">>},
+      check_reauthentication_pipeline(Sasl, Mechanism)
+    end, [plain, scram_sha_256, scram_sha_512]).
+
+callback_reauthentication_pipeline(_) ->
+  check_reauthentication_pipeline({callback, ?MODULE, {delegate, plain()}}, plain).
+
+check_reauthentication_pipeline(Sasl, Mechanism) ->
+  with_broker(#{manual_metadata => true, mechanism => Mechanism}, fun(Port) ->
+      {ok, Pid} = connect(Port, Sasl),
+      try
+        Initial = [metadata_request(), metadata_request()],
+        lists:foreach(fun(Req) -> ok = kpro:send(Pid, Req) end, Initial),
+        InitialReplies = [await_metadata_request() || _ <- Initial],
+        {Queued, QueuedReplies} = reauthenticate_with_backlog(Pid, Initial, InitialReplies),
+        %% Normal sends must also pipeline while the flushed requests are in flight.
+        New = metadata_request(),
+        ok = kpro:send(Pid, New),
+        NewReply = await_metadata_request(),
+        {Last, LastReplies} = reauthenticate_with_backlog(
+            Pid, Queued ++ [New], QueuedReplies ++ [NewReply]),
+        lists:foreach(fun reply_metadata/1, LastReplies),
+        lists:foreach(fun(Req) -> await_metadata_response(Pid, Req) end, Last)
+      after
+        kpro_connection:stop(Pid)
+      end
+    end).
+
+reauthenticate_with_backlog(Pid, InFlight, Replies) ->
+  flush_events(),
+  %% Trigger the timer message directly so queuing does not depend on elapsed time.
+  Pid ! sasl_authenticate,
+  Queued = [metadata_request(), metadata_request()],
+  lists:foreach(fun(Req) -> ok = kpro:send(Pid, Req) end, Queued),
+  %% This call is ordered after the timer message and the queued sends.
+  ?assertMatch({ok, _}, kpro_connection:get_endpoint(Pid)),
+  lists:foreach(fun reply_metadata/1, Replies),
+  lists:foreach(fun(Req) -> await_metadata_response(Pid, Req) end, InFlight),
+  receive {request, sasl_handshake, 1} -> ok
+  after 1000 -> ct:fail(no_reauthentication) end,
+  %% Receive both requests before replying to either one.
+  {Queued, [await_metadata_request() || _ <- Queued]}.
+
+metadata_request() -> kpro_req_lib:make(metadata, 0, [{topics, []}]).
+
+await_metadata_request() ->
+  receive {metadata_request, Sock, Corr} -> {Sock, Corr}
+  after 1000 -> ct:fail(metadata_not_pipelined) end.
+
+reply_metadata({Sock, Corr}) ->
+  ok = gen_tcp:send(Sock, <<Corr:32, 0:32, 0:32>>).
+
+await_metadata_response(Pid, #kpro_req{ref = Ref}) ->
+  receive {msg, Pid, #kpro_rsp{ref = Ref, api = metadata}} -> ok
+  after 1000 -> ct:fail(metadata_response_lost) end.
 
 plain() -> {plain, <<"test-user">>, <<"test-password">>}.
 connect(Port, Sasl) ->
@@ -208,6 +270,9 @@ respond(sasl_authenticate, Vsn, Corr, <<Len:32, Token:Len/binary>>, Sock, _, Opt
     timeout -> receive after 1000 -> ok end;
     none -> ok = gen_tcp:send(Sock, Packet)
   end, NewOptions;
+respond(metadata, 0, Corr, _, Sock, Owner, #{manual_metadata := true} = Options) ->
+  Owner ! {metadata_request, Sock, Corr},
+  Options;
 respond(metadata, 0, Corr, _, Sock, Owner, Options) ->
   timer:sleep(maps:get(metadata_delay, Options, 0)),
   ok = gen_tcp:send(Sock, <<Corr:32, 0:32, 0:32>>),

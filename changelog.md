@@ -1,4 +1,6 @@
-* Unreleased
+* 4.3.8
+  - Restore concurrent in-flight requests after SASL reauthentication.
+    Busy connections no longer wait for each queued response before sending the next request.
   - Accept trailing fields in ApiVersions v0 responses.
   - Negotiate the built-in SASL Authenticate version and use the reported session lifetime for reauthentication.
   - Accept a final PLAIN token after a successful Kafka-framed authentication response,
