@@ -105,7 +105,7 @@ test_txn_fetch_produce_test(ProduceVsn, FetchVsn) ->
   % find_coordinator (txn)
   {ok, Conn} = connect_coordinator(TxnId),
   % init_producer_id
-  {ok, TxnCtx} = kpro:txn_init_ctx(Conn, TxnId),
+  {ok, TxnCtx} = txn_init_ctx(Conn, TxnId),
   % add_partitions_to_txn
   ok = kpro:txn_send_partitions(TxnCtx, [{Topic, Partition}]),
   % produce
@@ -150,7 +150,7 @@ test_txn_produce_2(ProduceVsn, FetchVsn) ->
   % find_coordinator (txn)
   {ok, Conn} = connect_coordinator(TxnId),
   % init_producer_id
-  {ok, TxnCtx} = kpro:txn_init_ctx(Conn, TxnId),
+  {ok, TxnCtx} = txn_init_ctx(Conn, TxnId),
 
   TxnFun =
     fun(Seqno) ->

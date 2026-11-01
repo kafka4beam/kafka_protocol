@@ -36,6 +36,10 @@ clean: gen-clean
 xref:
 	@$(rebar_cmd) xref
 
+.PHONY: ct
+ct:
+	@$(rebar_cmd) ct --suite test/kpro_compatibility_SUITE
+
 .PHONY: eunit
 eunit:
 	@$(rebar_cmd) eunit -v --cover_export_name $(KAFKA_VERSION)

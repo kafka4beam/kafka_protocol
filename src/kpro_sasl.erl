@@ -20,6 +20,7 @@
 -module(kpro_sasl).
 
 -export([ auth/7
+        , auth/8
         ]).
 
 -include("kpro_private.hrl").
@@ -30,11 +31,16 @@
 
 %%%_* API ======================================================================
 
-auth(_Host, _Sock, _Mod, _ClientId, _Timeout, ?undef, _Vsn) ->
+%% Keep the default Authenticate version for existing callers.
+%% Both entry points accept a final token after successful framed PLAIN auth.
+auth(Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn) ->
+  auth(Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn, 0).
+
+auth(_Host, _Sock, _Mod, _ClientId, _Timeout, ?undef, _Vsn, _AuthenticateVsn) ->
   %% no auth
   ok;
 auth(Host, Sock, Mod, ClientId, Timeout,
-     {callback, ModuleName, Opts}, Vsn) ->
+     {callback, ModuleName, Opts}, Vsn, _AuthenticateVsn) ->
   case kpro_auth_backend:auth(ModuleName, Host, Sock, Vsn, Mod,
                               ClientId, Timeout, Opts) of
     ok ->
@@ -44,13 +50,13 @@ auth(Host, Sock, Mod, ClientId, Timeout,
     {error, Reason} ->
       ?ERROR(Reason)
   end;
-auth(_Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn) ->
+auth(_Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn, AuthenticateVsn) ->
   Mechanism = mechanism(Opts),
   ok = handshake(Sock, Mod, Timeout, ClientId, Mechanism, HandshakeVsn),
   %% Send and receive raw bytes
   SendRecvRaw =
     fun(Req) ->
-        try kpro_lib:send_and_recv_raw(Req, Sock, Mod, Timeout)
+        try {kpro_lib:send_and_recv_raw(Req, Sock, Mod, Timeout), undefined}
         catch
           error : Reason ?BIND_STACKTRACE(Stack) ->
             ?GET_STACKTRACE(Stack),
@@ -60,12 +66,17 @@ auth(_Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn) ->
   %% Embed raw bytes in auth_bytes field.
   SendRecv =
     fun(Bytes) ->
-        Req = kpro_req_lib:make(sasl_authenticate, _AuthReqVsn = 0,
+        Req = kpro_req_lib:make(sasl_authenticate, AuthenticateVsn,
                                 [{auth_bytes, Bytes}]),
         Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
         EC = kpro:find(error_code, Rsp),
         case EC =:= ?no_error of
-          true -> kpro:find(auth_bytes, Rsp);
+          true ->
+            Metadata = case AuthenticateVsn of
+                         0 -> undefined;
+                         _ -> #{session_lifetime_ms => kpro:find(session_lifetime_ms, Rsp)}
+                       end,
+            {kpro:find(auth_bytes, Rsp), Metadata};
           false -> ?ERROR(kpro:find(error_message, Rsp))
         end
     end,
@@ -84,8 +95,12 @@ auth(_Host, Sock, Mod, ClientId, Timeout, Opts, HandshakeVsn) ->
 do_auth(SendRecv, {plain, User, Pass}, Vsn) ->
   Req = sasl_plain_token(User, Pass),
   try
-    <<>> = SendRecv(Req),
-    ok
+    {Token, Metadata} = SendRecv(Req),
+    case Vsn of
+      0 -> <<>> = Token;
+      _ -> ok
+    end,
+    auth_result(Metadata)
   catch
     error : ?REASON({closed, _Stack}) when Vsn =:= 0 ->
       %% in version 0 (bare sasl bytes)
@@ -102,17 +117,21 @@ do_auth(SendRecv, {Scram, User, Pass}, _) when ?IS_SCRAM(Scram) ->
   %% make client first message
   CFirst = kpro_scram:first(Scram1),
   %% send client first message and receive server first message
-  ServerFirstMsg = SendRecv(CFirst),
+  {ServerFirstMsg, _} = SendRecv(CFirst),
   %% parse server first message
   Scram2 = kpro_scram:parse(Scram1, ServerFirstMsg),
   %% make client final message
   ClientFinalMsg = kpro_scram:final(Scram2),
   %% send client final message and receive server final message
-  ServerFinalMsg = SendRecv(ClientFinalMsg),
+  {ServerFinalMsg, Metadata} = SendRecv(ClientFinalMsg),
   %% Validate server signature
-  ok = kpro_scram:validate(Scram2, ServerFinalMsg);
+  ok = kpro_scram:validate(Scram2, ServerFinalMsg),
+  auth_result(Metadata);
 do_auth(_SendRecv, Unknown, _) ->
   ?ERROR({unknown_sasl_opt, Unknown}).
+
+auth_result(undefined) -> ok;
+auth_result(Metadata) -> {ok, Metadata}.
 
 handshake(Sock, Mod, Timeout, ClientId, Mechanism, Vsn) ->
   Req = kpro_req_lib:make(sasl_handshake, Vsn, [{mechanism, Mechanism}]),

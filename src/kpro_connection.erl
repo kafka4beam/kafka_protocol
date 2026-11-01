@@ -572,13 +572,10 @@ sasl_authenticate(#state{client_id = ClientId, mod = Mod, sock = Sock, remote = 
   Timeout = get_connect_timeout(Config),
   Deadline = deadline(Timeout),
   SaslOpts = get_sasl_opt(Config),
-  HandshakeVsn = case Versions of
-                   #{sasl_handshake := {_, V}} -> V;
-                   _ -> 0
-                 end,
+  {HandshakeVsn, AuthenticateVsn} = sasl_versions(SaslOpts, Versions),
   ok = setopts(Sock, Mod, [{active, false}]),
   case kpro_sasl:auth(Host, Sock, Mod, ClientId,
-                      timeout(Deadline), SaslOpts, HandshakeVsn) of
+                      timeout(Deadline), SaslOpts, HandshakeVsn, AuthenticateVsn) of
     ok ->
       ok;
     {ok, ServerResponse} ->
@@ -586,7 +583,7 @@ sasl_authenticate(#state{client_id = ClientId, mod = Mod, sock = Sock, remote = 
         Lifetime when is_integer(Lifetime) andalso Lifetime > 0 ->
           %% Broker can report back a maximal session lifetime: https://kafka.apache.org/protocol#The_Messages_SaslAuthenticate.
           %% Respect the session lifetime by draining in-flight requests and re-authenticating in half the time.
-          ReauthenticationDeadline = Lifetime div 2,
+          ReauthenticationDeadline = reauthentication_delay(Lifetime),
           _ = erlang:send_after(ReauthenticationDeadline, self(), sasl_authenticate),
           ok;
         _ ->
@@ -595,6 +592,34 @@ sasl_authenticate(#state{client_id = ClientId, mod = Mod, sock = Sock, remote = 
   end,
   ok = setopts(Sock, Mod, [{active, once}]),
   State.
+
+%% Keep the timer positive and within the portable relative-timeout range.
+reauthentication_delay(Lifetime) ->
+  min(16#ffffffff, max(1, Lifetime div 2)).
+
+%% Only built-in mechanisms negotiate the Authenticate API. Callbacks keep
+%% receiving the handshake version through their existing interface.
+sasl_versions({Mechanism, _, _}, Versions) when ?IS_PLAIN_OR_SCRAM(Mechanism) ->
+  HandshakeVsn = sasl_version(sasl_handshake, Versions),
+  AuthenticateVsn = case HandshakeVsn of
+                      0 -> 0;
+                      _ -> sasl_version(sasl_authenticate, Versions)
+                    end,
+  {HandshakeVsn, AuthenticateVsn};
+sasl_versions(_, Versions) ->
+  HandshakeVsn = case Versions of
+                   #{sasl_handshake := {_, V}} -> V;
+                   _ -> 0
+                 end,
+  {HandshakeVsn, 0}.
+
+sasl_version(API, Versions) ->
+  case Versions of
+    #{API := Range} ->
+      {_, Max} = kpro_api_vsn:intersect(API, Range),
+      Max;
+    _ -> 0
+  end.
 
 kafka_reply(_CallerPid, {msg, _SelfPid, #kpro_rsp{ref = {alias, Ref}}} = Msg) ->
   erlang:send(Ref, Msg),
@@ -779,6 +804,13 @@ timeout(Deadline) ->
   erlang:max(0, Deadline - erlang:monotonic_time(millisecond)).
 
 -ifdef(TEST).
+reauthentication_delay_test_() ->
+  [?_assertEqual(Expected, reauthentication_delay(Lifetime))
+   || {Lifetime, Expected} <- [{1, 1}, {2, 1}, {3, 1}, {4, 2}, {200, 100},
+                               {8589934590, 4294967295},
+                               {8589934592, 4294967295},
+                               {9223372036854775807, 4294967295}]].
+
 read_sasl_file_test_() ->
   Read = fun(Path) -> read_sasl_file(Path) end,
   BadFile = "README.md",

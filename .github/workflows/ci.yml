@@ -63,6 +63,7 @@ jobs:
           export KAFKA_VERSION=${{ matrix.kafka }}
           make test-env
           make eunit || (cd scripts && docker compose logs && exit 1)
+          if [ "$KAFKA_VERSION" = "4.0" ]; then make ct; fi
           make cover
 
     - name: Upload coverage reports to Codecov

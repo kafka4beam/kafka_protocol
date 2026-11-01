@@ -1,3 +1,10 @@
+* Unreleased
+  - Accept trailing fields in ApiVersions v0 responses.
+  - Negotiate the built-in SASL Authenticate version and use the reported session lifetime for reauthentication.
+  - Accept a final PLAIN token after a successful Kafka-framed authentication response,
+    including calls through the existing `kpro_sasl:auth/7` interface.
+  - Bound reauthentication timer delays for both built-in mechanisms and custom callbacks.
+
 * 4.3.7
   - Support IPv6 broker addresses.
     An IPv6 address host, e.g. `"fd00::5"` from bootstrap config or broker metadata, is connected over IPv6.

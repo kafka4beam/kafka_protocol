@@ -38,7 +38,7 @@ decode(API, Vsn, Body0, Ref) ->
       false ->
         Body0
     end,
-  {Message, <<>>} =
+  {Message, Rest} =
     try
       decode_struct(API, Vsn, Body)
     catch error : E ?BIND_STACKTRACE(Stack) ->
@@ -49,6 +49,11 @@ decode(API, Vsn, Body0, Ref) ->
       ?GET_STACKTRACE(Stack),
       erlang:raise(error, {E, Context}, Stack)
     end,
+  %% ApiVersions v0 can carry fields from a newer response schema.
+  case {API, Vsn} of
+    {api_versions, 0} -> ok;
+    _ -> <<>> = Rest
+  end,
   #kpro_rsp{ ref = Ref
            , api = API
            , vsn = Vsn
