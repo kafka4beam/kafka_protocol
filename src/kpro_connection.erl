@@ -553,19 +553,21 @@ prepend_to_backlog(#state{backlog = Backlog} = State, Item) ->
 maybe_flush_backlog(#state{backlog = false} = State) ->
   State;
 maybe_flush_backlog(#state{requests = Requests, backlog = Backlog} = State) ->
-  case kpro_sent_reqs:is_empty(Requests) of
-    true ->
-      NewState = case queue:out(Backlog) of
-        {{value, sasl_authenticate}, RemainingBacklog} ->
-          sasl_authenticate(State#state{backlog = RemainingBacklog});
-        {{value, {_From, {send, _}} = Msg}, RemainingBacklog} ->
-          send_request(Msg, State#state{backlog = RemainingBacklog});
-        {empty, _} ->
-          State#state{backlog = false}
-      end,
+  case queue:out(Backlog) of
+    {{value, sasl_authenticate}, RemainingBacklog} ->
+      %% Only authentication needs to wait for all in-flight responses.
+      case kpro_sent_reqs:is_empty(Requests) of
+        true ->
+          NewState = sasl_authenticate(State#state{backlog = RemainingBacklog}),
+          maybe_flush_backlog(NewState);
+        false ->
+          State
+      end;
+    {{value, {_From, {send, _}} = Msg}, RemainingBacklog} ->
+      NewState = send_request(Msg, State#state{backlog = RemainingBacklog}),
       maybe_flush_backlog(NewState);
-    false ->
-      State
+    {empty, _} ->
+      State#state{backlog = false}
   end.
 
 sasl_authenticate(#state{client_id = ClientId, mod = Mod, sock = Sock, remote = {Host, _Port}, api_vsns = Versions, config = Config} = State) ->
