@@ -203,7 +203,7 @@ enc_records(TsBase, [Msg | Batch], Offset, Bytes0, Acc) ->
 %   FirstSequence => int32
 %   Records => [Record]
 -spec do_decode(offset(), binary()) -> {batch_meta(), [message()]}.
-do_decode(Offset, <<_PartitionLeaderEpoch:32,
+do_decode(Offset, <<PartitionLeaderEpoch:32/signed-integer,
                     _Magic:8,
                     CRC:32/unsigned-integer,
                     T0/binary>>) ->
@@ -231,6 +231,7 @@ do_decode(Offset, <<_PartitionLeaderEpoch:32,
           , last_offset => Offset + LastOffsetDelta
           , max_ts => MaxTimestamp
           , producer_id => ProducerId
+          , leader_epoch => PartitionLeaderEpoch
           },
   {Meta, Messages}.
 

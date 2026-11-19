@@ -46,6 +46,24 @@ encode_decode_test_() ->
    CompressionOpt <- CompressionOpts,
    MagicV <- MagicVersions].
 
+%% The partition leader epoch is set by the leader broker when a batch is
+%% appended to its log. It is not covered by the CRC.
+decode_leader_epoch_test_() ->
+  Encoded = bin(encode(2, [#{value => <<"v">>}], no_compression)),
+  <<BaseOffset:8/binary, Size:4/binary, _LeaderEpoch:32, Rest/binary>> = Encoded,
+  WithEpoch = fun(Epoch) ->
+                  <<BaseOffset/binary, Size/binary, Epoch:32/signed, Rest/binary>>
+              end,
+  Decode = fun(Bin) ->
+               [{Meta, [#kafka_message{value = <<"v">>}]}] = kpro_batch:decode(Bin),
+               maps:get(leader_epoch, Meta)
+           end,
+  [ ?_assertEqual(-1, Decode(Encoded))
+  , ?_assertEqual(0, Decode(WithEpoch(0)))
+  , ?_assertEqual(153, Decode(WithEpoch(153)))
+  , ?_assertEqual(2147483647, Decode(WithEpoch(2147483647)))
+  ].
+
 encode_large_batch_test() ->
   %% Test encoding large batches (>1MB) with different compression options
   LargeBatch = make_large_batch(),

@@ -241,8 +241,10 @@
       | is_control % for read_uncommitted clients
       | last_offset % client won't have to do lists:last(Messages)
       | max_ts % client don't have to scan the messages for max
-      | producer_id. % it can be referenced by a future fetch response in
-                     % its aborted_transactions field
+      | producer_id % it can be referenced by a future fetch response in
+                    % its aborted_transactions field
+      | leader_epoch. % the partition leader epoch when the batch was appended
+                      % to the leader's log (KIP-101), -1 if unknown
 -type batch_meta_val() :: boolean() | atom() | integer().
 -type batch_meta() :: ?KPRO_NO_BATCH_META %% magic 0-1
                     | #{batch_meta_key() => batch_meta_val()}.
