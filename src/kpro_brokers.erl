@@ -18,8 +18,10 @@
         , connect_controller/3
         , connect_coordinator/3
         , connect_partition_leader/5
+        , connect_partition_leader_with_epoch/5
         , discover_coordinator/4
         , discover_partition_leader/4
+        , discover_partition_leader_with_epoch/4
         , get_api_versions/1
         , get_api_vsn_range/2
         , with_connection/3
@@ -35,6 +37,7 @@
 -type coordinator_type() :: kpro:coordinator_type().
 -type group_id() :: kpro:group_id().
 -type transactional_id() :: kpro:transactional_id().
+-type leader_epoch() :: kpro:leader_epoch().
 
 -define(DEFAULT_TIMEOUT, timer:seconds(5)).
 
@@ -80,6 +83,23 @@ connect_partition_leader(Bootstrap, Config, Topic, Partition, Opts) ->
   DiscoverFun =
     fun(C) -> discover_partition_leader(C, Topic, Partition, Timeout) end,
   discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout).
+
+%% @doc Same as `connect_partition_leader/5', but also return the leader
+%% epoch of the partition, as reported in the metadata response that was
+%% used to discover the leader.
+%% The leader epoch is `-1' if the broker does not report it
+%% (metadata API version 6 or earlier, i.e. Kafka before 2.1).
+-spec connect_partition_leader_with_epoch(connection() | [endpoint()], config(),
+                                          topic(), partition(),
+                                          #{timeout => timeout()}) ->
+        {ok, {connection(), leader_epoch()}} | {error, any()}.
+connect_partition_leader_with_epoch(Bootstrap, Config, Topic, Partition, Opts) ->
+  Timeout = resolve_timeout(Config, Opts),
+  DiscoverFun =
+    fun(C) ->
+        discover_partition_leader_with_epoch(C, Topic, Partition, Timeout)
+    end,
+  discover_and_connect_with_info(DiscoverFun, Bootstrap, Config, Timeout).
 
 %% @doc Connect group or transaction coordinator.
 %% If the first arg is not a connection pid but a list of bootstrapping
@@ -132,13 +152,26 @@ get_api_vsn_range(Connection, API) ->
   end.
 
 %% @doc Discover partition leader endpoint.
-%% @end
-%% Can not get dialyzer working for this call:
-%% kpro_req_lib:metadata(Vsn, [Topic])
--dialyzer([{nowarn_function, [discover_partition_leader/4]}]).
 -spec discover_partition_leader(connection(), topic(),partition(),
                                 timeout()) -> {ok, endpoint()} | {error, any()}.
 discover_partition_leader(Connection, Topic, Partition, Timeout) ->
+  case discover_partition_leader_with_epoch(Connection, Topic,
+                                            Partition, Timeout) of
+    {ok, {Endpoint, _LeaderEpoch}} -> {ok, Endpoint};
+    {error, Reason} -> {error, Reason}
+  end.
+
+%% @doc Discover partition leader endpoint and the partition leader epoch.
+%% The leader epoch is `-1' if the broker does not report it
+%% (metadata API version 6 or earlier, i.e. Kafka before 2.1).
+%% @end
+%% Can not get dialyzer working for this call:
+%% kpro_req_lib:metadata(Vsn, [Topic])
+-dialyzer([{nowarn_function, [discover_partition_leader_with_epoch/4]}]).
+-spec discover_partition_leader_with_epoch(connection(), topic(), partition(),
+                                           timeout()) ->
+        {ok, {endpoint(), leader_epoch()}} | {error, any()}.
+discover_partition_leader_with_epoch(Connection, Topic, Partition, Timeout) ->
   FL =
     [ fun() -> get_api_vsn_range(Connection, metadata) end
     , fun({_, Vsn}) ->
@@ -181,7 +214,9 @@ discover_partition_leader(Connection, Topic, Partition, Timeout) ->
           [Broker] = lists:filter(Pred, Brokers),
           Host = kpro:find(host, Broker),
           Port = kpro:find(port, Broker),
-          {ok, {Host, Port}}
+          %% leader_epoch is introduced in metadata v7
+          LeaderEpoch = kpro:find(leader_epoch, PartitionMeta, -1),
+          {ok, {{Host, Port}, LeaderEpoch}}
       end
     ],
   kpro_lib:ok_pipe(FL, Timeout).
@@ -246,15 +281,34 @@ discover_controller(Conn, Timeout) ->
 %% * Cluster controller
 %% * Group coordinator
 %% * Transactional coordinator
-discover_and_connect(DiscoverFun, X, Config, Timeout) when is_list(Config) ->
-  discover_and_connect(DiscoverFun, X, maps:from_list(Config), Timeout);
-discover_and_connect(DiscoverFun, C, Config, Timeout) when is_pid(C) ->
+discover_and_connect(DiscoverFun, X, Config, Timeout) ->
+  DiscoverWithInfoFun =
+    fun(C) ->
+        case DiscoverFun(C) of
+          {ok, Endpoint} -> {ok, {Endpoint, undefined}};
+          {error, Reason} -> {error, Reason}
+        end
+    end,
+  case discover_and_connect_with_info(DiscoverWithInfoFun, X, Config, Timeout) of
+    {ok, {Connection, undefined}} -> {ok, Connection};
+    {error, Reason} -> {error, Reason}
+  end.
+
+%% Same as discover_and_connect/4, but the discover function returns
+%% the endpoint together with some information about the broker,
+%% which is returned together with the connection.
+discover_and_connect_with_info(DiscoverFun, X, Config, Timeout)
+  when is_list(Config) ->
+  discover_and_connect_with_info(DiscoverFun, X, maps:from_list(Config),
+                                 Timeout);
+discover_and_connect_with_info(DiscoverFun, C, Config, Timeout)
+  when is_pid(C) ->
   FL =
     [ fun() -> DiscoverFun(C) end
-    , fun(CoordinatorEp) -> connect_any([CoordinatorEp], Config) end
+    , fun(Discovered) -> connect_discovered(Discovered, Config) end
     ],
   kpro_lib:ok_pipe(FL, Timeout);
-discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout) ->
+discover_and_connect_with_info(DiscoverFun, Bootstrap, Config, Timeout) ->
   %% the socket is short-lived, no need to link it.
   NoLinkConfig = Config#{nolink => true},
   FL =
@@ -262,9 +316,15 @@ discover_and_connect(DiscoverFun, Bootstrap, Config, Timeout) ->
     , fun(Connection) ->
         try DiscoverFun(Connection)
         after kpro_connection:stop(Connection) end end
-    , fun(DiscoveredEndpoint) -> connect_any([DiscoveredEndpoint], Config) end
+    , fun(Discovered) -> connect_discovered(Discovered, Config) end
     ],
   kpro_lib:ok_pipe(FL, Timeout).
+
+connect_discovered({Endpoint, Info}, Config) ->
+  case connect_any([Endpoint], Config) of
+    {ok, Connection} -> {ok, {Connection, Info}};
+    {error, Reason} -> {error, Reason}
+  end.
 
 connect_any([], _Config, Errors) ->
   {error, lists:reverse(Errors)};

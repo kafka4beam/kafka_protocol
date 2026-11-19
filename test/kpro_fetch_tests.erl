@@ -51,6 +51,70 @@ incremental_fetch_test() ->
     false -> ok
   end.
 
+%% KIP-320: the partition leader checks the leader epoch in fetch requests.
+%% Metadata v7 and fetch v9 (Kafka 2.1) are required.
+fetch_with_leader_epoch_test() ->
+  {_Min, Max} = get_api_vsn_range(?TOPIC),
+  case Max >= 9 of
+    true -> test_fetch_with_leader_epoch(Max);
+    false -> test_no_leader_epoch()
+  end.
+
+%% Brokers before Kafka 2.1 do not report the leader epoch.
+test_no_leader_epoch() ->
+  Config = kpro_test_lib:connection_config(plaintext),
+  Endpoints = kpro_test_lib:get_endpoints(plaintext),
+  {ok, {Connection, LeaderEpoch}} =
+    kpro:connect_partition_leader_with_epoch(Endpoints, Config, ?TOPIC, ?PARTI),
+  kpro:close_connection(Connection),
+  ?assertEqual(-1, LeaderEpoch),
+  ?assertMatch({ok, {_Endpoint, -1}},
+               discover_partition_leader_with_epoch(Endpoints, Config)).
+
+test_fetch_with_leader_epoch(Vsn) ->
+  Config = kpro_test_lib:connection_config(plaintext),
+  Endpoints = kpro_test_lib:get_endpoints(plaintext),
+  {ok, {Connection, LeaderEpoch}} =
+    kpro:connect_partition_leader_with_epoch(Endpoints, Config, ?TOPIC, ?PARTI),
+  try
+    ?assert(LeaderEpoch >= 0),
+    ?assertMatch({ok, {_Endpoint, LeaderEpoch}},
+                 discover_partition_leader_with_epoch(Endpoints, Config)),
+    {ok, ProduceVsn} = kpro:get_api_vsn_range(Connection, produce),
+    ProduceReq = kpro_req_lib:produce(element(2, ProduceVsn), ?TOPIC, ?PARTI,
+                                      [#{value => <<"leader-epoch">>}]),
+    {ok, ProduceRsp} = kpro:request_sync(Connection, ProduceReq, ?TIMEOUT),
+    #{error_code := no_error, base_offset := Offset} =
+      kpro_test_lib:parse_rsp(ProduceRsp),
+    Fetch =
+      fun(Epoch) ->
+          Req = kpro_req_lib:fetch(Vsn, ?TOPIC, ?PARTI, Offset,
+                                   #{leader_epoch => Epoch}),
+          {ok, Rsp} = kpro:request_sync(Connection, Req, ?TIMEOUT),
+          kpro_test_lib:parse_rsp(Rsp)
+      end,
+    %% the current leader serves the current epoch
+    #{error_code := no_error, batches := [{_Meta, [Msg | _]} | _]} =
+      Fetch(LeaderEpoch),
+    ?assertMatch(#kafka_message{offset = Offset, value = <<"leader-epoch">>}, Msg),
+    %% -1 disables the check
+    ?assertMatch(#{error_code := no_error}, Fetch(-1)),
+    %% the client knows a newer epoch than the broker
+    ?assertMatch(#{error_code := unknown_leader_epoch}, Fetch(LeaderEpoch + 1)),
+    %% the client has stale metadata
+    LeaderEpoch > 0 andalso
+      ?assertMatch(#{error_code := fenced_leader_epoch}, Fetch(LeaderEpoch - 1))
+  after
+    kpro:close_connection(Connection)
+  end.
+
+discover_partition_leader_with_epoch(Endpoints, Config) ->
+  kpro_test_lib:with_connection(
+    Endpoints, Config, fun kpro:connect_any/2,
+    fun(Conn) ->
+        kpro:discover_partition_leader_with_epoch(Conn, ?TOPIC, ?PARTI, ?TIMEOUT)
+    end).
+
 test_incemental_fetch(Connection, Vsn) ->
   %% resolve latest offset
   LatestOffset = kpro_test_lib:list_offset(Connection, ?TOPIC, ?PARTI,
