@@ -36,7 +36,7 @@
 %%    Version 0: Kafka fetches offsets from zookeeper.
 -spec range(kpro:api()) -> false | range().
 range(offset_commit) -> {2, 8};
-range(offset_fetch) -> {1, 2};
+range(offset_fetch) -> {1, 6};
 range(API) -> kpro_schema:vsn_range(API).
 
 -spec kafka_09_range(kpro:api()) -> false | range().
