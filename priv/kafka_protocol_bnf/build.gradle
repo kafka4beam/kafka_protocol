@@ -2,12 +2,17 @@ apply plugin: 'java'
 apply plugin: 'application'
 
 sourceSets.main.java.srcDirs = ['.']
-mainClassName = 'KafkaProtocolBnf'
+
+application {
+    mainClass = 'KafkaProtocolBnf'
+}
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-  compile "org.apache.kafka:kafka-clients:2.4.0"
+  // The generator reads only the protocol schema classes. It never loads
+  // the compression libraries that kafka-clients depends on.
+  implementation("org.apache.kafka:kafka-clients:4.4.0") { transitive = false }
 }
