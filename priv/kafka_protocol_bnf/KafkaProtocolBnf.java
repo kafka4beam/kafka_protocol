@@ -160,15 +160,11 @@ public class KafkaProtocolBnf {
         return b.toString();
     }
 
+    // Gradle runs the app from priv/kafka_protocol_bnf, so this is priv/kafka.bnf.
+    private static final String OUTPUT_FILE = "../kafka.bnf";
+
     public static void main(String[] args) {
-        String filename = "";
-        try {
-            filename = args[0];
-        } catch (ArrayIndexOutOfBoundsException e) {
-            System.err.println("Expecting output filename as a single argument.");
-            System.exit(1);
-        }
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(filename))) {
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(OUTPUT_FILE))) {
             bw.write(toText());
         } catch (IOException e) {
             e.printStackTrace();
