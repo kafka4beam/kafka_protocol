@@ -90,6 +90,7 @@
                        , isolation_level => isolation_level()
                        , session_id => kpro:int32()
                        , session_epoch => kpro:int32()
+                       , leader_epoch => kpro:leader_epoch()
                        , rack_id => iodata()
                        }.
 %% Options for a `fetch' request.
@@ -125,6 +126,12 @@
 %%       fetch sessions (by setting appropriate `session_id' and `session_epoch' default
 %%       values). Defaults to 0.</li>
 %%  <li>`session_epoch': Fetch session epoch. Holds the same as above. Defaults to -1.</li>
+%%  <li>`leader_epoch': The partition leader epoch the client knows from metadata,
+%%       sent as `current_leader_epoch' (fetch version 9 or later, KIP-320).
+%%       The broker rejects the request with `fenced_leader_epoch' if this epoch is
+%%       older than its own, or `unknown_leader_epoch' if it is newer, e.g. when the
+%%       broker is a stale leader. Defaults to -1, which disables the check.
+%%       Ignored by older fetch versions.</li>
 %%  <li>`rack_id': The consumer's rack ID. This allow consumers fetching from closest
 %%       replica (instead the leader). Defaults to `undefined'.</li>
 %% </ul>
