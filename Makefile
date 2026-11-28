@@ -8,7 +8,10 @@ rebar_cmd = $(rebar) $(profile:%=as %)
 GEN_INPUT = include/*.hrl priv/kpro_gen.escript priv/kafka.bnf priv/kpro_scanner.xrl priv/kpro_parser.yrl
 GEN_CODE = src/kpro_schema.erl
 
-# results of this target are to be committed in this repo
+# Commit the output of this target only after kpro handles the schema of
+# the pinned kafka-clients version. priv/kafka.bnf comes from kafka-clients
+# 2.4.0. Later versions renamed schema fields and removed old API versions,
+# so a regenerated file breaks the kpro API today.
 .PHONY: kafka-bnf
 kafka-bnf:
 	@cd priv/kafka_protocol_bnf && gradle run
