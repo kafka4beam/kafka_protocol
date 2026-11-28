@@ -26,11 +26,14 @@
         , connect_coordinator/3
         , connect_partition_leader/4
         , connect_partition_leader/5
+        , connect_partition_leader_with_epoch/4
+        , connect_partition_leader_with_epoch/5
         ]).
 
 %% Broker properties
 -export([ discover_coordinator/4
         , discover_partition_leader/4
+        , discover_partition_leader_with_epoch/4
         , get_api_versions/1
         , get_api_vsn_range/2
         ]).
@@ -400,6 +403,50 @@ connect_partition_leader(Bootstrap, ConnConfig, Topic, Partition, Opts) ->
                                 timeout()) -> {ok, endpoint()} | {error, any()}.
 discover_partition_leader(Connection, Topic, Partition, Timeout) ->
   kpro_brokers:discover_partition_leader(Connection, Topic, Partition, Timeout).
+
+%% @see connect_partition_leader_with_epoch/5.
+-spec connect_partition_leader_with_epoch(connection() | [endpoint()],
+                                          conn_config(), topic(), partition()) ->
+        {ok, {connection(), leader_epoch()}} | {error, any()}.
+connect_partition_leader_with_epoch(Bootstrap, ConnConfig, Topic, Partition) ->
+  connect_partition_leader_with_epoch(Bootstrap, ConnConfig,
+                                      Topic, Partition, #{}).
+
+%% @doc Connect partition leader, and return the connection together with
+%% the partition leader epoch found in the metadata used to discover the
+%% leader.
+%%
+%% The leader epoch can be sent in `fetch' requests (option `leader_epoch'
+%% in `kpro_req_lib:fetch/5'). The broker then rejects the request with
+%% `fenced_leader_epoch' if the epoch is older than its own (the caller's
+%% metadata is stale), or with `unknown_leader_epoch' if it is newer
+%% (the broker has not yet learned about the latest leader change).
+%% See KIP-320.
+%%
+%% The leader epoch is `-1' if the broker does not report it
+%% (metadata API version 6 or earlier, i.e. Kafka before 2.1).
+%% NOTE: Connection process is linked to caller unless `nolink => true'
+%%       is set in connection config.
+-spec connect_partition_leader_with_epoch(connection() | [endpoint()],
+                                          conn_config(), topic(), partition(),
+                                          #{timeout => timeout()}) ->
+        {ok, {connection(), leader_epoch()}} | {error, any()}.
+connect_partition_leader_with_epoch(Bootstrap, ConnConfig, Topic, Partition,
+                                    Opts) ->
+  kpro_brokers:connect_partition_leader_with_epoch(Bootstrap, ConnConfig,
+                                                   Topic, Partition, Opts).
+
+%% @doc Discover partition leader broker endpoint and the partition
+%% leader epoch.
+%% An implicit step performed in `connect_partition_leader_with_epoch'.
+%% The leader epoch is `-1' if the broker does not report it
+%% (metadata API version 6 or earlier, i.e. Kafka before 2.1).
+-spec discover_partition_leader_with_epoch(connection(), topic(), partition(),
+                                           timeout()) ->
+        {ok, {endpoint(), leader_epoch()}} | {error, any()}.
+discover_partition_leader_with_epoch(Connection, Topic, Partition, Timeout) ->
+  kpro_brokers:discover_partition_leader_with_epoch(Connection, Topic,
+                                                    Partition, Timeout).
 
 %% @see connect_controller/3.
 -spec connect_controller(connection() | [endpoint()], conn_config()) ->
